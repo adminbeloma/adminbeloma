@@ -4,6 +4,10 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Playeras — Sistema de Administración</title>
+<!-- PDF y Excel -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.5.28/jspdf.plugin.autotable.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 <style>
 @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=DM+Serif+Display:ital@0;1&display=swap');
 
@@ -328,7 +332,13 @@ tbody td{padding:11px 14px;font-size:13.5px;vertical-align:middle;}
 
   <!-- REPORTES -->
   <div id="section-reportes" class="section">
-    <div class="topbar"><h1>Reportes</h1></div>
+    <div class="topbar">
+      <h1>Reportes</h1>
+      <div class="actions">
+        <button class="btn btn-ghost btn-sm" onclick="exportarReportePDF()" id="btn-export-pdf" style="display:none;">📄 Exportar PDF</button>
+        <button class="btn btn-ghost btn-sm" onclick="exportarReporteExcel()" id="btn-export-excel" style="display:none;">📊 Exportar Excel</button>
+      </div>
+    </div>
     <div class="content">
       <div class="card" style="margin-bottom:18px;">
         <div style="font-weight:700;font-size:15px;margin-bottom:14px;">📅 Rango de fechas</div>
@@ -1060,6 +1070,10 @@ window.generarReporte=function(){
   const porCatGasto={};
   gastosPer.forEach(g=>{porCatGasto[g.categoria]=(porCatGasto[g.categoria]||0)+(+g.monto||0);});
 
+  document.getElementById('btn-export-pdf').style.display='inline-flex';
+  document.getElementById('btn-export-excel').style.display='inline-flex';
+  // Guardar datos para exportar
+  window._reporteData = { desde, hasta, ventasPer, gastosPer, totalVentas, totalGastos, utilidad, totalUnidades, porTalla, porColor, porCanal, porCatGasto };
   const el=document.getElementById('reporte-contenido');
   el.innerHTML=`
     <div class="stats-row" style="margin-bottom:18px;">
@@ -1509,6 +1523,209 @@ function calcCostoTinta(){
     valEl.textContent=fmtMoney(costo);
   }
 }
+
+// ─── EXPORTAR REPORTES ───
+window.exportarReportePDF = function() {
+  const d = window._reporteData;
+  if(!d){ toast('⚠️ Genera un reporte primero'); return; }
+  const { jsPDF } = window.jspdf;
+  const doc = new jsPDF();
+  const titulo = `Reporte Playeras Beloma — ${fmtFecha(d.desde)} al ${fmtFecha(d.hasta)}`;
+  
+  // Header
+  doc.setFillColor(24,24,27);
+  doc.rect(0,0,210,28,'F');
+  doc.setTextColor(232,93,38);
+  doc.setFontSize(16);
+  doc.setFont('helvetica','bold');
+  doc.text('PLAYERAS BELOMA', 14, 12);
+  doc.setTextColor(255,255,255);
+  doc.setFontSize(10);
+  doc.setFont('helvetica','normal');
+  doc.text('Sistema de Administración', 14, 20);
+  doc.text(`Período: ${fmtFecha(d.desde)} — ${fmtFecha(d.hasta)}`, 120, 20);
+  
+  let y = 36;
+  
+  // Resumen financiero
+  doc.setTextColor(24,24,27);
+  doc.setFontSize(13);
+  doc.setFont('helvetica','bold');
+  doc.text('RESUMEN FINANCIERO', 14, y); y+=8;
+  
+  doc.autoTable({
+    startY: y,
+    head: [['Concepto', 'Monto']],
+    body: [
+      ['Total Ventas', fmtMoney(d.totalVentas)],
+      ['Total Gastos', fmtMoney(d.totalGastos)],
+      ['Utilidad Neta', fmtMoney(d.utilidad)],
+      ['Unidades Vendidas', d.totalUnidades + ' pzas'],
+      ['Ticket Promedio', d.ventasPer.length>0 ? fmtMoney(d.totalVentas/d.ventasPer.length) : '$0'],
+    ],
+    headStyles:{ fillColor:[24,24,27], textColor:[255,255,255] },
+    alternateRowStyles:{ fillColor:[245,245,240] },
+    styles:{ fontSize:10 },
+    columnStyles:{ 1:{ halign:'right', fontStyle:'bold' } }
+  });
+  y = doc.lastAutoTable.finalY + 10;
+
+  // Consumo tinta
+  const totalTintaBlanca = d.ventasPer.reduce((s,v)=>s+(+v.tintaBlanca||0)*(+v.cantidad||1),0);
+  const totalTintaColor = d.ventasPer.reduce((s,v)=>s+(+v.tintaColor||0)*(+v.cantidad||1),0);
+  const costoTintaTotal = d.ventasPer.reduce((s,v)=>s+(+v.costoTinta||0),0);
+  
+  doc.setFontSize(13); doc.setFont('helvetica','bold');
+  doc.text('CONSUMO DE TINTA DTG', 14, y); y+=6;
+  doc.autoTable({
+    startY: y,
+    head: [['Tinta', 'Total cc', 'Costo']],
+    body: [
+      ['Tinta Blanca', totalTintaBlanca.toFixed(2)+' cc', fmtMoney(costoTintaTotal*(totalTintaBlanca/(totalTintaBlanca+totalTintaColor||1)))],
+      ['Tinta CMYK/Color', totalTintaColor.toFixed(2)+' cc', fmtMoney(costoTintaTotal*(totalTintaColor/(totalTintaBlanca+totalTintaColor||1)))],
+      ['TOTAL TINTA', (totalTintaBlanca+totalTintaColor).toFixed(2)+' cc', fmtMoney(costoTintaTotal)],
+    ],
+    headStyles:{ fillColor:[24,24,27] },
+    styles:{ fontSize:10 },
+    columnStyles:{ 1:{ halign:'right' }, 2:{ halign:'right', fontStyle:'bold' } }
+  });
+  y = doc.lastAutoTable.finalY + 10;
+  
+  // Ventas por canal
+  if(y > 240){ doc.addPage(); y = 20; }
+  doc.setFontSize(13); doc.setFont('helvetica','bold');
+  doc.text('VENTAS POR CANAL', 14, y); y+=6;
+  doc.autoTable({
+    startY: y,
+    head: [['Canal', 'Total']],
+    body: Object.entries(d.porCanal).sort((a,b)=>b[1]-a[1]).map(([k,v])=>[k, fmtMoney(v)]),
+    headStyles:{ fillColor:[24,24,27] },
+    styles:{ fontSize:10 },
+    columnStyles:{ 1:{ halign:'right' } }
+  });
+  y = doc.lastAutoTable.finalY + 10;
+
+  // Por talla y color en columnas
+  const colStart = [14, 110];
+  if(y > 220){ doc.addPage(); y = 20; }
+  doc.setFontSize(13); doc.setFont('helvetica','bold');
+  doc.text('VENTAS POR TALLA', colStart[0], y);
+  doc.text('VENTAS POR COLOR', colStart[1], y); y+=6;
+  
+  doc.autoTable({
+    startY: y, margin:{left:14, right:105},
+    head: [['Talla', 'Pzas']],
+    body: Object.entries(d.porTalla).sort((a,b)=>b[1]-a[1]).map(([k,v])=>[k, v]),
+    headStyles:{ fillColor:[24,24,27] }, styles:{ fontSize:10 }
+  });
+  const y1 = doc.lastAutoTable.finalY;
+  doc.autoTable({
+    startY: y, margin:{left:109, right:14},
+    head: [['Color', 'Pzas']],
+    body: Object.entries(d.porColor).sort((a,b)=>b[1]-a[1]).map(([k,v])=>[k, v]),
+    headStyles:{ fillColor:[24,24,27] }, styles:{ fontSize:10 }
+  });
+  y = Math.max(y1, doc.lastAutoTable.finalY) + 10;
+
+  // Detalle ventas
+  if(y > 220){ doc.addPage(); y = 20; }
+  doc.setFontSize(13); doc.setFont('helvetica','bold');
+  doc.text('DETALLE DE VENTAS', 14, y); y+=6;
+  doc.autoTable({
+    startY: y,
+    head: [['Fecha','Cliente','Producto','Talla','Color','Canal','Cant','Total']],
+    body: d.ventasPer.sort((a,b)=>b.fecha>a.fecha?1:-1).map(v=>[
+      fmtFecha(v.fecha), v.cliente||'—', v.producto?.substring(0,25)||'—',
+      v.talla||'—', v.color||'—', v.canal, v.cantidad, fmtMoney(v.total)
+    ]),
+    headStyles:{ fillColor:[24,24,27], fontSize:8 },
+    styles:{ fontSize:8 },
+    columnStyles:{ 7:{ halign:'right' } }
+  });
+
+  // Footer
+  const pageCount = doc.internal.getNumberOfPages();
+  for(let i=1;i<=pageCount;i++){
+    doc.setPage(i);
+    doc.setFontSize(8); doc.setTextColor(150,150,150);
+    doc.text(`Página ${i} de ${pageCount} — Generado el ${new Date().toLocaleDateString('es-MX')}`, 14, 290);
+  }
+  
+  doc.save(`reporte-playeras-${d.desde}-${d.hasta}.pdf`);
+  toast('📄 PDF generado');
+};
+
+window.exportarReporteExcel = function() {
+  const d = window._reporteData;
+  if(!d){ toast('⚠️ Genera un reporte primero'); return; }
+  
+  const wb = XLSX.utils.book_new();
+  
+  // Hoja 1: Resumen
+  const resumen = [
+    ['REPORTE PLAYERAS BELOMA'],
+    [`Período: ${fmtFecha(d.desde)} al ${fmtFecha(d.hasta)}`],
+    [],
+    ['RESUMEN FINANCIERO'],
+    ['Concepto', 'Monto'],
+    ['Total Ventas', d.totalVentas],
+    ['Total Gastos', d.totalGastos],
+    ['Utilidad Neta', d.utilidad],
+    ['Unidades Vendidas', d.totalUnidades],
+    ['Ticket Promedio', d.ventasPer.length>0 ? d.totalVentas/d.ventasPer.length : 0],
+    [],
+    ['CONSUMO DE TINTA'],
+    ['Tipo', 'cc totales', 'Costo'],
+    ['Tinta Blanca', d.ventasPer.reduce((s,v)=>s+(+v.tintaBlanca||0)*(+v.cantidad||1),0), ''],
+    ['Tinta CMYK', d.ventasPer.reduce((s,v)=>s+(+v.tintaColor||0)*(+v.cantidad||1),0), ''],
+    [],
+    ['VENTAS POR CANAL'],
+    ['Canal', 'Total'],
+    ...Object.entries(d.porCanal).sort((a,b)=>b[1]-a[1]).map(([k,v])=>[k,v]),
+    [],
+    ['VENTAS POR TALLA'],
+    ['Talla', 'Piezas'],
+    ...Object.entries(d.porTalla).sort((a,b)=>b[1]-a[1]).map(([k,v])=>[k,v]),
+    [],
+    ['VENTAS POR COLOR'],
+    ['Color', 'Piezas'],
+    ...Object.entries(d.porColor).sort((a,b)=>b[1]-a[1]).map(([k,v])=>[k,v]),
+    [],
+    ['GASTOS POR CATEGORÍA'],
+    ['Categoría', 'Total'],
+    ...Object.entries(d.porCatGasto).sort((a,b)=>b[1]-a[1]).map(([k,v])=>[k,v]),
+  ];
+  const ws1 = XLSX.utils.aoa_to_sheet(resumen);
+  ws1['!cols'] = [{wch:30},{wch:15},{wch:15}];
+  XLSX.utils.book_append_sheet(wb, ws1, 'Resumen');
+  
+  // Hoja 2: Detalle ventas
+  const ventasData = [
+    ['Fecha','Cliente','Producto','Talla','Color','Canal','Cantidad','Precio Unit.','Descuento','Total','Tinta Blanca cc','Tinta CMYK cc','Costo Tinta','Proveedor','Folio'],
+    ...d.ventasPer.sort((a,b)=>b.fecha>a.fecha?1:-1).map(v=>[
+      fmtFecha(v.fecha), v.cliente||'', v.producto||'', v.talla||'', v.color||'',
+      v.canal, v.cantidad, v.precio, v.descuento||0, v.total,
+      v.tintaBlanca||0, v.tintaColor||0, v.costoTinta||0, v.proveedor||'', v.folio||''
+    ])
+  ];
+  const ws2 = XLSX.utils.aoa_to_sheet(ventasData);
+  ws2['!cols'] = [{wch:12},{wch:20},{wch:30},{wch:8},{wch:10},{wch:15},{wch:8},{wch:12},{wch:10},{wch:12},{wch:14},{wch:12},{wch:12},{wch:15},{wch:12}];
+  XLSX.utils.book_append_sheet(wb, ws2, 'Ventas');
+  
+  // Hoja 3: Gastos
+  const gastosData = [
+    ['Fecha','Concepto','Categoría','Tipo','Monto','Notas'],
+    ...d.gastosPer.sort((a,b)=>b.fecha>a.fecha?1:-1).map(g=>[
+      fmtFecha(g.fecha), g.concepto, g.categoria, g.tipo, g.monto, g.notas||''
+    ])
+  ];
+  const ws3 = XLSX.utils.aoa_to_sheet(gastosData);
+  ws3['!cols'] = [{wch:12},{wch:30},{wch:15},{wch:10},{wch:12},{wch:30}];
+  XLSX.utils.book_append_sheet(wb, ws3, 'Gastos');
+  
+  XLSX.writeFile(wb, `reporte-playeras-${d.desde}-${d.hasta}.xlsx`);
+  toast('📊 Excel generado');
+};
 
 // INIT
 document.getElementById('fecha-hoy').textContent=new Date().toLocaleDateString('es-MX',{weekday:'long',year:'numeric',month:'long',day:'numeric'});
