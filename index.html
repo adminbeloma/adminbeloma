@@ -2717,7 +2717,7 @@ window.actualizarTallasVenta = function() {
 // ─── CATÁLOGO DE DISEÑOS ───
 let diseños = [];
 const CATALOGO_URL = 'https://adminbeloma.github.io/catalogo/';
-onSnapshot(collection(db,'bl_diseños'),s=>{
+onSnapshot(collection(db,'bl_disenos'),s=>{
   diseños=s.docs.map(d=>d.data());
   renderDiseños();
   actualizarCatsDisenoSelect();
@@ -2787,7 +2787,7 @@ window.guardarDiseno=async function(){
     imagenUrl=existing?.imagen||'';
   }
   const data={id,nombre,categoria,tags:document.getElementById('dis-tags').value,precio:+document.getElementById('dis-precio').value||0,activo:document.getElementById('dis-activo').value==='true',notas:document.getElementById('dis-notas').value,imagen:imagenUrl,creado:new Date().toISOString()};
-  await setDoc(doc(db,'bl_diseños',id),data);
+  await setDoc(doc(db,'bl_disenos',id),data);
   closeModal('modal-diseno');
   toast('✅ Diseño guardado');
 };
@@ -2844,7 +2844,7 @@ window.copiarLinkDiseno=function(cat){
 
 window.eliminarDiseno=async function(id){
   if(!confirm('¿Eliminar este diseño?'))return;
-  await deleteDoc(doc(db,'bl_diseños',id));
+  await deleteDoc(doc(db,'bl_disenos',id));
   toast('🗑 Diseño eliminado');
 };
 
