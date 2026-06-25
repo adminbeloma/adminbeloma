@@ -211,18 +211,19 @@ tbody td{padding:11px 14px;font-size:13.5px;vertical-align:middle;}
     <div class="nav-group">Principal</div>
     <a class="active" onclick="showSection('dashboard')" id="nav-dashboard"><span class="icon">🏠</span><span>Inicio</span></a>
     <a onclick="showSection('ventas')" id="nav-ventas"><span class="icon">💰</span><span>Ventas</span></a>
-    <a onclick="showSection('gastos')" id="nav-gastos"><span class="icon">💸</span><span>Gastos</span></a>
-    <a onclick="showSection('reportes')" id="nav-reportes"><span class="icon">📊</span><span>Reportes</span></a>
+    <a onclick="showSection('gastos')" id="nav-gastos" class="admin-only" style="display:none;"><span class="icon">💸</span><span>Gastos</span></a>
+    <a onclick="showSection('reportes')" id="nav-reportes" class="admin-only" style="display:none;"><span class="icon">📊</span><span>Reportes</span></a>
     <div class="nav-group">Inventario</div>
     <a onclick="showSection('playeras')" id="nav-playeras"><span class="icon">👕</span><span>Playeras</span></a>
     <a onclick="showSection('insumos')" id="nav-insumos"><span class="icon">🧴</span><span>Insumos</span></a>
+    <div class="nav-group admin-only" style="display:none;">Admin</div>
     <div class="nav-group">Local</div>
     <a onclick="showSection('pedidos')" id="nav-pedidos"><span class="icon">📦</span><span>Pedidos</span></a>
     <a onclick="showSection('caja')" id="nav-caja"><span class="icon">🏧</span><span>Caja</span></a>
     <div class="nav-group">Más</div>
     <a onclick="showSection('clientes')" id="nav-clientes"><span class="icon">👥</span><span>Clientes</span></a>
-    <a onclick="showSection('proveedores')" id="nav-proveedores"><span class="icon">🏭</span><span>Proveedores</span></a>
-    <a onclick="showSection('config')" id="nav-config"><span class="icon">⚙️</span><span>Config</span></a>
+    <a onclick="showSection('proveedores')" id="nav-proveedores" class="admin-only" style="display:none;"><span class="icon">🏭</span><span>Proveedores</span></a>
+    <a onclick="showSection('config')" id="nav-config" class="admin-only" style="display:none;"><span class="icon">⚙️</span><span>Config</span></a>
     <div class="nav-group admin-only" style="display:none;">Admin</div>
     <a onclick="showSection('banco')" id="nav-banco" class="admin-only" style="display:none;"><span class="icon">🏦</span><span>Conciliación</span></a>
   </nav>
@@ -315,7 +316,7 @@ tbody td{padding:11px 14px;font-size:13.5px;vertical-align:middle;}
       </div>
       <div class="table-wrap">
         <table>
-          <thead><tr><th>Fecha</th><th>Cliente</th><th>Producto</th><th>Talla</th><th>Color</th><th>Canal</th><th>Cant.</th><th>Total</th><th>Acciones</th></tr></thead>
+          <thead><tr><th>Fecha</th><th>Cliente</th><th>Producto</th><th>Género</th><th>Talla</th><th>Color</th><th>Canal</th><th>Cant.</th><th>Total</th><th>Acciones</th></tr></thead>
           <tbody id="tabla-ventas"></tbody>
         </table>
       </div>
@@ -340,6 +341,17 @@ tbody td{padding:11px 14px;font-size:13.5px;vertical-align:middle;}
       <div class="filter-bar">
         <input type="date" id="filter-gasto-desde" onchange="renderGastos()">
         <input type="date" id="filter-gasto-hasta" onchange="renderGastos()">
+        <select id="filter-gasto-categoria" onchange="renderGastos()">
+          <option value="">Todas las categorías</option>
+          <option>Renta</option><option>Electricidad</option><option>Agua</option>
+          <option>Internet</option><option>Teléfono</option><option>Sueldos / Nómina</option>
+          <option>Playeras</option><option>Tintas</option><option>Pretratamiento</option>
+          <option>Insumos impresión</option><option>Mantenimiento equipo</option><option>Equipo / Maquinaria</option>
+          <option>Envíos / Paquetería</option><option>Empaques</option><option>Marketing / Publicidad</option>
+          <option>Comisiones plataformas</option><option>Contabilidad</option><option>Impuestos / SAT</option>
+          <option>Papelería</option><option>Limpieza</option><option>Otro</option>
+        </select>
+        <input type="text" id="filter-gasto-buscar" placeholder="🔍 Buscar concepto..." oninput="renderGastos()" style="min-width:180px;">
       </div>
       <div style="display:flex;gap:14px;margin-bottom:16px;flex-wrap:wrap;">
         <div style="background:var(--bg-card);border:1px solid var(--border);border-radius:8px;padding:12px 16px;"><div style="font-size:11px;color:var(--ink-soft);font-weight:600;text-transform:uppercase;">Total Fijos</div><div style="font-size:20px;font-weight:700;color:var(--red);" id="gastos-fijos-total">$0</div></div>
@@ -420,7 +432,7 @@ tbody td{padding:11px 14px;font-size:13.5px;vertical-align:middle;}
     <div class="topbar">
       <h1>Inventario de Playeras</h1>
       <div class="actions">
-        <button class="btn btn-accent" onclick="openPlayeraModal()">+ Agregar Playera</button>
+        <button class="btn btn-accent admin-only" style="display:none;" onclick="openPlayeraModal()">+ Agregar Playera</button>
       </div>
     </div>
     <div class="content">
@@ -432,7 +444,7 @@ tbody td{padding:11px 14px;font-size:13.5px;vertical-align:middle;}
         </select>
         <select id="filter-talla" onchange="renderPlayeras()">
           <option value="">Todas las tallas</option>
-          <option>S</option><option>M</option><option>L</option><option>XL</option><option>XXL</option><option>3XL</option>
+          <option>M</option><option>L</option><option>XL</option><option>XXL</option><option>3XL</option>
           <option>CH</option><option>MED</option><option>GDE</option>
           <option>Talla 1</option><option>Talla 2</option><option>Talla 3</option>
           <option>3 meses</option><option>6 meses</option><option>9 meses</option><option>12 meses</option><option>18 meses</option><option>24 meses</option>
@@ -460,9 +472,9 @@ tbody td{padding:11px 14px;font-size:13.5px;vertical-align:middle;}
     <div class="topbar">
       <h1>Insumos</h1>
       <div class="actions">
-        <button class="btn btn-ghost btn-sm" onclick="openConsumoModal()">📝 Registrar uso</button>
-        <button class="btn btn-teal btn-sm" onclick="openCompraModal()">🛒 Registrar compra</button>
-        <button class="btn btn-accent" onclick="openInsumoModal()">+ Nuevo Insumo</button>
+        <button class="btn btn-ghost btn-sm admin-only" style="display:none;" onclick="openConsumoModal()">📝 Registrar uso</button>
+        <button class="btn btn-teal btn-sm admin-only" style="display:none;" onclick="openCompraModal()">🛒 Registrar compra</button>
+        <button class="btn btn-accent admin-only" style="display:none;" onclick="openInsumoModal()">+ Nuevo Insumo</button>
       </div>
     </div>
     <div class="content">
@@ -514,7 +526,7 @@ tbody td{padding:11px 14px;font-size:13.5px;vertical-align:middle;}
     <div class="topbar">
       <h1>Clientes</h1>
       <div class="actions">
-        <button class="btn btn-accent" onclick="openClienteModal()">+ Nuevo Cliente</button>
+        <button class="btn btn-accent admin-only" style="display:none;" onclick="openClienteModal()">+ Nuevo Cliente</button>
       </div>
     </div>
     <div class="content">
@@ -595,7 +607,7 @@ tbody td{padding:11px 14px;font-size:13.5px;vertical-align:middle;}
     <div class="topbar">
       <h1>Pedidos</h1>
       <div class="actions">
-        <button class="btn btn-accent" onclick="openPedidoModal()">+ Nuevo Pedido</button>
+        <button class="btn btn-accent admin-only" style="display:none;" onclick="openPedidoModal()">+ Nuevo Pedido</button>
       </div>
     </div>
     <div class="content">
@@ -859,10 +871,44 @@ tbody td{padding:11px 14px;font-size:13.5px;vertical-align:middle;}
         </div>
         <div class="form-group full"><label>Concepto *</label><input type="text" id="g-concepto" placeholder="Ej. Renta, Electricidad, Tinta blanca..."></div>
         <div class="form-group"><label>Categoría</label>
-          <select id="g-categoria">
-            <option>Renta</option><option>Electricidad</option><option>Internet</option><option>Sueldos</option>
-            <option>Insumos</option><option>Envíos</option><option>Marketing</option><option>Equipo</option><option>Otro</option>
+          <select id="g-categoria" onchange="toggleCatPersonalizada()">
+            <optgroup label="Operación">
+              <option>Renta</option>
+              <option>Electricidad</option>
+              <option>Agua</option>
+              <option>Internet</option>
+              <option>Teléfono</option>
+              <option>Sueldos / Nómina</option>
+            </optgroup>
+            <optgroup label="Producción">
+              <option>Playeras</option>
+              <option>Tintas</option>
+              <option>Pretratamiento</option>
+              <option>Insumos impresión</option>
+              <option>Mantenimiento equipo</option>
+              <option>Equipo / Maquinaria</option>
+            </optgroup>
+            <optgroup label="Ventas">
+              <option>Envíos / Paquetería</option>
+              <option>Empaques</option>
+              <option>Marketing / Publicidad</option>
+              <option>Comisiones plataformas</option>
+            </optgroup>
+            <optgroup label="Administrativo">
+              <option>Contabilidad</option>
+              <option>Impuestos / SAT</option>
+              <option>Papelería</option>
+              <option>Limpieza</option>
+            </optgroup>
+            <optgroup label="Otros">
+              <option>Otro</option>
+              <option value="__personalizada__">+ Agregar categoría nueva...</option>
+            </optgroup>
           </select>
+        </div>
+        <div class="form-group" id="cat-personalizada-group" style="display:none;">
+          <label>Nueva categoría</label>
+          <input type="text" id="g-cat-nueva" placeholder="Escribe la nueva categoría">
         </div>
         <div class="form-group"><label>Monto ($) *</label><input type="number" id="g-monto" placeholder="0.00" step="0.01"></div>
         <div class="form-group"><label>Proveedor / Establecimiento</label>
@@ -956,12 +1002,24 @@ tbody td{padding:11px 14px;font-size:13.5px;vertical-align:middle;}
         <div class="form-group full"><label>Nombre *</label><input type="text" id="ins-nombre" placeholder="Ej. Líquido pretratamiento playeras negras"></div>
         <div class="form-group"><label>Categoría</label>
           <select id="ins-categoria">
-            <option>Pretratamiento</option><option>Tinta blanca</option><option>Tinta color</option>
-            <option>Solución mantenimiento</option><option>Kit mantenimiento</option><option>Playera</option><option>Empaque</option><option>Otro</option>
+            <option>Pretratamiento negras/color</option>
+            <option>Pretratamiento blancas</option>
+            <option>Tinta blanca</option>
+            <option>Tinta Cyan</option>
+            <option>Tinta Magenta</option>
+            <option>Tinta Amarilla</option>
+            <option>Tinta Negra</option>
+            <option>Limpiador de wiper</option>
+            <option>Wiper</option>
+            <option>Solución mantenimiento</option>
+            <option>Kit mantenimiento</option>
+            <option>Playera</option>
+            <option>Empaque</option>
+            <option>Otro</option>
           </select>
         </div>
         <div class="form-group"><label>Unidad de medida</label>
-          <select id="ins-unidad"><option>ml</option><option>L</option><option>gr</option><option>kg</option><option>piezas</option><option>kits</option></select>
+          <select id="ins-unidad"><option>ml/cc</option><option>ml</option><option>cc</option><option>L</option><option>gr</option><option>kg</option><option>piezas</option><option>kits</option></select>
         </div>
         <div class="form-group"><label>Stock actual *</label><input type="number" id="ins-stock" placeholder="1000" step="0.01"></div>
         <div class="form-group"><label>Stock mínimo (alerta)</label><input type="number" id="ins-stock-min" placeholder="200" step="0.01"></div>
@@ -1399,7 +1457,20 @@ function checkLoaded(){
   }
 }
 
-onSnapshot(collection(db,'pl_ventas'),s=>{ventas=s.docs.map(d=>d.data());checkLoaded();renderDashboard();renderVentas();});
+// Cargar cache local mientras Firebase conecta (para respuesta inmediata)
+try {
+  const cv = localStorage.getItem('cache_ventas');
+  if(cv) ventas = JSON.parse(cv);
+} catch(e){}
+
+onSnapshot(collection(db,'pl_ventas'),s=>{
+  ventas=s.docs.map(d=>d.data());
+  checkLoaded();
+  renderDashboard();
+  renderVentas();
+  // Guardar en cache local para acceso rápido
+  try{ localStorage.setItem('cache_ventas', JSON.stringify(ventas)); } catch(e){}
+});
 onSnapshot(collection(db,'pl_gastos'),s=>{gastos=s.docs.map(d=>d.data());checkLoaded();renderDashboard();renderGastos();});
 onSnapshot(collection(db,'pl_playeras'),s=>{playeras=s.docs.map(d=>d.data());checkLoaded();renderPlayeras();});
 onSnapshot(collection(db,'pl_insumos'),s=>{insumos=s.docs.map(d=>d.data());checkLoaded();renderInsumos();renderDashboard();});
@@ -1436,6 +1507,7 @@ window.showSection=function(sec){
   document.querySelectorAll('nav a').forEach(a=>a.classList.remove('active'));
   document.getElementById('section-'+sec).classList.add('active');
   document.getElementById('nav-'+sec).classList.add('active');
+  if(sec==='ventas' && !isAdmin){ toast('⚠️ Acceso restringido'); return; }
   if(sec==='ventas') renderVentas();
   if(sec==='gastos') renderGastos();
   if(sec==='playeras') renderPlayeras();
@@ -1505,11 +1577,12 @@ function renderDashboard(){
 }
 
 // ─── VENTAS ───
-window.openVentaModal=function(tipo){
+window.openVentaModal=function(tipo, ventaId){
   document.getElementById('venta-id').value='';
-  ['v-cliente','v-producto','v-folio','v-notas'].forEach(f=>document.getElementById(f).value='');
+  ['v-cliente','v-producto','v-folio','v-notas','v-proveedor'].forEach(f=>document.getElementById(f).value='');
   document.getElementById('v-fecha').value=hoy();
-  document.getElementById('v-canal').value=tipo==='ml'?'Mercado Libre':'Directo';
+  document.getElementById('v-canal').value=tipo==='ml'?'Mercado Libre':'Local';
+  document.getElementById('v-genero').value='';
   document.getElementById('v-talla').value='';
   document.getElementById('v-color').value='';
   document.getElementById('v-cantidad').value='1';
@@ -1527,7 +1600,42 @@ window.openVentaModal=function(tipo){
   document.getElementById('v-paqueteria').value='';
   document.getElementById('v-envio-fields').style.display='none';
   document.getElementById('v-ciudad-group').style.display='none';
-  document.getElementById('modal-venta-title').textContent=tipo==='ml'?'Nueva Venta — Mercado Libre':'Nueva Venta';
+  document.getElementById('modal-venta-title').textContent='Nueva Venta';
+
+  if(tipo==='edit' && ventaId) {
+    const v = ventas.find(x=>x.id===ventaId);
+    if(v){
+      document.getElementById('venta-id').value=v.id;
+      document.getElementById('v-fecha').value=v.fecha||hoy();
+      document.getElementById('v-canal').value=v.canal||'Local';
+      document.getElementById('v-cliente').value=v.cliente||'';
+      document.getElementById('v-producto').value=v.producto||'';
+      document.getElementById('v-genero').value=v.genero||'';
+      actualizarTallasVenta();
+      document.getElementById('v-talla').value=v.talla||'';
+      document.getElementById('v-color').value=v.color||'';
+      document.getElementById('v-cantidad').value=v.cantidad||1;
+      document.getElementById('v-precio').value=v.precio||'';
+      document.getElementById('v-descuento').value=v.descuento||0;
+      document.getElementById('v-total').value=fmtMoney(v.total||0);
+      document.getElementById('v-tinta-blanca').value=v.tintaBlanca||0;
+      document.getElementById('v-tinta-color').value=v.tintaColor||0;
+      document.getElementById('v-proveedor').value=v.proveedor||'';
+      document.getElementById('v-folio').value=v.folio||'';
+      document.getElementById('v-notas').value=v.notas||'';
+      document.getElementById('v-ciudad').value=v.ciudad||'';
+      document.getElementById('v-paqueteria').value=v.paqueteria||'';
+      document.getElementById('v-costo-guia').value=v.costoGuia||0;
+      document.getElementById('v-guia').value=v.guia||'';
+      document.getElementById('v-domicilio-envio').value=v.domicilioEnvio||'';
+      toggleEnvioFields();
+      actualizarTipoPlayera();
+      document.getElementById('modal-venta-title').textContent='Editar Venta';
+    }
+  } else if(tipo==='ml'){
+    document.getElementById('v-canal').value='Mercado Libre';
+    document.getElementById('modal-venta-title').textContent='Nueva Venta — Mercado Libre';
+  }
   openModal('modal-venta');
 };
 
@@ -1576,8 +1684,15 @@ function renderVentas(){
   const canal=(document.getElementById('filter-canal')||{value:''}).value;
   const desde=(document.getElementById('filter-venta-desde')||{value:''}).value;
   const hasta=(document.getElementById('filter-venta-hasta')||{value:''}).value;
+  // Si hay fechas pero no texto de búsqueda, mostrar todo en ese rango
   let lista=ventas.filter(v=>{
-    const ms=!search||v.producto?.toLowerCase().includes(search)||v.cliente?.toLowerCase().includes(search);
+    const ms=!search||
+      (v.producto||'').toLowerCase().includes(search)||
+      (v.cliente||'').toLowerCase().includes(search)||
+      (v.canal||'').toLowerCase().includes(search)||
+      (v.genero||'').toLowerCase().includes(search)||
+      (v.color||'').toLowerCase().includes(search)||
+      (v.folio||'').toLowerCase().includes(search);
     const mc=!canal||v.canal===canal;
     const md=!desde||v.fecha>=desde;
     const mh=!hasta||v.fecha<=hasta;
@@ -1598,12 +1713,16 @@ function renderVentas(){
     <td>${fmtFecha(v.fecha)}</td>
     <td>${v.cliente||'—'}</td>
     <td style="font-weight:500;">${v.producto}</td>
+    <td style="font-size:11px;">${v.genero||'—'}</td>
     <td>${v.talla||'—'}</td>
     <td>${v.color||'—'}</td>
     <td><span class="badge ${canalColor[v.canal]||'badge-gray'}">${v.canal}</span>${v.ciudad?`<div style="font-size:10px;color:var(--ink-soft);margin-top:2px;">📍${v.ciudad}</div>`:''}</td>
     <td>${v.cantidad}</td>
     <td style="font-weight:700;color:var(--green);">${fmtMoney(v.total)}</td>
-    <td><button class="btn btn-danger btn-sm" onclick="eliminarVenta('${v.id}')">🗑</button></td>
+    <td style="display:flex;gap:4px;">
+      <button class="btn btn-ghost btn-sm" onclick="openVentaModal('edit','${v.id}')">✏️</button>
+      <button class="btn btn-danger btn-sm" onclick="eliminarVenta('${v.id}')">🗑</button>
+    </td>
   </tr>`).join('');
 }
 
@@ -1623,6 +1742,17 @@ window.openGastoModal=function(id){
   document.getElementById('g-proveedor').value='';
   document.getElementById('g-factura').value='';
   document.getElementById('g-notas').value='';
+  document.getElementById('cat-personalizada-group').style.display='none';
+  // Agregar categorías personalizadas guardadas al select
+  const sel = document.getElementById('g-categoria');
+  const cats = JSON.parse(localStorage.getItem('pl_cats_gastos')||'[]');
+  // Remover opciones personalizadas previas
+  Array.from(sel.options).forEach(o => { if(o.dataset.custom) o.remove(); });
+  cats.forEach(cat => {
+    const opt = document.createElement('option');
+    opt.value = cat; opt.text = cat; opt.dataset.custom = '1';
+    sel.insertBefore(opt, sel.querySelector('option[value="__personalizada__"]'));
+  });
   // Llenar datalist de proveedores
   const dl=document.getElementById('lista-proveedores-gasto');
   if(dl) dl.innerHTML=proveedores.map(p=>`<option value="${p.nombre}">`).join('');
@@ -1633,7 +1763,15 @@ window.openGastoModal=function(id){
       document.getElementById('g-fecha').value=g.fecha||hoy();
       document.getElementById('g-tipo').value=g.tipo||'Fijo';
       document.getElementById('g-concepto').value=g.concepto||'';
-      document.getElementById('g-categoria').value=g.categoria||'Otro';
+      // Si la categoría no está en el select, agregarla temporalmente
+    const gsel = document.getElementById('g-categoria');
+    const exists = Array.from(gsel.options).some(o=>o.value===g.categoria);
+    if(!exists && g.categoria) {
+      const opt = document.createElement('option');
+      opt.value=g.categoria; opt.text=g.categoria; opt.dataset.custom='1';
+      gsel.insertBefore(opt, gsel.querySelector('option[value="__personalizada__"]'));
+    }
+    gsel.value=g.categoria||'Otro';
       document.getElementById('g-monto').value=g.monto||'';
       document.getElementById('g-proveedor').value=g.proveedor||'';
       document.getElementById('g-factura').value=g.factura||'';
@@ -1648,7 +1786,14 @@ window.guardarGasto=async function(){
   const monto=+document.getElementById('g-monto').value;
   if(!concepto||!monto){toast('⚠️ Concepto y monto son obligatorios');return;}
   const id=document.getElementById('gasto-id').value||uid();
-  const data={id,fecha:document.getElementById('g-fecha').value,tipo:document.getElementById('g-tipo').value,concepto,categoria:document.getElementById('g-categoria').value,monto,proveedor:document.getElementById('g-proveedor').value,factura:document.getElementById('g-factura').value,notas:document.getElementById('g-notas').value,creado:new Date().toISOString()};
+  let categoria = document.getElementById('g-categoria').value;
+  if(categoria === '__personalizada__') {
+    categoria = document.getElementById('g-cat-nueva').value.trim() || 'Otro';
+    // Guardar nueva categoría para futuro uso
+    const cats = JSON.parse(localStorage.getItem('pl_cats_gastos')||'[]');
+    if(!cats.includes(categoria)) { cats.push(categoria); localStorage.setItem('pl_cats_gastos', JSON.stringify(cats)); }
+  }
+  const data={id,fecha:document.getElementById('g-fecha').value,tipo:document.getElementById('g-tipo').value,concepto,categoria,monto,proveedor:document.getElementById('g-proveedor').value,factura:document.getElementById('g-factura').value,notas:document.getElementById('g-notas').value,creado:new Date().toISOString()};
   await setDoc(doc(db,'pl_gastos',id),data);
   closeModal('modal-gasto');
   toast('✅ Gasto guardado');
@@ -1664,11 +1809,15 @@ window.filterGastos=function(tipo,btn){
 function renderGastos(){
   const desde=(document.getElementById('filter-gasto-desde')||{value:''}).value;
   const hasta=(document.getElementById('filter-gasto-hasta')||{value:''}).value;
+  const catFG=(document.getElementById('filter-gasto-categoria')||{value:''}).value;
+  const buscarG=(document.getElementById('filter-gasto-buscar')||{value:''}).value.toLowerCase();
   let lista=gastos.filter(g=>{
     const mt=gastosFiltro==='todos'||g.tipo===gastosFiltro;
     const md=!desde||g.fecha>=desde;
     const mh=!hasta||g.fecha<=hasta;
-    return mt&&md&&mh;
+    const mc=!catFG||g.categoria===catFG;
+    const mb=!buscarG||(g.concepto||'').toLowerCase().includes(buscarG)||(g.proveedor||'').toLowerCase().includes(buscarG);
+    return mt&&md&&mh&&mc&&mb;
   }).sort((a,b)=>b.fecha>a.fecha?1:-1);
   const fijos=gastos.filter(g=>(!desde||g.fecha>=desde)&&(!hasta||g.fecha<=hasta)&&g.tipo==='Fijo').reduce((s,g)=>s+(+g.monto||0),0);
   const variables=gastos.filter(g=>(!desde||g.fecha>=desde)&&(!hasta||g.fecha<=hasta)&&g.tipo==='Variable').reduce((s,g)=>s+(+g.monto||0),0);
@@ -2035,7 +2184,7 @@ function renderInsumos(){
       <td>${i.usoDia||'—'} ${i.usoDia?i.unidad+'/día':''}</td>
       <td style="font-weight:700;color:${diasColor};">${diasRestantes!==null?diasRestantes+' días':'—'}</td>
       <td style="display:flex;gap:6px;">
-        <button class="btn btn-ghost btn-sm" onclick="openInsumoModal('${i.id}')">✏️</button>
+        <button class="btn btn-ghost btn-sm" onclick="openInsumoModal('${i.id}')">✏️ Editar</button>
         <button class="btn btn-danger btn-sm" onclick="eliminarInsumo('${i.id}')">🗑</button>
       </td>
     </tr>`;
@@ -2193,10 +2342,10 @@ function renderClientes(){
       <td><span class="badge ${c.tipo==='Empresa'?'badge-gold':'badge-gray'}" style="font-size:10px;">${c.tipo||'Particular'}</span></td>
       <td>${ventasCliente.length}</td>
       <td style="font-weight:700;color:var(--green);">${fmtMoney(totalGastado)}</td>
-      <td style="display:flex;gap:4px;">
-        <button class="btn btn-ghost btn-sm" onclick="openClienteModal('${c.id}')">✏️</button>
+      <td style="display:flex;gap:4px;flex-wrap:wrap;">
+        ${isAdmin?`<button class="btn btn-ghost btn-sm" onclick="openClienteModal('${c.id}')">✏️ Editar</button>`:''}
         <button class="btn btn-sm" style="background:#25D366;color:#fff;" onclick="wsCliente('${c.id}')">💬</button>
-        <button class="btn btn-danger btn-sm" onclick="eliminarCliente('${c.id}')">🗑</button>
+        ${isAdmin?`<button class="btn btn-danger btn-sm" onclick="eliminarCliente('${c.id}')">🗑</button>`:''}
       </td>
     </tr>`;
   }).join('');
@@ -2240,7 +2389,8 @@ window.exportarDatos=function(){
 // ─── TIPO DE PROCESO ───
 window.toggleEnvioFields = function() {
   const canal = document.getElementById('v-canal').value;
-  const canalesConEnvio = ['Foráneo','Mercado Libre','Amazon','Shopify'];
+  // Mercado Libre usa su propia logística, no paqueterías tradicionales
+  const canalesConEnvio = ['Foráneo','Amazon','Shopify'];
   const mostrar = canalesConEnvio.includes(canal);
   document.getElementById('v-envio-fields').style.display = mostrar ? 'block' : 'none';
   document.getElementById('v-ciudad-group').style.display = mostrar ? 'flex' : 'none';
@@ -2335,8 +2485,8 @@ function calcularRendimiento() {
 
 // ─── TALLAS DINÁMICAS ───
 const TALLAS_POR_GENERO = {
-  'Hombre':   ['CH','S','M','L','XL','XXL','3XL'],
-  'Mujer':    ['CH','S','M','L','XL','XXL'],
+  'Hombre':   ['CH','M','L','XL','XXL','3XL'],
+  'Mujer':    ['CH','M','L','XL','XXL'],
   'Juvenil':  ['CH','MED','GDE','XL'],
   'Niño':     ['CH','MED','GDE','XL'],
   'Bebé Playera': ['Talla 1','Talla 2','Talla 3'],
@@ -2452,7 +2602,7 @@ function renderProveedores(){
       <td style="font-size:13px;">${comprasProv.length}</td>
       <td style="font-weight:700;color:var(--red);">${fmtMoney(totalProv)}</td>
       <td style="display:flex;gap:4px;">
-        <button class="btn btn-ghost btn-sm" onclick="openProveedorModal('${p.id}')">✏️</button>
+        <button class="btn btn-ghost btn-sm" onclick="openProveedorModal('${p.id}')">✏️ Editar</button>
         <button class="btn btn-danger btn-sm" onclick="eliminarProveedor('${p.id}')">🗑</button>
       </td>
     </tr>`;
@@ -2556,10 +2706,10 @@ function renderPedidos(){
     <td>${p.entrega?fmtFecha(p.entrega):'—'}</td>
     <td><span class="badge ${estatusColor[p.estatus]||'badge-gray'}">${p.estatus}</span></td>
     <td style="display:flex;gap:4px;flex-wrap:wrap;">
-      <button class="btn btn-ghost btn-sm" onclick="openPedidoModal('${p.id}')">✏️</button>
+      ${isAdmin?`<button class="btn btn-ghost btn-sm" onclick="openPedidoModal('${p.id}')">✏️</button>`:''}
       <button class="btn btn-sm" style="background:#25D366;color:#fff;" onclick="wsComprobante('${p.id}','anticipo')">💬 Anticipo</button>
       ${p.saldo===0?`<button class="btn btn-sm" style="background:#25D366;color:#fff;" onclick="wsComprobante('${p.id}','liquidado')">💬 Liquidado</button>`:''}
-      <button class="btn btn-danger btn-sm" onclick="eliminarPedido('${p.id}')">🗑</button>
+      ${isAdmin?`<button class="btn btn-danger btn-sm" onclick="eliminarPedido('${p.id}')">🗑</button>`:''}
     </td>
   </tr>`).join('');
 }
@@ -2629,6 +2779,17 @@ window.openGastoLocalModal=function(){
   document.getElementById('gl-categoria').value='Limpieza';
   document.getElementById('gl-forma').value='Efectivo caja';
   openModal('modal-gasto-local');
+};
+
+window.toggleCatPersonalizada = function() {
+  const sel = document.getElementById('g-categoria');
+  const group = document.getElementById('cat-personalizada-group');
+  if(sel.value === '__personalizada__') {
+    group.style.display = 'flex';
+    document.getElementById('g-cat-nueva').focus();
+  } else {
+    group.style.display = 'none';
+  }
 };
 
 window.guardarGastoLocal=async function(){
@@ -3329,7 +3490,8 @@ window.eliminarMovimiento=async function(id){
 // ─── SHOW SECTION actualizar para banco ───
 const _origShowSection = window.showSection;
 window.showSection = function(sec) {
-  if(sec==='banco' && !isAdmin){ toast('⚠️ Acceso restringido'); return; }
+  const seccionesAdmin = ['gastos','reportes','proveedores','config','banco'];
+  if(seccionesAdmin.includes(sec) && !isAdmin){ toast('⚠️ Acceso restringido'); return; }
   _origShowSection(sec);
   if(sec==='banco'){ renderCuentas(); renderMovimientos(); }
 };
