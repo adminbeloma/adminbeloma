@@ -301,13 +301,16 @@ tbody td{padding:11px 14px;font-size:13.5px;vertical-align:middle;}
         <input type="date" id="filter-venta-desde" onchange="renderVentas()">
         <input type="date" id="filter-venta-hasta" onchange="renderVentas()">
       </div>
-      <div style="display:flex;gap:10px;margin-bottom:14px;flex-wrap:wrap;">
+      <div style="display:flex;gap:8px;margin-bottom:14px;flex-wrap:wrap;align-items:center;">
+        <span style="font-size:12px;color:var(--ink-soft);font-weight:600;">Rango rápido:</span>
         <button class="btn btn-ghost btn-sm" onclick="setRango('hoy')">Hoy</button>
-        <button class="btn btn-ghost btn-sm" onclick="setRango('semana')">Esta semana</button>
-        <button class="btn btn-ghost btn-sm" onclick="setRango('mes')">Este mes</button>
+        <button class="btn btn-ghost btn-sm" onclick="setRango('semana')">Semana</button>
+        <button class="btn btn-ghost btn-sm" onclick="setRango('mes')">Mes</button>
         <button class="btn btn-ghost btn-sm" onclick="setRango('trimestre')">Trimestre</button>
-        <button class="btn btn-ghost btn-sm" onclick="setRango('año')">Este año</button>
+        <button class="btn btn-ghost btn-sm" onclick="setRango('año')">Año</button>
         <button class="btn btn-ghost btn-sm" onclick="setRango('todo')">Todo</button>
+        <button class="btn btn-primary btn-sm" onclick="renderVentas()" style="margin-left:4px;">🔍 Buscar</button>
+        <button class="btn btn-ghost btn-sm" onclick="limpiarFiltrosVentas()">✕ Limpiar</button>
       </div>
       <div style="display:flex;gap:14px;margin-bottom:16px;flex-wrap:wrap;">
         <div style="background:var(--bg-card);border:1px solid var(--border);border-radius:8px;padding:12px 16px;"><div style="font-size:11px;color:var(--ink-soft);font-weight:600;text-transform:uppercase;">Total período</div><div style="font-size:20px;font-weight:700;color:var(--green);" id="ventas-total-periodo">$0</div></div>
@@ -1670,6 +1673,14 @@ window.guardarVenta=async function(){
   await setDoc(doc(db,'pl_ventas',id),data);
   closeModal('modal-venta');
   toast('✅ Venta guardada');
+};
+
+window.limpiarFiltrosVentas=function(){
+  document.getElementById('search-ventas').value='';
+  document.getElementById('filter-canal').value='';
+  document.getElementById('filter-venta-desde').value='';
+  document.getElementById('filter-venta-hasta').value='';
+  renderVentas();
 };
 
 window.setRango=function(tipo){
