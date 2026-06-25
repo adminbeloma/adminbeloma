@@ -225,6 +225,7 @@ tbody td{padding:11px 14px;font-size:13.5px;vertical-align:middle;}
     <a onclick="showSection('proveedores')" id="nav-proveedores" class="admin-only" style="display:none;"><span class="icon">🏭</span><span>Proveedores</span></a>
     <a onclick="showSection('config')" id="nav-config" class="admin-only" style="display:none;"><span class="icon">⚙️</span><span>Config</span></a>
     <div class="nav-group admin-only" style="display:none;">Admin</div>
+    <a onclick="showSection('catalogo')" id="nav-catalogo" class="admin-only" style="display:none;"><span class="icon">🎨</span><span>Catálogo</span></a>
     <a onclick="showSection('banco')" id="nav-banco" class="admin-only" style="display:none;"><span class="icon">🏦</span><span>Conciliación</span></a>
   </nav>
   <div class="sidebar-footer">v1.0 · Beloma · playerasbeloma.com</div>
@@ -757,6 +758,44 @@ tbody td{padding:11px 14px;font-size:13.5px;vertical-align:middle;}
         </table>
       </div>
       <div id="movimientos-empty" class="empty-state" style="display:none;"><div class="icon">🏦</div><p>No hay movimientos registrados.</p></div>
+    </div>
+  </div>
+
+
+  <!-- CATÁLOGO DE DISEÑOS -->
+  <div id="section-catalogo" class="section">
+    <div class="topbar">
+      <h1>🎨 Catálogo de Diseños</h1>
+      <div class="actions">
+        <button class="btn btn-ghost btn-sm" onclick="copiarLinkCatalogo()">🔗 Link catálogo</button>
+        <button class="btn btn-ghost btn-sm" onclick="copiarLinkCategoria()">📂 Link por categoría</button>
+        <button class="btn btn-accent" onclick="openDisenoModal()">+ Nuevo diseño</button>
+      </div>
+    </div>
+    <div class="content">
+      <div class="filter-bar">
+        <input type="text" id="search-diseños" placeholder="🔍 Buscar diseño..." oninput="renderDiseños()">
+        <select id="filter-diseno-cat" onchange="renderDiseños()">
+          <option value="">Todas las categorías</option>
+        </select>
+        <select id="filter-diseno-status" onchange="renderDiseños()">
+          <option value="">Todos</option>
+          <option value="activo">Activos</option>
+          <option value="inactivo">Inactivos</option>
+        </select>
+      </div>
+
+      <!-- Links rápidos -->
+      <div class="card" style="margin-bottom:18px;background:var(--bg-dark);border:none;">
+        <div style="font-size:13px;font-weight:600;color:rgba(255,255,255,0.7);margin-bottom:10px;">🔗 Links para compartir con clientes</div>
+        <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:center;">
+          <div style="background:rgba(255,255,255,0.08);border-radius:8px;padding:8px 14px;font-size:12px;color:rgba(255,255,255,0.6);flex:1;min-width:200px;" id="link-catalogo-url">Cargando URL...</div>
+          <button class="btn btn-gold btn-sm" onclick="copiarLinkCatalogo()">Copiar link completo</button>
+        </div>
+      </div>
+
+      <div id="diseños-grid" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(180px,1fr));gap:14px;"></div>
+      <div id="diseños-empty" class="empty-state" style="display:none;"><div class="icon">🎨</div><p>No hay diseños. Agrega el primero.</p></div>
     </div>
   </div>
 
@@ -1421,6 +1460,44 @@ tbody td{padding:11px 14px;font-size:13.5px;vertical-align:middle;}
     <div class="modal-footer">
       <button class="btn btn-ghost" onclick="closeModal('modal-movimiento')">Cancelar</button>
       <button class="btn btn-accent" onclick="guardarMovimiento()">Guardar</button>
+    </div>
+  </div>
+</div>
+
+
+<!-- MODAL DISEÑO -->
+<div class="modal-overlay" id="modal-diseno">
+  <div class="modal">
+    <div class="modal-header"><h2 id="modal-diseno-title">Nuevo Diseño</h2><button class="modal-close" onclick="closeModal('modal-diseno')">×</button></div>
+    <div class="modal-body">
+      <input type="hidden" id="dis-id">
+      <div class="form-grid">
+        <div class="form-group full"><label>Nombre del diseño *</label><input type="text" id="dis-nombre" placeholder="Ej. Dexter 01, Batman Classic..."></div>
+        <div class="form-group"><label>Categoría *</label>
+          <input type="text" id="dis-categoria" placeholder="Caricaturas, Rock, Superhéroes..." list="cats-list">
+          <datalist id="cats-list"></datalist>
+        </div>
+        <div class="form-group"><label>Tags / palabras clave</label><input type="text" id="dis-tags" placeholder="dexter, cartoon, niño, laboratorio"></div>
+        <div class="form-group"><label>Precio ($)</label><input type="number" id="dis-precio" placeholder="250" step="0.01"></div>
+        <div class="form-group"><label>Estado</label>
+          <select id="dis-activo">
+            <option value="true">Activo (visible)</option>
+            <option value="false">Inactivo (oculto)</option>
+          </select>
+        </div>
+        <div class="form-group full"><label>📷 Imagen del mockup</label>
+          <label class="btn btn-ghost btn-sm" style="cursor:pointer;width:fit-content;">
+            Seleccionar imagen
+            <input type="file" id="dis-imagen" accept="image/*" style="display:none" onchange="previewDisenoImg(this)">
+          </label>
+          <img id="dis-imagen-preview" style="display:none;width:120px;height:120px;object-fit:cover;border-radius:8px;margin-top:8px;border:1px solid var(--border);">
+        </div>
+        <div class="form-group full"><label>Notas internas</label><textarea id="dis-notas" placeholder="Notas sobre el diseño..."></textarea></div>
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-ghost" onclick="closeModal('modal-diseno')">Cancelar</button>
+      <button class="btn btn-accent" onclick="guardarDiseno()">Guardar diseño</button>
     </div>
   </div>
 </div>
@@ -2636,6 +2713,141 @@ window.actualizarTallasVenta = function() {
 };
 
 
+
+// ─── CATÁLOGO DE DISEÑOS ───
+let diseños = [];
+const CATALOGO_URL = 'https://adminbeloma.github.io/catalogo/';
+onSnapshot(collection(db,'bl_diseños'),s=>{
+  diseños=s.docs.map(d=>d.data());
+  renderDiseños();
+  actualizarCatsDisenoSelect();
+});
+
+function actualizarCatsDisenoSelect(){
+  const cats=[...new Set(diseños.map(d=>d.categoria).filter(Boolean))].sort();
+  const sel=document.getElementById('filter-diseno-cat');
+  const dl=document.getElementById('cats-list');
+  if(sel){
+    const val=sel.value;
+    sel.innerHTML='<option value="">Todas las categorías</option>'+cats.map(c=>`<option value="${c}">${c}</option>`).join('');
+    sel.value=val;
+  }
+  if(dl) dl.innerHTML=cats.map(c=>`<option value="${c}">`).join('');
+  // Actualizar URL del catálogo
+  const urlEl=document.getElementById('link-catalogo-url');
+  if(urlEl) urlEl.textContent=CATALOGO_URL;
+}
+
+window.openDisenoModal=function(id){
+  document.getElementById('dis-id').value='';
+  ['dis-nombre','dis-categoria','dis-tags','dis-precio','dis-notas'].forEach(f=>document.getElementById(f).value='');
+  document.getElementById('dis-activo').value='true';
+  document.getElementById('dis-imagen-preview').style.display='none';
+  document.getElementById('dis-imagen').value='';
+  document.getElementById('modal-diseno-title').textContent='Nuevo Diseño';
+  if(id){
+    const d=diseños.find(x=>x.id===id);
+    if(d){
+      document.getElementById('dis-id').value=d.id;
+      document.getElementById('dis-nombre').value=d.nombre||'';
+      document.getElementById('dis-categoria').value=d.categoria||'';
+      document.getElementById('dis-tags').value=d.tags||'';
+      document.getElementById('dis-precio').value=d.precio||'';
+      document.getElementById('dis-activo').value=d.activo?'true':'false';
+      document.getElementById('dis-notas').value=d.notas||'';
+      if(d.imagen){const img=document.getElementById('dis-imagen-preview');img.src=d.imagen;img.style.display='block';}
+      document.getElementById('modal-diseno-title').textContent='Editar Diseño';
+    }
+  }
+  openModal('modal-diseno');
+};
+
+window.previewDisenoImg=function(input){
+  const file=input.files[0];if(!file)return;
+  const reader=new FileReader();
+  reader.onload=e=>{const img=document.getElementById('dis-imagen-preview');img.src=e.target.result;img.style.display='block';};
+  reader.readAsDataURL(file);
+};
+
+window.guardarDiseno=async function(){
+  const nombre=document.getElementById('dis-nombre').value.trim();
+  const categoria=document.getElementById('dis-categoria').value.trim();
+  if(!nombre||!categoria){toast('⚠️ Nombre y categoría son obligatorios');return;}
+  const id=document.getElementById('dis-id').value||uid();
+  let imagenUrl='';
+  const file=document.getElementById('dis-imagen').files[0];
+  if(file){
+    toast('⏳ Subiendo imagen...');
+    const fd=new FormData();fd.append('file',file);fd.append('upload_preset',PRESET);fd.append('folder','beloma-catalogo');
+    const res=await fetch(`https://api.cloudinary.com/v1_1/${CLOUD}/image/upload`,{method:'POST',body:fd});
+    const data=await res.json();
+    imagenUrl=data.secure_url||'';
+  } else {
+    const existing=diseños.find(x=>x.id===id);
+    imagenUrl=existing?.imagen||'';
+  }
+  const data={id,nombre,categoria,tags:document.getElementById('dis-tags').value,precio:+document.getElementById('dis-precio').value||0,activo:document.getElementById('dis-activo').value==='true',notas:document.getElementById('dis-notas').value,imagen:imagenUrl,creado:new Date().toISOString()};
+  await setDoc(doc(db,'bl_diseños',id),data);
+  closeModal('modal-diseno');
+  toast('✅ Diseño guardado');
+};
+
+function renderDiseños(){
+  const search=(document.getElementById('search-diseños')||{value:''}).value.toLowerCase();
+  const cat=(document.getElementById('filter-diseno-cat')||{value:''}).value;
+  const status=(document.getElementById('filter-diseno-status')||{value:''}).value;
+  let lista=diseños.filter(d=>{
+    const ms=!search||d.nombre?.toLowerCase().includes(search)||(d.tags||'').toLowerCase().includes(search)||(d.categoria||'').toLowerCase().includes(search);
+    const mc=!cat||d.categoria===cat;
+    const mst=!status||(status==='activo'?d.activo:!d.activo);
+    return ms&&mc&&mst;
+  });
+  const grid=document.getElementById('diseños-grid');
+  const empty=document.getElementById('diseños-empty');
+  if(!grid)return;
+  if(lista.length===0){grid.innerHTML='';empty.style.display='block';return;}
+  empty.style.display='none';
+  grid.innerHTML=lista.map(d=>`
+    <div style="background:var(--bg-card);border:1px solid var(--border);border-radius:12px;overflow:hidden;${!d.activo?'opacity:0.6;':''}" >
+      ${d.imagen?`<img src="${d.imagen}" style="width:100%;aspect-ratio:1;object-fit:cover;" loading="lazy">`:`<div style="width:100%;aspect-ratio:1;background:var(--bg);display:flex;align-items:center;justify-content:center;font-size:40px;">👕</div>`}
+      <div style="padding:10px 12px;">
+        <div style="font-weight:600;font-size:13px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${d.nombre}</div>
+        <div style="font-size:11px;color:var(--ink-soft);">${d.categoria||'—'}</div>
+        ${d.precio?`<div style="font-size:13px;font-weight:700;color:var(--green);margin-top:2px;">$${Number(d.precio).toLocaleString('es-MX')}</div>`:''}
+        <div style="margin-top:4px;"><span class="badge ${d.activo?'badge-green':'badge-gray'}" style="font-size:10px;">${d.activo?'Activo':'Inactivo'}</span></div>
+        <div style="display:flex;gap:6px;margin-top:8px;">
+          <button class="btn btn-ghost btn-sm" style="flex:1;" onclick="openDisenoModal('${d.id}')">✏️</button>
+          <button class="btn btn-ghost btn-sm" onclick="copiarLinkDiseno('${d.categoria}')">🔗</button>
+          <button class="btn btn-danger btn-sm" onclick="eliminarDiseno('${d.id}')">🗑</button>
+        </div>
+      </div>
+    </div>
+  `).join('');
+}
+
+window.copiarLinkCatalogo=function(){
+  const url=CATALOGO_URL;
+  navigator.clipboard?.writeText(url).then(()=>toast('🔗 Link copiado: '+url));
+};
+
+window.copiarLinkCategoria=function(){
+  const cat=document.getElementById('filter-diseno-cat')?.value;
+  if(!cat){toast('⚠️ Selecciona una categoría primero en el filtro');return;}
+  const url=CATALOGO_URL+'?cat='+encodeURIComponent(cat);
+  navigator.clipboard?.writeText(url).then(()=>toast('🔗 Link copiado: '+url));
+};
+
+window.copiarLinkDiseno=function(cat){
+  const url=CATALOGO_URL+(cat?'?cat='+encodeURIComponent(cat):'');
+  navigator.clipboard?.writeText(url).then(()=>toast('🔗 Link copiado'));
+};
+
+window.eliminarDiseno=async function(id){
+  if(!confirm('¿Eliminar este diseño?'))return;
+  await deleteDoc(doc(db,'bl_diseños',id));
+  toast('🗑 Diseño eliminado');
+};
+
 // ─── PROVEEDORES ───
 let proveedores = [];
 onSnapshot(collection(db,'pl_proveedores'),s=>{proveedores=s.docs.map(d=>d.data());renderProveedores();});
@@ -3649,10 +3861,11 @@ window.eliminarMovimiento=async function(id){
 // ─── SHOW SECTION actualizar para banco ───
 const _origShowSection = window.showSection;
 window.showSection = function(sec) {
-  const seccionesAdmin = ['gastos','reportes','proveedores','config','banco'];
+  const seccionesAdmin = ['gastos','reportes','proveedores','config','banco','catalogo'];
   if(seccionesAdmin.includes(sec) && !isAdmin){ toast('⚠️ Acceso restringido'); return; }
   _origShowSection(sec);
   if(sec==='banco'){ renderCuentas(); renderMovimientos(); }
+  if(sec==='catalogo'){ renderDiseños(); actualizarCatsDisenoSelect(); }
 };
 
 // INIT
