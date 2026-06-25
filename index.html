@@ -309,7 +309,7 @@ tbody td{padding:11px 14px;font-size:13.5px;vertical-align:middle;}
         <button class="btn btn-ghost btn-sm" onclick="setRango('trimestre')">Trimestre</button>
         <button class="btn btn-ghost btn-sm" onclick="setRango('año')">Año</button>
         <button class="btn btn-ghost btn-sm" onclick="setRango('todo')">Todo</button>
-        <button class="btn btn-primary btn-sm" onclick="renderVentas()" style="margin-left:4px;">🔍 Buscar</button>
+        <button class="btn btn-primary btn-sm" onclick="buscarVentasPorFecha()" style="margin-left:4px;">🔍 Buscar</button>
         <button class="btn btn-ghost btn-sm" onclick="limpiarFiltrosVentas()">✕ Limpiar</button>
       </div>
       <div style="display:flex;gap:14px;margin-bottom:16px;flex-wrap:wrap;">
@@ -324,6 +324,10 @@ tbody td{padding:11px 14px;font-size:13.5px;vertical-align:middle;}
         </table>
       </div>
       <div id="ventas-empty" class="empty-state" style="display:none;"><div class="icon">💰</div><p>No hay ventas en este período.</p></div>
+      <div id="ventas-cargar-mas" style="text-align:center;padding:16px;display:none;">
+        <button class="btn btn-ghost" onclick="cargarMasVentas()">⬇️ Cargar más ventas</button>
+        <div style="font-size:12px;color:var(--ink-soft);margin-top:6px;" id="ventas-count-label"></div>
+      </div>
     </div>
   </div>
 
@@ -1425,7 +1429,7 @@ tbody td{padding:11px 14px;font-size:13.5px;vertical-align:middle;}
 
 <script type="module">
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
-import { getFirestore, collection, doc, setDoc, deleteDoc, onSnapshot, query, getDocs } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
+import { getFirestore, collection, doc, setDoc, deleteDoc, onSnapshot, query, getDocs, orderBy, limit, startAfter, where, getDoc } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
 import { getAuth, signInWithEmailAndPassword, signOut, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js";
 
 const firebaseConfig = {
@@ -1466,13 +1470,54 @@ try {
   if(cv) ventas = JSON.parse(cv);
 } catch(e){}
 
-onSnapshot(collection(db,'pl_ventas'),s=>{
-  ventas=s.docs.map(d=>d.data());
+// Ventas: paginación en lugar de cargar todo
+let ultimoDocVenta = null;
+let hayMasVentas = false;
+let cargandoVentas = false;
+let ventasTotalCount = 0;
+
+async function cargarVentas(reset=false) {
+  if(cargandoVentas) return;
+  cargandoVentas = true;
+  if(reset){ ventas=[]; ultimoDocVenta=null; hayMasVentas=false; }
+  
+  let q = query(collection(db,'pl_ventas'), orderBy('fecha','desc'), orderBy('creado','desc'), limit(50));
+  if(ultimoDocVenta && !reset) q = query(collection(db,'pl_ventas'), orderBy('fecha','desc'), orderBy('creado','desc'), limit(50), startAfter(ultimoDocVenta));
+  
+  const snap = await getDocs(q);
+  const nuevas = snap.docs.map(d=>d.data());
+  
+  if(reset) ventas = nuevas;
+  else ventas = [...ventas, ...nuevas];
+  
+  ultimoDocVenta = snap.docs[snap.docs.length-1] || null;
+  hayMasVentas = snap.docs.length === 50;
+  cargandoVentas = false;
+  
   checkLoaded();
   renderDashboard();
   renderVentas();
-  // Guardar en cache local para acceso rápido
-  try{ localStorage.setItem('cache_ventas', JSON.stringify(ventas)); } catch(e){}
+  try{ localStorage.setItem('cache_ventas', JSON.stringify(ventas.slice(0,50))); } catch(e){}
+}
+
+// Para dashboard y stats necesitamos un conteo real
+async function contarVentas() {
+  // Solo usamos las ventas cargadas para el dashboard
+}
+
+cargarVentas(true);
+
+// Listener solo para nuevas ventas (escrituras recientes)
+onSnapshot(query(collection(db,'pl_ventas'), orderBy('creado','desc'), limit(5)), s=>{
+  const recientes = s.docs.map(d=>d.data());
+  // Actualizar ventas recientes en memoria sin recargar todo
+  recientes.forEach(v=>{
+    const idx = ventas.findIndex(x=>x.id===v.id);
+    if(idx>=0) ventas[idx]=v;
+    else if(ventas.length<50) ventas.unshift(v);
+  });
+  renderVentas();
+  renderDashboard();
 });
 onSnapshot(collection(db,'pl_gastos'),s=>{gastos=s.docs.map(d=>d.data());checkLoaded();renderDashboard();renderGastos();});
 onSnapshot(collection(db,'pl_playeras'),s=>{playeras=s.docs.map(d=>d.data());checkLoaded();renderPlayeras();});
@@ -1673,20 +1718,66 @@ window.guardarVenta=async function(){
   await setDoc(doc(db,'pl_ventas',id),data);
   closeModal('modal-venta');
   toast('✅ Venta guardada');
+  // Recargar ventas recientes
+  await cargarVentas(true);
 };
 
-window.limpiarFiltrosVentas=function(){
+window.cargarMasVentas = async function() {
+  await cargarVentas(false);
+};
+
+window.buscarVentasPorFecha = async function() {
+  const desde = document.getElementById('filter-venta-desde').value;
+  const hasta = document.getElementById('filter-venta-hasta').value;
+  
+  if(desde && hasta) {
+    try {
+      toast('🔍 Buscando...');
+      const q = query(collection(db,'pl_ventas'),
+        where('fecha','>=',desde),
+        where('fecha','<=',hasta),
+        orderBy('fecha','desc'),
+        limit(500));
+      const snap = await getDocs(q);
+      ventas = snap.docs.map(d=>d.data());
+      hayMasVentas = false;
+    } catch(e) { console.log('Error búsqueda:', e); }
+  } else {
+    // Sin fechas, recargar las últimas 50
+    await cargarVentas(true);
+  }
+  renderVentas();
+};
+
+window.limpiarFiltrosVentas=async function(){
   document.getElementById('search-ventas').value='';
   document.getElementById('filter-canal').value='';
   document.getElementById('filter-venta-desde').value='';
   document.getElementById('filter-venta-hasta').value='';
+  await cargarVentas(true);
   renderVentas();
 };
 
-window.setRango=function(tipo){
+window.setRango=async function(tipo){
   const r=getRango(tipo);
   document.getElementById('filter-venta-desde').value=r.desde;
   document.getElementById('filter-venta-hasta').value=r.hasta;
+  
+  // Si hay rango de fechas, hacer query específica a Firebase
+  if(r.desde && r.hasta && tipo !== 'todo'){
+    try{
+      const q = query(collection(db,'pl_ventas'), 
+        where('fecha','>=',r.desde), 
+        where('fecha','<=',r.hasta),
+        orderBy('fecha','desc'),
+        limit(500));
+      const snap = await getDocs(q);
+      ventas = snap.docs.map(d=>d.data());
+      hayMasVentas = false;
+    } catch(e){ console.log('Query error:', e); }
+  } else if(tipo === 'todo'){
+    await cargarVentas(true);
+  }
   renderVentas();
 };
 
@@ -1717,6 +1808,14 @@ function renderVentas(){
   document.getElementById('ventas-unidades-periodo').textContent=unidadesPer;
   document.getElementById('ventas-ticket-periodo').textContent=lista.length>0?fmtMoney(totalPer/lista.length):'$0';
   if(!tbody)return;
+  
+  // Mostrar botón cargar más si hay más ventas disponibles
+  const btnMas = document.getElementById('ventas-cargar-mas');
+  const countLabel = document.getElementById('ventas-count-label');
+  const filtrosActivos = search || canal || desde || hasta;
+  if(btnMas) btnMas.style.display = hayMasVentas && !filtrosActivos ? 'block' : 'none';
+  if(countLabel) countLabel.textContent = `Mostrando ${ventas.length} ventas${hayMasVentas?' (hay más por cargar)':''}`;
+  
   if(lista.length===0){tbody.innerHTML='';empty.style.display='block';return;}
   empty.style.display='none';
   const canalColor={Local:'badge-blue','Foráneo':'badge-gold','Mercado Libre':'badge-gold',Amazon:'badge-green',Shopify:'badge-green',WhatsApp:'badge-green',Otro:'badge-gray'};
@@ -1741,6 +1840,7 @@ window.eliminarVenta=async function(id){
   if(!confirm('¿Eliminar esta venta?'))return;
   await deleteDoc(doc(db,'pl_ventas',id));
   toast('🗑 Venta eliminada');
+  await cargarVentas(true);
 };
 
 // ─── GASTOS ───
@@ -1838,6 +1938,14 @@ function renderGastos(){
   const tbody=document.getElementById('tabla-gastos');
   const empty=document.getElementById('gastos-empty');
   if(!tbody)return;
+  
+  // Mostrar botón cargar más si hay más ventas disponibles
+  const btnMas = document.getElementById('ventas-cargar-mas');
+  const countLabel = document.getElementById('ventas-count-label');
+  const filtrosActivos = search || canal || desde || hasta;
+  if(btnMas) btnMas.style.display = hayMasVentas && !filtrosActivos ? 'block' : 'none';
+  if(countLabel) countLabel.textContent = `Mostrando ${ventas.length} ventas${hayMasVentas?' (hay más por cargar)':''}`;
+  
   if(lista.length===0){tbody.innerHTML='';empty.style.display='block';return;}
   empty.style.display='none';
   tbody.innerHTML=lista.map(g=>`<tr>
@@ -2335,6 +2443,14 @@ function renderClientes(){
   if(empresasEl) empresasEl.textContent=lista.filter(c=>c.tipo==='Empresa').length;
 
   if(!tbody)return;
+  
+  // Mostrar botón cargar más si hay más ventas disponibles
+  const btnMas = document.getElementById('ventas-cargar-mas');
+  const countLabel = document.getElementById('ventas-count-label');
+  const filtrosActivos = search || canal || desde || hasta;
+  if(btnMas) btnMas.style.display = hayMasVentas && !filtrosActivos ? 'block' : 'none';
+  if(countLabel) countLabel.textContent = `Mostrando ${ventas.length} ventas${hayMasVentas?' (hay más por cargar)':''}`;
+  
   if(lista.length===0){tbody.innerHTML='';empty.style.display='block';return;}
   empty.style.display='none';
 
@@ -2589,6 +2705,14 @@ function renderProveedores(){
   const tbody=document.getElementById('tabla-proveedores');
   const empty=document.getElementById('proveedores-empty');
   if(!tbody)return;
+  
+  // Mostrar botón cargar más si hay más ventas disponibles
+  const btnMas = document.getElementById('ventas-cargar-mas');
+  const countLabel = document.getElementById('ventas-count-label');
+  const filtrosActivos = search || canal || desde || hasta;
+  if(btnMas) btnMas.style.display = hayMasVentas && !filtrosActivos ? 'block' : 'none';
+  if(countLabel) countLabel.textContent = `Mostrando ${ventas.length} ventas${hayMasVentas?' (hay más por cargar)':''}`;
+  
   if(lista.length===0){tbody.innerHTML='';empty.style.display='block';return;}
   empty.style.display='none';
 
@@ -2704,6 +2828,14 @@ function renderPedidos(){
   const tbody=document.getElementById('tabla-pedidos');
   const empty=document.getElementById('pedidos-empty');
   if(!tbody)return;
+  
+  // Mostrar botón cargar más si hay más ventas disponibles
+  const btnMas = document.getElementById('ventas-cargar-mas');
+  const countLabel = document.getElementById('ventas-count-label');
+  const filtrosActivos = search || canal || desde || hasta;
+  if(btnMas) btnMas.style.display = hayMasVentas && !filtrosActivos ? 'block' : 'none';
+  if(countLabel) countLabel.textContent = `Mostrando ${ventas.length} ventas${hayMasVentas?' (hay más por cargar)':''}`;
+  
   if(lista.length===0){tbody.innerHTML='';empty.style.display='block';return;}
   empty.style.display='none';
   const estatusColor={'En elaboración':'badge-gold','Listo':'badge-blue','Entregado':'badge-green','Liquidado':'badge-gray'};
@@ -3028,6 +3160,14 @@ function renderCompras(){
   const tbody=document.getElementById('tabla-compras');
   const empty=document.getElementById('compras-empty');
   if(!tbody)return;
+  
+  // Mostrar botón cargar más si hay más ventas disponibles
+  const btnMas = document.getElementById('ventas-cargar-mas');
+  const countLabel = document.getElementById('ventas-count-label');
+  const filtrosActivos = search || canal || desde || hasta;
+  if(btnMas) btnMas.style.display = hayMasVentas && !filtrosActivos ? 'block' : 'none';
+  if(countLabel) countLabel.textContent = `Mostrando ${ventas.length} ventas${hayMasVentas?' (hay más por cargar)':''}`;
+  
   if(lista.length===0){tbody.innerHTML='';empty.style.display='block';return;}
   empty.style.display='none';
   tbody.innerHTML=lista.map(c=>`<tr>
@@ -3468,6 +3608,14 @@ function renderMovimientos(){
   const tbody=document.getElementById('tabla-movimientos');
   const empty=document.getElementById('movimientos-empty');
   if(!tbody)return;
+  
+  // Mostrar botón cargar más si hay más ventas disponibles
+  const btnMas = document.getElementById('ventas-cargar-mas');
+  const countLabel = document.getElementById('ventas-count-label');
+  const filtrosActivos = search || canal || desde || hasta;
+  if(btnMas) btnMas.style.display = hayMasVentas && !filtrosActivos ? 'block' : 'none';
+  if(countLabel) countLabel.textContent = `Mostrando ${ventas.length} ventas${hayMasVentas?' (hay más por cargar)':''}`;
+  
   if(lista.length===0){tbody.innerHTML='';empty.style.display='block';return;}
   empty.style.display='none';
 
