@@ -2719,8 +2719,7 @@ let diseños = [];
 const CATALOGO_URL = 'https://adminbeloma.github.io/catalogo/';
 onSnapshot(collection(db,'bl_disenos'),s=>{
   diseños=s.docs.map(d=>d.data());
-  renderDiseños();
-  actualizarCatsDisenoSelect();
+  actualizarCatsDisenoSelect(); // Esto llama renderDiseños internamente
 });
 
 function actualizarCatsDisenoSelect(){
@@ -2730,12 +2729,15 @@ function actualizarCatsDisenoSelect(){
   if(sel){
     const val=sel.value;
     sel.innerHTML='<option value="">Todas las categorías</option>'+cats.map(c=>`<option value="${c}">${c}</option>`).join('');
-    sel.value=val;
+    // Restaurar valor seleccionado si sigue existiendo
+    if(val && cats.includes(val)) sel.value=val;
   }
   if(dl) dl.innerHTML=cats.map(c=>`<option value="${c}">`).join('');
   // Actualizar URL del catálogo
   const urlEl=document.getElementById('link-catalogo-url');
   if(urlEl) urlEl.textContent=CATALOGO_URL;
+  // Re-renderizar con filtro actual
+  renderDiseños();
 }
 
 window.openDisenoModal=function(id){
