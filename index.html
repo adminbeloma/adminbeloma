@@ -1469,7 +1469,7 @@ tbody td{padding:11px 14px;font-size:13.5px;vertical-align:middle;}
 <!-- MODAL DISEÑO -->
 <div class="modal-overlay" id="modal-diseno">
   <div class="modal">
-    <div class="modal-header"><h2 id="modal-diseno-title">Nuevo Diseño</h2><button class="modal-close" onclick="closeModal('modal-diseno')">×</button></div>
+    <div class="modal-header"><h2 id="modal-diseno-title">Nuevo Diseño</h2><button class="modal-close" onclick="cerrarDisenoConAdvertencia()">×</button></div>
     <div class="modal-body">
       <input type="hidden" id="dis-id">
       <div class="form-grid">
@@ -1526,7 +1526,7 @@ tbody td{padding:11px 14px;font-size:13.5px;vertical-align:middle;}
       </div>
     </div>
     <div class="modal-footer">
-      <button class="btn btn-ghost" onclick="closeModal('modal-diseno')">Cancelar</button>
+      <button class="btn btn-ghost" onclick="cerrarDisenoConAdvertencia()">Cancelar</button>
       <button class="btn btn-accent" onclick="guardarDiseno()">Guardar diseño</button>
     </div>
   </div>
@@ -1539,7 +1539,7 @@ tbody td{padding:11px 14px;font-size:13.5px;vertical-align:middle;}
   <div class="modal" style="max-width:860px;">
     <div class="modal-header">
       <h2>📦 Carga masiva de diseños</h2>
-      <button class="modal-close" onclick="cerrarCargaMasiva()">×</button>
+      <button class="modal-close" onclick="cerrarCargaMasivaConAdvertencia()">×</button>
     </div>
     <div class="modal-body">
 
@@ -1617,7 +1617,7 @@ tbody td{padding:11px 14px;font-size:13.5px;vertical-align:middle;}
                width:0%;transition:width 0.3s;"></div>
         </div>
       </div>
-      <button class="btn btn-ghost" onclick="cerrarCargaMasiva()">Cancelar</button>
+      <button class="btn btn-ghost" onclick="cerrarCargaMasivaConAdvertencia()">Cancelar</button>
       <button class="btn btn-accent" id="cm-btn-guardar" onclick="cmGuardarTodo()">
         ✅ Guardar todos los diseños
       </button>
@@ -4231,7 +4231,7 @@ window.showSection = function(sec) {
 
 // INIT
 document.getElementById('fecha-hoy').textContent=new Date().toLocaleDateString('es-MX',{weekday:'long',year:'numeric',month:'long',day:'numeric'});
-document.querySelectorAll('.modal-overlay').forEach(o=>{o.addEventListener('click',e=>{if(e.target===o)o.classList.remove('open');});});
+document.querySelectorAll(".modal-overlay").forEach(o=>{o.addEventListener("click",e=>{if(e.target!==o)return;if(o.id==="modal-diseno"){cerrarDisenoConAdvertencia();return;}if(o.id==="modal-carga-masiva"){cerrarCargaMasivaConAdvertencia();return;}o.classList.remove("open");});});
 const cfgP=localStorage.getItem('pl_precio');const cfgC=localStorage.getItem('pl_costo_var');
 if(cfgP)document.getElementById('cfg-precio').value=cfgP;
 if(cfgC)document.getElementById('cfg-costo-var').value=cfgC;
@@ -4257,3 +4257,87 @@ actualizarEjemploTinta();
 </script>
 </body>
 </html>
+
+<!-- MODAL: Advertencia salir sin guardar -->
+<div class="modal-overlay" id="modal-confirm-diseno" style="z-index:1100;">
+  <div class="modal" style="max-width:380px;text-align:center;">
+    <div class="modal-body" style="padding:32px 28px 20px;">
+      <div style="font-size:44px;margin-bottom:14px;">⚠️</div>
+      <div style="font-size:17px;font-weight:700;margin-bottom:10px;">¿Salir sin guardar?</div>
+      <div style="font-size:14px;color:var(--ink-soft);line-height:1.5;">
+        Tienes cambios sin guardar en este diseño.<br>Si sales ahora se perderán.
+      </div>
+    </div>
+    <div class="modal-footer" style="justify-content:center;gap:12px;">
+      <button class="btn btn-ghost" onclick="closeModal('modal-confirm-diseno')">
+        ✏️ Seguir editando
+      </button>
+      <button class="btn btn-danger" onclick="confirmarCerrarDiseno()">
+        🚪 Salir sin guardar
+      </button>
+    </div>
+  </div>
+</div>
+
+<script>
+function abrirConfirmSinGuardar(){
+  openModal('modal-confirm-diseno');
+}
+window.confirmarCerrarDiseno = function(){
+  closeModal('modal-confirm-diseno');
+  closeModal('modal-diseno');
+};
+function disenoTieneCambios(){
+  return !!(
+    document.getElementById('dis-nombre')?.value ||
+    document.getElementById('dis-categoria')?.value ||
+    document.getElementById('dis-precio')?.value ||
+    document.getElementById('dis-tags')?.value ||
+    document.getElementById('dis-color')?.value ||
+    document.getElementById('dis-notas')?.value ||
+    document.getElementById('dis-imagen')?.files?.length
+  );
+}
+window.cerrarDisenoConAdvertencia = function(){
+  if(disenoTieneCambios()){
+    abrirConfirmSinGuardar();
+  } else {
+    closeModal('modal-diseno');
+  }
+};
+</script>
+
+<!-- MODAL: Advertencia salir carga masiva sin guardar -->
+<div class="modal-overlay" id="modal-confirm-carga-masiva" style="z-index:1200;">
+  <div class="modal" style="max-width:380px;text-align:center;">
+    <div class="modal-body" style="padding:32px 28px 20px;">
+      <div style="font-size:44px;margin-bottom:14px;">⚠️</div>
+      <div style="font-size:17px;font-weight:700;margin-bottom:10px;">¿Salir sin guardar?</div>
+      <div style="font-size:14px;color:var(--ink-soft);line-height:1.5;">
+        Tienes imágenes cargadas que no se han guardado.<br>Si sales ahora se perderán.
+      </div>
+    </div>
+    <div class="modal-footer" style="justify-content:center;gap:12px;">
+      <button class="btn btn-ghost" onclick="closeModal('modal-confirm-carga-masiva')">
+        ✏️ Seguir editando
+      </button>
+      <button class="btn btn-danger" onclick="confirmarCerrarCargaMasiva()">
+        🚪 Salir sin guardar
+      </button>
+    </div>
+  </div>
+</div>
+
+<script>
+window.cerrarCargaMasivaConAdvertencia = function(){
+  if(cmItems.length > 0){
+    openModal('modal-confirm-carga-masiva');
+  } else {
+    cerrarCargaMasiva();
+  }
+};
+window.confirmarCerrarCargaMasiva = function(){
+  closeModal('modal-confirm-carga-masiva');
+  cerrarCargaMasiva();
+};
+</script>
