@@ -2717,6 +2717,13 @@ window.actualizarTallasVenta = function() {
 // ─── CATÁLOGO DE DISEÑOS ───
 let diseños = [];
 const CATALOGO_URL = 'https://adminbeloma.github.io/catalogo/';
+
+// Optimizar imágenes de Cloudinary con transformaciones
+function optimizarImgUrl(url, ancho=300) {
+  if(!url || !url.includes('cloudinary.com')) return url;
+  // Insertar transformaciones: width, quality auto, format auto
+  return url.replace('/upload/', `/upload/w_${ancho},q_auto,f_auto/`);
+}
 onSnapshot(collection(db,'bl_disenos'),s=>{
   diseños=s.docs.map(d=>d.data());
   actualizarCatsDisenoSelect(); // Esto llama renderDiseños internamente
@@ -2811,7 +2818,7 @@ function renderDiseños(){
   empty.style.display='none';
   grid.innerHTML=lista.map(d=>`
     <div style="background:var(--bg-card);border:1px solid var(--border);border-radius:12px;overflow:hidden;${!d.activo?'opacity:0.6;':''}" >
-      ${d.imagen?`<img src="${d.imagen}" style="width:100%;aspect-ratio:1;object-fit:cover;" loading="lazy">`:`<div style="width:100%;aspect-ratio:1;background:var(--bg);display:flex;align-items:center;justify-content:center;font-size:40px;">👕</div>`}
+      ${d.imagen?`<img src="${optimizarImgUrl(d.imagen,300)}" style="width:100%;aspect-ratio:1;object-fit:cover;" loading="lazy">`:`<div style="width:100%;aspect-ratio:1;background:var(--bg);display:flex;align-items:center;justify-content:center;font-size:40px;">👕</div>`}
       <div style="padding:10px 12px;">
         <div style="font-weight:600;font-size:13px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${d.nombre}</div>
         <div style="font-size:11px;color:var(--ink-soft);">${d.categoria||'—'}</div>
