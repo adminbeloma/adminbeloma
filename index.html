@@ -775,10 +775,10 @@ tbody td{padding:11px 14px;font-size:13.5px;vertical-align:middle;}
     <div class="content">
       <div class="filter-bar">
         <input type="text" id="search-diseños" placeholder="🔍 Buscar diseño..." oninput="renderDiseños()">
-        <select id="filter-diseno-cat" onchange="renderDiseños()">
+        <select id="filter-diseno-cat" onchange="window.renderDiseños()">
           <option value="">Todas las categorías</option>
         </select>
-        <select id="filter-diseno-status" onchange="renderDiseños()">
+        <select id="filter-diseno-status" onchange="window.renderDiseños()">
           <option value="">Todos</option>
           <option value="activo">Activos</option>
           <option value="inactivo">Inactivos</option>
@@ -1479,6 +1479,26 @@ tbody td{padding:11px 14px;font-size:13.5px;vertical-align:middle;}
         </div>
         <div class="form-group"><label>Tags / palabras clave</label><input type="text" id="dis-tags" placeholder="dexter, cartoon, niño, laboratorio"></div>
         <div class="form-group"><label>Precio ($)</label><input type="number" id="dis-precio" placeholder="250" step="0.01"></div>
+        <div class="form-group"><label>Color de playera</label>
+          <select id="dis-color">
+            <option value="">— Cualquier color —</option>
+            <option>Blanca</option>
+            <option>Negra</option>
+            <option>Color claro</option>
+            <option>Color oscuro</option>
+          </select>
+        </div>
+        <div class="form-group"><label>Género</label>
+          <select id="dis-genero">
+            <option value="">— Todos los géneros —</option>
+            <option>Hombre</option>
+            <option>Mujer</option>
+            <option>Juvenil</option>
+            <option>Niño</option>
+            <option>Bebé Playera</option>
+            <option>Pañalero</option>
+          </select>
+        </div>
         <div class="form-group"><label>Estado</label>
           <select id="dis-activo">
             <option value="true">Activo (visible)</option>
@@ -2726,10 +2746,10 @@ function optimizarImgUrl(url, ancho=300) {
 }
 onSnapshot(collection(db,'bl_disenos'),s=>{
   diseños=s.docs.map(d=>d.data());
-  actualizarCatsDisenoSelect(); // Esto llama renderDiseños internamente
+  window.actualizarCatsDisenoSelect();
 });
 
-function actualizarCatsDisenoSelect(){
+window.actualizarCatsDisenoSelect = function(){
   const cats=[...new Set(diseños.map(d=>d.categoria).filter(Boolean))].sort();
   const sel=document.getElementById('filter-diseno-cat');
   const dl=document.getElementById('cats-list');
@@ -2751,6 +2771,8 @@ window.openDisenoModal=function(id){
   document.getElementById('dis-id').value='';
   ['dis-nombre','dis-categoria','dis-tags','dis-precio','dis-notas'].forEach(f=>document.getElementById(f).value='');
   document.getElementById('dis-activo').value='true';
+  document.getElementById('dis-color').value='';
+  document.getElementById('dis-genero').value='';
   document.getElementById('dis-imagen-preview').style.display='none';
   document.getElementById('dis-imagen').value='';
   document.getElementById('modal-diseno-title').textContent='Nuevo Diseño';
@@ -2763,6 +2785,8 @@ window.openDisenoModal=function(id){
       document.getElementById('dis-tags').value=d.tags||'';
       document.getElementById('dis-precio').value=d.precio||'';
       document.getElementById('dis-activo').value=d.activo?'true':'false';
+      document.getElementById('dis-color').value=d.color||'';
+      document.getElementById('dis-genero').value=d.genero||'';
       document.getElementById('dis-notas').value=d.notas||'';
       if(d.imagen){const img=document.getElementById('dis-imagen-preview');img.src=d.imagen;img.style.display='block';}
       document.getElementById('modal-diseno-title').textContent='Editar Diseño';
@@ -2795,13 +2819,13 @@ window.guardarDiseno=async function(){
     const existing=diseños.find(x=>x.id===id);
     imagenUrl=existing?.imagen||'';
   }
-  const data={id,nombre,categoria,tags:document.getElementById('dis-tags').value,precio:+document.getElementById('dis-precio').value||0,activo:document.getElementById('dis-activo').value==='true',notas:document.getElementById('dis-notas').value,imagen:imagenUrl,creado:new Date().toISOString()};
+  const data={id,nombre,categoria,tags:document.getElementById('dis-tags').value,precio:+document.getElementById('dis-precio').value||0,color:document.getElementById('dis-color').value,genero:document.getElementById('dis-genero').value,activo:document.getElementById('dis-activo').value==='true',notas:document.getElementById('dis-notas').value,imagen:imagenUrl,creado:new Date().toISOString()};
   await setDoc(doc(db,'bl_disenos',id),data);
   closeModal('modal-diseno');
   toast('✅ Diseño guardado');
 };
 
-function renderDiseños(){
+window.renderDiseños = function(){
   const search=(document.getElementById('search-diseños')||{value:''}).value.toLowerCase();
   const cat=(document.getElementById('filter-diseno-cat')||{value:''}).value;
   const status=(document.getElementById('filter-diseno-status')||{value:''}).value;
