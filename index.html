@@ -83,7 +83,15 @@ tbody tr:hover{background:var(--bg);}
 tbody td{padding:11px 14px;font-size:13.5px;vertical-align:middle;}
 
 /* MODAL */
-.modal-overlay{display:none;position:fixed;inset:0;background:rgba(0,0,0,0.5);z-index:1000;align-items:center;justify-content:center;padding:20px;}
+.btn-pago{padding:8px 14px;border:2px solid var(--border);border-radius:20px;background:var(--bg-card);
+  color:var(--ink);font-size:13px;font-weight:600;cursor:pointer;transition:all 0.15s;font-family:'Inter',sans-serif;}
+.btn-pago:hover{border-color:var(--green);color:var(--green);}
+.btn-pago.activo{background:var(--green);border-color:var(--green);color:#fff;}
+.btn-deposito{padding:6px 12px;border:1.5px solid var(--border);border-radius:16px;background:var(--bg-card);
+  color:var(--ink);font-size:12px;font-weight:600;cursor:pointer;transition:all 0.15s;font-family:'Inter',sans-serif;}
+.btn-deposito:hover{border-color:var(--green);}
+.btn-deposito.activo{background:var(--accent-light);border-color:var(--green);color:var(--green);}
+
 .modal-overlay.open{display:flex;}
 .modal{background:var(--bg-card);border-radius:16px;width:100%;max-width:640px;max-height:90vh;overflow-y:auto;box-shadow:0 24px 60px rgba(0,0,0,0.2);}
 .modal-header{padding:20px 24px 16px;border-bottom:1px solid var(--border);display:flex;justify-content:space-between;align-items:center;position:sticky;top:0;background:var(--bg-card);z-index:1;}
@@ -577,6 +585,29 @@ tbody td{padding:11px 14px;font-size:13.5px;vertical-align:middle;}
     <div class="topbar"><h1>Configuración</h1></div>
     <div class="content">
       <div class="card" style="max-width:520px;margin-bottom:18px;">
+        <div style="font-weight:700;font-size:15px;margin-bottom:16px;">💳 Datos para Transferencia</div>
+        <p style="font-size:13px;color:var(--ink-soft);margin-bottom:14px;line-height:1.5;">
+          Estos datos se muestran automáticamente al seleccionar "Transferencia" en Nueva Venta.
+        </p>
+        <div class="form-grid">
+          <div class="form-group"><label>Banco</label>
+            <input type="text" id="cfg-banco" placeholder="Ej. BBVA, Banamex, HSBC...">
+          </div>
+          <div class="form-group"><label>Titular de la cuenta</label>
+            <input type="text" id="cfg-titular" placeholder="Nombre completo">
+          </div>
+          <div class="form-group"><label>CLABE / Número de cuenta</label>
+            <input type="text" id="cfg-clabe" placeholder="18 dígitos CLABE">
+          </div>
+          <div class="form-group"><label>Número de tarjeta (opcional)</label>
+            <input type="text" id="cfg-num-tarjeta" placeholder="16 dígitos">
+          </div>
+        </div>
+        <div style="margin-top:12px;">
+          <button class="btn btn-primary btn-sm" onclick="guardarConfigPagos()">Guardar</button>
+        </div>
+      </div>
+      <div class="card" style="max-width:520px;margin-bottom:18px;">
         <div style="font-weight:700;font-size:15px;margin-bottom:16px;">📐 Punto de Equilibrio</div>
         <div class="form-grid">
           <div class="form-group"><label>Precio promedio de venta ($)</label><input type="number" id="cfg-precio" placeholder="250"></div>
@@ -825,7 +856,28 @@ tbody td{padding:11px 14px;font-size:13.5px;vertical-align:middle;}
           <label>Ciudad de destino</label>
           <input type="text" id="v-ciudad" placeholder="Ej. Guadalajara, Jalisco">
         </div>
-        <div class="form-group full"><label>Cliente</label><input type="text" id="v-cliente" placeholder="Nombre del cliente"></div>
+        <!-- FOLIO -->
+        <div class="form-group">
+          <label>Folio</label>
+          <input type="text" id="v-folio" placeholder="Auto" style="font-weight:700;letter-spacing:0.05em;">
+          <div style="font-size:11px;color:var(--ink-soft);margin-top:3px;" id="v-folio-hint">Se genera automáticamente para ventas locales y WhatsApp</div>
+        </div>
+        <!-- CLIENTE -->
+        <div class="form-group">
+          <label>Cliente</label>
+          <div style="display:flex;gap:6px;align-items:center;">
+            <div style="position:relative;flex:1;">
+              <input type="text" id="v-cliente" placeholder="Público en general" autocomplete="off"
+                oninput="buscarClienteVenta(this.value)"
+                style="width:100%;">
+              <div id="v-cliente-dropdown" style="display:none;position:absolute;top:100%;left:0;right:0;
+                background:var(--bg-card);border:1px solid var(--border);border-radius:8px;
+                box-shadow:0 4px 16px rgba(0,0,0,0.15);z-index:200;max-height:180px;overflow-y:auto;"></div>
+            </div>
+            <button type="button" class="btn btn-ghost btn-sm" onclick="openClienteModal()"
+              title="Nuevo cliente" style="white-space:nowrap;">+ Nuevo</button>
+          </div>
+        </div>
         <div class="form-group full"><label>Producto / Descripción *</label><input type="text" id="v-producto" placeholder="Ej. Playera negra estampada logo empresa"></div>
         <div class="form-group"><label>Género / Categoría</label>
           <select id="v-genero" onchange="actualizarTallasVenta()">
@@ -858,7 +910,6 @@ tbody td{padding:11px 14px;font-size:13.5px;vertical-align:middle;}
         <div class="form-group"><label>Descuento ($)</label><input type="number" id="v-descuento" placeholder="0" value="0" step="0.01"></div>
         <div class="form-group"><label>Total</label><input type="text" id="v-total" readonly style="background:var(--accent-light);font-weight:700;"></div>
         <div class="form-group"><label>Proveedor playera</label><input type="text" id="v-proveedor" placeholder="Ej. Mark Athletic"></div>
-        <div class="form-group"><label>No. de orden/folio</label><input type="text" id="v-folio" placeholder="ML-123456"></div>
         <div class="form-group"><label>🖨️ Tinta blanca (cc)</label><input type="number" id="v-tinta-blanca" placeholder="5.83" step="0.01" value="0"></div>
         <div class="form-group"><label>🎨 Tinta CMYK/color (cc)</label><input type="number" id="v-tinta-color" placeholder="0.62" step="0.01" value="0"></div>
         <div id="v-costo-tinta-info" style="grid-column:1/-1;background:var(--bg);border-radius:8px;padding:10px 12px;font-size:13px;color:var(--ink-soft);display:none;">
@@ -893,6 +944,74 @@ tbody td{padding:11px 14px;font-size:13.5px;vertical-align:middle;}
           </div>
         </div>
         <div class="form-group full"><label>Notas</label><textarea id="v-notas" placeholder="Detalles del pedido..."></textarea></div>
+
+        <!-- ══ MÉTODO DE PAGO ══ -->
+        <div class="form-group full">
+          <label>💳 Método de pago</label>
+          <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:10px;">
+            <button type="button" class="btn-pago" data-pago="efectivo" onclick="selPago('efectivo')">💵 Efectivo</button>
+            <button type="button" class="btn-pago" data-pago="transferencia" onclick="selPago('transferencia')">📲 Transferencia</button>
+            <button type="button" class="btn-pago" data-pago="deposito" onclick="selPago('deposito')">🏦 Depósito</button>
+            <button type="button" class="btn-pago" data-pago="tarjeta" onclick="selPago('tarjeta')">💳 Tarjeta</button>
+          </div>
+
+          <!-- Efectivo -->
+          <div id="pago-efectivo" style="display:none;background:var(--bg);border-radius:10px;padding:14px;">
+            <div class="form-grid">
+              <div class="form-group">
+                <label>Con cuánto paga ($)</label>
+                <input type="number" id="v-pago-con" placeholder="0.00" step="0.01" oninput="calcCambio()">
+              </div>
+              <div class="form-group">
+                <label>Cambio</label>
+                <input type="text" id="v-cambio" readonly
+                  style="background:var(--accent-light);font-weight:700;font-size:16px;text-align:center;">
+              </div>
+            </div>
+          </div>
+
+          <!-- Transferencia -->
+          <div id="pago-transferencia" style="display:none;background:var(--bg);border-radius:10px;padding:14px;">
+            <div style="font-size:13px;margin-bottom:10px;color:var(--ink-soft);">Datos de tu cuenta para transferencia:</div>
+            <div style="background:var(--bg-card);border:1px solid var(--border);border-radius:8px;
+              padding:12px 14px;font-size:13px;line-height:1.8;" id="v-datos-transferencia-preview">
+              <em style="color:var(--ink-soft);">— Configura tu cuenta en Config → Pagos —</em>
+            </div>
+            <div style="margin-top:10px;">
+              <label style="font-size:12px;font-weight:600;display:block;margin-bottom:4px;">Banco origen del cliente</label>
+              <input type="text" id="v-banco-origen" placeholder="Ej. BBVA, Banamex, HSBC..."
+                style="width:100%;border:1.5px solid var(--border);border-radius:8px;
+                  padding:8px 10px;font-size:13px;font-family:'Inter',sans-serif;outline:none;background:var(--bg-card);color:var(--ink);">
+            </div>
+          </div>
+
+          <!-- Depósito -->
+          <div id="pago-deposito" style="display:none;background:var(--bg);border-radius:10px;padding:14px;">
+            <label style="font-size:12px;font-weight:600;display:block;margin-bottom:6px;">Lugar de depósito</label>
+            <div style="display:flex;gap:8px;flex-wrap:wrap;">
+              <button type="button" class="btn-deposito" data-lugar="7-Eleven" onclick="selDeposito('7-Eleven')">7-Eleven</button>
+              <button type="button" class="btn-deposito" data-lugar="OXXO" onclick="selDeposito('OXXO')">OXXO</button>
+              <button type="button" class="btn-deposito" data-lugar="Kiosco" onclick="selDeposito('Kiosco')">Kiosco</button>
+              <button type="button" class="btn-deposito" data-lugar="Walmart" onclick="selDeposito('Walmart')">Walmart</button>
+              <button type="button" class="btn-deposito" data-lugar="Soriana" onclick="selDeposito('Soriana')">Soriana</button>
+              <button type="button" class="btn-deposito" data-lugar="Farmacias Guadalajara" onclick="selDeposito('Farmacias Guadalajara')">Fcias. Guadalajara</button>
+              <button type="button" class="btn-deposito" data-lugar="Banco" onclick="selDeposito('Banco')">Banco</button>
+            </div>
+            <input type="hidden" id="v-deposito-lugar">
+          </div>
+
+          <!-- Tarjeta -->
+          <div id="pago-tarjeta" style="display:none;background:var(--bg);border-radius:10px;padding:14px;">
+            <label style="font-size:12px;font-weight:600;display:block;margin-bottom:6px;">Tipo de tarjeta</label>
+            <div style="display:flex;gap:8px;">
+              <button type="button" class="btn-deposito" data-tipo="Débito" onclick="selTipoTarjeta('Débito')">Débito</button>
+              <button type="button" class="btn-deposito" data-tipo="Crédito" onclick="selTipoTarjeta('Crédito')">Crédito</button>
+            </div>
+            <input type="hidden" id="v-tarjeta-tipo">
+          </div>
+
+          <input type="hidden" id="v-metodo-pago" value="">
+        </div>
       </div>
     </div>
     <div class="modal-footer">
@@ -1827,7 +1946,7 @@ function renderDashboard(){
 // ─── VENTAS ───
 window.openVentaModal=function(tipo, ventaId){
   document.getElementById('venta-id').value='';
-  ['v-cliente','v-producto','v-folio','v-notas','v-proveedor'].forEach(f=>document.getElementById(f).value='');
+  ['v-cliente','v-producto','v-notas','v-proveedor','v-banco-origen'].forEach(f=>{const el=document.getElementById(f);if(el)el.value='';});
   document.getElementById('v-fecha').value=hoy();
   document.getElementById('v-canal').value=tipo==='ml'?'Mercado Libre':'Local';
   document.getElementById('v-genero').value='';
@@ -1848,6 +1967,23 @@ window.openVentaModal=function(tipo, ventaId){
   document.getElementById('v-paqueteria').value='';
   document.getElementById('v-envio-fields').style.display='none';
   document.getElementById('v-ciudad-group').style.display='none';
+  document.getElementById('v-metodo-pago').value='';
+  document.getElementById('v-pago-con').value='';
+  document.getElementById('v-cambio').value='';
+  document.getElementById('v-deposito-lugar').value='';
+  document.getElementById('v-tarjeta-tipo').value='';
+  // Ocultar todos los paneles de pago y resetear botones
+  ['efectivo','transferencia','deposito','tarjeta'].forEach(p=>{
+    document.getElementById('pago-'+p).style.display='none';
+  });
+  document.querySelectorAll('.btn-pago').forEach(b=>b.classList.remove('activo'));
+  document.querySelectorAll('.btn-deposito').forEach(b=>b.classList.remove('activo'));
+  document.getElementById('v-cliente-dropdown').style.display='none';
+
+  // Folio automático para canales locales
+  const canal=document.getElementById('v-canal').value;
+  asignarFolioSegunCanal(canal);
+
   document.getElementById('modal-venta-title').textContent='Nueva Venta';
 
   if(tipo==='edit' && ventaId) {
@@ -1876,6 +2012,7 @@ window.openVentaModal=function(tipo, ventaId){
       document.getElementById('v-costo-guia').value=v.costoGuia||0;
       document.getElementById('v-guia').value=v.guia||'';
       document.getElementById('v-domicilio-envio').value=v.domicilioEnvio||'';
+      if(v.metodoPago) selPago(v.metodoPago, true);
       toggleEnvioFields();
       actualizarTipoPlayera();
       document.getElementById('modal-venta-title').textContent='Editar Venta';
@@ -1883,7 +2020,15 @@ window.openVentaModal=function(tipo, ventaId){
   } else if(tipo==='ml'){
     document.getElementById('v-canal').value='Mercado Libre';
     document.getElementById('modal-venta-title').textContent='Nueva Venta — Mercado Libre';
+    document.getElementById('v-folio').value='';
+    document.getElementById('v-folio-hint').textContent='Ingresa el folio de Mercado Libre';
   }
+  // Actualizar folio al cambiar canal
+  document.getElementById('v-canal').onchange=function(){
+    toggleEnvioFields();
+    asignarFolioSegunCanal(this.value);
+  };
+  cargarDatosTransferenciaPreview();
   openModal('modal-venta');
 };
 
@@ -1914,11 +2059,31 @@ window.guardarVenta=async function(){
   const precioTintaB=+localStorage.getItem('pl_tinta_blanca_precio')||0;
   const precioTintaC=+localStorage.getItem('pl_tinta_color_precio')||0;
   const costoTinta=(tintaBlanca*precioTintaB+tintaColor*precioTintaC)*cant;
-  const data={id,fecha:document.getElementById('v-fecha').value,canal:document.getElementById('v-canal').value,cliente:document.getElementById('v-cliente').value,producto,genero:document.getElementById('v-genero').value,talla:document.getElementById('v-talla').value,color:document.getElementById('v-color').value,tipoProceso:document.getElementById('v-tipo-proceso').value,ciudad:tieneEnvio?document.getElementById('v-ciudad').value:'',paqueteria:tieneEnvio?document.getElementById('v-paqueteria').value:'',guia:tieneEnvio?document.getElementById('v-guia').value:'',costoGuia,domicilioEnvio:tieneEnvio?document.getElementById('v-domicilio-envio').value:'',cantidad:cant,precio,descuento:desc,total,proveedor:document.getElementById('v-proveedor').value,folio:document.getElementById('v-folio').value,notas:document.getElementById('v-notas').value,tintaBlanca,tintaColor,costoTinta,creado:new Date().toISOString()};
+  const metodoPago=document.getElementById('v-metodo-pago').value||'';
+  const lugDeposito=document.getElementById('v-deposito-lugar').value||'';
+  const tipoTarjeta=document.getElementById('v-tarjeta-tipo').value||'';
+  const bancoOrigen=document.getElementById('v-banco-origen')?.value||'';
+  const pagoCon=+document.getElementById('v-pago-con')?.value||0;
+  const folioVal=document.getElementById('v-folio').value||generarFolio(canal2);
+  const data={id,fecha:document.getElementById('v-fecha').value,canal:canal2,
+    cliente:document.getElementById('v-cliente').value||'Público en general',
+    producto,genero:document.getElementById('v-genero').value,
+    talla:document.getElementById('v-talla').value,color:document.getElementById('v-color').value,
+    tipoProceso:document.getElementById('v-tipo-proceso').value,
+    ciudad:tieneEnvio?document.getElementById('v-ciudad').value:'',
+    paqueteria:tieneEnvio?document.getElementById('v-paqueteria').value:'',
+    guia:tieneEnvio?document.getElementById('v-guia').value:'',costoGuia,
+    domicilioEnvio:tieneEnvio?document.getElementById('v-domicilio-envio').value:'',
+    cantidad:cant,precio,descuento:desc,total,
+    proveedor:document.getElementById('v-proveedor').value,
+    folio:folioVal,notas:document.getElementById('v-notas').value,
+    tintaBlanca,tintaColor,costoTinta,
+    metodoPago,lugDeposito,tipoTarjeta,bancoOrigen,
+    pagoCon:metodoPago==='efectivo'?pagoCon:0,
+    creado:new Date().toISOString()};
   await setDoc(doc(db,'pl_ventas',id),data);
   closeModal('modal-venta');
-  toast('✅ Venta guardada');
-  // Recargar ventas recientes
+  toast('✅ Venta guardada — Folio: '+folioVal);
   await cargarVentas(true);
 };
 
@@ -4340,4 +4505,123 @@ window.confirmarCerrarCargaMasiva = function(){
   closeModal('modal-confirm-carga-masiva');
   cerrarCargaMasiva();
 };
+</script>
+
+<script>
+// ══════════════════════════════════════════════════════
+//  FOLIO AUTOMÁTICO
+// ══════════════════════════════════════════════════════
+function generarFolio(canal){
+  const prefijo=canal==='WhatsApp'?'WA':'BL';
+  return prefijo+'-'+String(Date.now()).slice(-6);
+}
+function asignarFolioSegunCanal(canal){
+  const input=document.getElementById('v-folio');
+  const hint=document.getElementById('v-folio-hint');
+  if(!input||!hint) return;
+  const canalesAuto=['Local','WhatsApp'];
+  if(canalesAuto.includes(canal)){
+    input.value=generarFolio(canal);
+    input.readOnly=false;
+    input.style.background='var(--accent-light)';
+    hint.textContent='Folio generado automáticamente (puedes editarlo)';
+  } else {
+    input.value='';
+    input.readOnly=false;
+    input.style.background='';
+    hint.textContent='Ingresa el folio/orden de '+canal;
+  }
+}
+
+// ══════════════════════════════════════════════════════
+//  BÚSQUEDA DE CLIENTES EN NUEVA VENTA
+// ══════════════════════════════════════════════════════
+window.buscarClienteVenta=function(q){
+  const dd=document.getElementById('v-cliente-dropdown');
+  if(!q||q.length<2){dd.style.display='none';return;}
+  const res=(window.clientes||[]).filter(c=>c.nombre&&c.nombre.toLowerCase().includes(q.toLowerCase())).slice(0,6);
+  if(res.length===0){dd.style.display='none';return;}
+  dd.innerHTML=res.map(c=>`
+    <div onclick="seleccionarClienteVenta('${(c.nombre||'').replace(/'/g,"\\'")}')"
+      style="padding:10px 14px;cursor:pointer;font-size:13px;border-bottom:1px solid var(--border);"
+      onmouseover="this.style.background='var(--bg)'" onmouseout="this.style.background=''">
+      <div style="font-weight:600;">${c.nombre}</div>
+      ${c.tel?`<div style="font-size:11px;color:var(--ink-soft);">${c.tel}</div>`:''}
+    </div>`).join('');
+  dd.style.display='block';
+};
+window.seleccionarClienteVenta=function(nombre){
+  document.getElementById('v-cliente').value=nombre;
+  document.getElementById('v-cliente-dropdown').style.display='none';
+};
+document.addEventListener('click',function(e){
+  const dd=document.getElementById('v-cliente-dropdown');
+  if(dd&&!dd.contains(e.target)&&e.target.id!=='v-cliente') dd.style.display='none';
+});
+
+// ══════════════════════════════════════════════════════
+//  MÉTODOS DE PAGO
+// ══════════════════════════════════════════════════════
+window.selPago=function(tipo){
+  document.getElementById('v-metodo-pago').value=tipo;
+  document.querySelectorAll('.btn-pago').forEach(b=>b.classList.toggle('activo',b.dataset.pago===tipo));
+  ['efectivo','transferencia','deposito','tarjeta'].forEach(p=>{
+    document.getElementById('pago-'+p).style.display=p===tipo?'block':'none';
+  });
+  if(tipo==='transferencia') cargarDatosTransferenciaPreview();
+};
+window.selDeposito=function(lugar){
+  document.getElementById('v-deposito-lugar').value=lugar;
+  document.querySelectorAll('.btn-deposito[data-lugar]').forEach(b=>b.classList.toggle('activo',b.dataset.lugar===lugar));
+};
+window.selTipoTarjeta=function(tipo){
+  document.getElementById('v-tarjeta-tipo').value=tipo;
+  document.querySelectorAll('.btn-deposito[data-tipo]').forEach(b=>b.classList.toggle('activo',b.dataset.tipo===tipo));
+};
+window.calcCambio=function(){
+  const total=parseFloat((document.getElementById('v-total').value||'0').replace(/[^0-9.]/g,''))||0;
+  const pagaCon=+document.getElementById('v-pago-con').value||0;
+  const cambio=pagaCon-total;
+  const el=document.getElementById('v-cambio');
+  if(pagaCon>0){
+    el.value=cambio>=0?'$'+cambio.toFixed(2):'⚠️ Insuficiente';
+    el.style.color=cambio>=0?'var(--green)':'var(--red)';
+  } else { el.value=''; }
+};
+
+// ══════════════════════════════════════════════════════
+//  CONFIG TRANSFERENCIA
+// ══════════════════════════════════════════════════════
+window.guardarConfigPagos=function(){
+  ['banco','titular','clabe','num-tarjeta'].forEach(k=>{
+    const el=document.getElementById('cfg-'+k);
+    if(el) localStorage.setItem('pl_pago_'+k,el.value);
+  });
+  toast('✅ Datos de transferencia guardados');
+};
+function cargarDatosTransferenciaPreview(){
+  const banco=localStorage.getItem('pl_pago_banco')||'';
+  const titular=localStorage.getItem('pl_pago_titular')||'';
+  const clabe=localStorage.getItem('pl_pago_clabe')||'';
+  const tarjeta=localStorage.getItem('pl_pago_num-tarjeta')||'';
+  const el=document.getElementById('v-datos-transferencia-preview');
+  if(!el) return;
+  if(!banco&&!titular&&!clabe){
+    el.innerHTML='<em style="color:var(--ink-soft);">— Configura tu cuenta en Config → Datos para Transferencia —</em>';
+    return;
+  }
+  el.innerHTML=`
+    ${banco?`<div><strong>Banco:</strong> ${banco}</div>`:''}
+    ${titular?`<div><strong>Titular:</strong> ${titular}</div>`:''}
+    ${clabe?`<div><strong>CLABE:</strong> ${clabe}</div>`:''}
+    ${tarjeta?`<div><strong>No. Tarjeta:</strong> ${tarjeta}</div>`:''}`;
+}
+// Cargar valores al iniciar
+(function(){
+  ['banco','titular','clabe','num-tarjeta'].forEach(k=>{
+    const val=localStorage.getItem('pl_pago_'+k);
+    const el=document.getElementById('cfg-'+k);
+    if(val&&el) el.value=val;
+  });
+})();
 </script>
