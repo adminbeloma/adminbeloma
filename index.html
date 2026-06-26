@@ -3100,9 +3100,18 @@ window.cmGuardarTodo = async function() {
       const fd = new FormData();
       fd.append('file', item.file);
       fd.append('upload_preset', PRESET);
-      fd.append('folder', 'beloma-catalogo');
+      // Sin carpeta para evitar restricciones del preset
       const res  = await fetch(`https://api.cloudinary.com/v1_1/${CLOUD}/image/upload`, {method:'POST', body:fd});
       const data = await res.json();
+
+      // Detectar error explícito de Cloudinary
+      if(data.error) {
+        console.error('Cloudinary error:', data.error.message);
+        progTxt.textContent = `❌ Error Cloudinary: ${data.error.message}`;
+        errores++;
+        continue;
+      }
+
       const imagenUrl = data.secure_url || '';
 
       // Guardar en Firebase
@@ -3110,7 +3119,7 @@ window.cmGuardarTodo = async function() {
       await setDoc(doc(db, 'bl_disenos', docId), {
         id:        docId,
         nombre:    item.nombre.trim(),
-        categoria: item.categoria.trim(),
+        categoria: (item.categoria || '').trim(),
         tags:      item.tags || '',
         precio:    +item.precio || 0,
         activo:    item.activo !== false,
@@ -3121,11 +3130,21 @@ window.cmGuardarTodo = async function() {
       guardados++;
     } catch(e) {
       console.error('Error en item', item.nombre, e);
+      progTxt.textContent = `❌ Error: ${e.message} — continuando...`;
       errores++;
     }
   }
 
+  // Siempre desbloquear el botón al terminar
+  btn.disabled = false;
+  btn.textContent = '✅ Guardar todos los diseños';
   progBar.style.width = '100%';
+
+  if(guardados === 0 && errores > 0) {
+    progTxt.textContent = `❌ No se pudo guardar ningún diseño. Revisa la consola (F12).`;
+    return;
+  }
+
   progTxt.textContent = `✅ Listo: ${guardados} guardados${errores > 0 ? `, ${errores} con error` : ''}`;
 
   setTimeout(() => {
