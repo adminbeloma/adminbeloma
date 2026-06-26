@@ -769,6 +769,7 @@ tbody td{padding:11px 14px;font-size:13.5px;vertical-align:middle;}
       <div class="actions">
         <button class="btn btn-ghost btn-sm" onclick="copiarLinkCatalogo()">🔗 Link catálogo</button>
         <button class="btn btn-ghost btn-sm" onclick="copiarLinkCategoria()">📂 Link por categoría</button>
+        <button class="btn btn-ghost btn-sm" onclick="abrirCargaMasiva()" style="background:var(--green);color:#fff;border-color:var(--green);">📦 Carga masiva</button>
         <button class="btn btn-accent" onclick="openDisenoModal()">+ Nuevo diseño</button>
       </div>
     </div>
@@ -1527,6 +1528,99 @@ tbody td{padding:11px 14px;font-size:13.5px;vertical-align:middle;}
     <div class="modal-footer">
       <button class="btn btn-ghost" onclick="closeModal('modal-diseno')">Cancelar</button>
       <button class="btn btn-accent" onclick="guardarDiseno()">Guardar diseño</button>
+    </div>
+  </div>
+</div>
+
+<!-- ══════════════════════════════════════════════════
+     MODAL CARGA MASIVA DE DISEÑOS
+═══════════════════════════════════════════════════ -->
+<div class="modal-overlay" id="modal-carga-masiva">
+  <div class="modal" style="max-width:860px;">
+    <div class="modal-header">
+      <h2>📦 Carga masiva de diseños</h2>
+      <button class="modal-close" onclick="cerrarCargaMasiva()">×</button>
+    </div>
+    <div class="modal-body">
+
+      <!-- PASO 1: Selección de imágenes -->
+      <div id="cm-paso1">
+        <!-- Zona de drop -->
+        <div id="cm-dropzone"
+          style="border:2px dashed var(--border);border-radius:14px;padding:40px 20px;
+                 text-align:center;cursor:pointer;transition:border-color 0.2s,background 0.2s;"
+          onclick="document.getElementById('cm-file-input').click()"
+          ondragover="cmDragOver(event)" ondragleave="cmDragLeave(event)" ondrop="cmDrop(event)">
+          <div style="font-size:40px;margin-bottom:12px;">🖼️</div>
+          <div style="font-size:15px;font-weight:700;margin-bottom:6px;">Arrastra las imágenes aquí</div>
+          <div style="font-size:13px;color:var(--ink-soft);margin-bottom:16px;">o haz clic para seleccionarlas</div>
+          <div style="font-size:12px;color:var(--ink-soft);">JPG, PNG, WEBP · Máximo 20 imágenes a la vez</div>
+          <input type="file" id="cm-file-input" accept="image/*" multiple style="display:none"
+            onchange="cmArchivosSeleccionados(this.files)">
+        </div>
+
+        <!-- Ajustes globales (se muestran cuando hay imágenes) -->
+        <div id="cm-ajustes-globales" style="display:none;margin-top:20px;">
+          <div style="font-size:13px;font-weight:700;margin-bottom:10px;color:var(--ink-soft);
+                      text-transform:uppercase;letter-spacing:0.05em;">
+            ⚡ Aplicar a todos (opcional)
+          </div>
+          <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(180px,1fr));gap:10px;margin-bottom:14px;">
+            <div>
+              <label style="font-size:12px;font-weight:600;display:block;margin-bottom:4px;">Categoría</label>
+              <input type="text" id="cm-g-categoria" placeholder="Ej. Caricaturas, Rock..."
+                list="cats-list" oninput="cmAplicarGlobal('categoria',this.value)"
+                style="width:100%;border:1.5px solid var(--border);border-radius:8px;
+                       padding:8px 10px;font-size:13px;font-family:'Inter',sans-serif;outline:none;background:var(--bg-card);color:var(--ink);">
+            </div>
+            <div>
+              <label style="font-size:12px;font-weight:600;display:block;margin-bottom:4px;">Precio ($)</label>
+              <input type="number" id="cm-g-precio" placeholder="Ej. 250" step="0.01"
+                oninput="cmAplicarGlobal('precio',this.value)"
+                style="width:100%;border:1.5px solid var(--border);border-radius:8px;
+                       padding:8px 10px;font-size:13px;font-family:'Inter',sans-serif;outline:none;background:var(--bg-card);color:var(--ink);">
+            </div>
+            <div>
+              <label style="font-size:12px;font-weight:600;display:block;margin-bottom:4px;">Tags</label>
+              <input type="text" id="cm-g-tags" placeholder="Ej. niño, caricatura"
+                oninput="cmAplicarGlobal('tags',this.value)"
+                style="width:100%;border:1.5px solid var(--border);border-radius:8px;
+                       padding:8px 10px;font-size:13px;font-family:'Inter',sans-serif;outline:none;background:var(--bg-card);color:var(--ink);">
+            </div>
+            <div>
+              <label style="font-size:12px;font-weight:600;display:block;margin-bottom:4px;">Estado</label>
+              <select id="cm-g-activo" onchange="cmAplicarGlobal('activo',this.value)"
+                style="width:100%;border:1.5px solid var(--border);border-radius:8px;
+                       padding:8px 10px;font-size:13px;font-family:'Inter',sans-serif;outline:none;background:var(--bg-card);color:var(--ink);">
+                <option value="true">Activo (visible)</option>
+                <option value="false">Inactivo (oculto)</option>
+              </select>
+            </div>
+          </div>
+          <div style="font-size:12px;color:var(--ink-soft);margin-bottom:16px;">
+            💡 Estos valores se aplican a todas las imágenes. Puedes editarlas individualmente abajo.
+          </div>
+        </div>
+
+        <!-- Grid de imágenes cargadas -->
+        <div id="cm-preview-grid"
+          style="display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));
+                 gap:14px;margin-top:16px;max-height:420px;overflow-y:auto;"></div>
+      </div>
+
+    </div>
+    <div class="modal-footer" id="cm-footer" style="display:none;">
+      <div id="cm-progreso" style="display:none;flex:1;">
+        <div style="font-size:13px;font-weight:600;margin-bottom:6px;" id="cm-prog-texto">Subiendo imágenes...</div>
+        <div style="background:var(--border);border-radius:10px;height:8px;overflow:hidden;">
+          <div id="cm-prog-bar" style="height:100%;background:var(--green);border-radius:10px;
+               width:0%;transition:width 0.3s;"></div>
+        </div>
+      </div>
+      <button class="btn btn-ghost" onclick="cerrarCargaMasiva()">Cancelar</button>
+      <button class="btn btn-accent" id="cm-btn-guardar" onclick="cmGuardarTodo()">
+        ✅ Guardar todos los diseños
+      </button>
     </div>
   </div>
 </div>
@@ -2832,6 +2926,212 @@ window.guardarDiseno=async function(){
   await setDoc(doc(db,'bl_disenos',id),data);
   closeModal('modal-diseno');
   toast('✅ Diseño guardado');
+};
+
+// ══════════════════════════════════════════════════════════════
+//  CARGA MASIVA DE DISEÑOS
+// ══════════════════════════════════════════════════════════════
+let cmItems = []; // [{file, previewUrl, nombre, categoria, precio, tags, activo}]
+
+window.abrirCargaMasiva = function() {
+  cmItems = [];
+  document.getElementById('cm-preview-grid').innerHTML = '';
+  document.getElementById('cm-ajustes-globales').style.display = 'none';
+  document.getElementById('cm-footer').style.display = 'none';
+  document.getElementById('cm-progreso').style.display = 'none';
+  document.getElementById('cm-file-input').value = '';
+  // Limpiar globales
+  ['cm-g-categoria','cm-g-precio','cm-g-tags'].forEach(id => {
+    const el = document.getElementById(id);
+    if(el) el.value = '';
+  });
+  document.getElementById('cm-g-activo').value = 'true';
+  openModal('modal-carga-masiva');
+};
+
+window.cerrarCargaMasiva = function() {
+  closeModal('modal-carga-masiva');
+  cmItems = [];
+};
+
+// Drag & drop
+window.cmDragOver = function(e) {
+  e.preventDefault();
+  const dz = document.getElementById('cm-dropzone');
+  dz.style.borderColor = 'var(--green)';
+  dz.style.background  = 'rgba(106,171,31,0.05)';
+};
+window.cmDragLeave = function(e) {
+  const dz = document.getElementById('cm-dropzone');
+  dz.style.borderColor = 'var(--border)';
+  dz.style.background  = '';
+};
+window.cmDrop = function(e) {
+  e.preventDefault();
+  cmDragLeave(e);
+  cmArchivosSeleccionados(e.dataTransfer.files);
+};
+
+window.cmArchivosSeleccionados = function(files) {
+  const arr = Array.from(files).filter(f => f.type.startsWith('image/'));
+  if(arr.length === 0) { toast('⚠️ Solo se aceptan imágenes'); return; }
+  if(arr.length > 20)  { toast('⚠️ Máximo 20 imágenes a la vez'); return; }
+
+  // Leer previews
+  arr.forEach(file => {
+    const reader = new FileReader();
+    reader.onload = e => {
+      const item = {
+        id: uid(),
+        file,
+        previewUrl: e.target.result,
+        nombre: file.name.replace(/\.[^.]+$/, '').replace(/[-_]/g, ' '),
+        categoria: document.getElementById('cm-g-categoria').value || '',
+        precio: document.getElementById('cm-g-precio').value || '',
+        tags: document.getElementById('cm-g-tags').value || '',
+        activo: document.getElementById('cm-g-activo').value !== 'false'
+      };
+      cmItems.push(item);
+      cmRenderGrid();
+    };
+    reader.readAsDataURL(file);
+  });
+
+  document.getElementById('cm-ajustes-globales').style.display = 'block';
+  document.getElementById('cm-footer').style.display = 'flex';
+};
+
+function cmRenderGrid() {
+  const grid = document.getElementById('cm-preview-grid');
+  grid.innerHTML = cmItems.map((item, i) => `
+    <div style="background:var(--bg-card);border:1px solid var(--border);border-radius:12px;
+                overflow:hidden;position:relative;" id="cmcard-${item.id}">
+      <!-- Botón eliminar -->
+      <button onclick="cmEliminarItem('${item.id}')"
+        style="position:absolute;top:6px;right:6px;background:rgba(0,0,0,0.55);color:#fff;
+               border:none;border-radius:50%;width:26px;height:26px;font-size:14px;
+               cursor:pointer;display:flex;align-items:center;justify-content:center;z-index:2;">×</button>
+      <!-- Preview imagen -->
+      <img src="${item.previewUrl}"
+        style="width:100%;aspect-ratio:1;object-fit:cover;" loading="lazy">
+      <!-- Campos -->
+      <div style="padding:10px 10px 12px;">
+        <input type="text" value="${item.nombre}" placeholder="Nombre del diseño *"
+          oninput="cmUpdateItem('${item.id}','nombre',this.value)"
+          style="width:100%;border:1.5px solid var(--border);border-radius:7px;
+                 padding:6px 9px;font-size:12px;font-family:'Inter',sans-serif;
+                 outline:none;background:var(--bg);color:var(--ink);margin-bottom:6px;"
+          required>
+        <input type="text" value="${item.categoria}" placeholder="Categoría *"
+          list="cats-list" oninput="cmUpdateItem('${item.id}','categoria',this.value)"
+          style="width:100%;border:1.5px solid var(--border);border-radius:7px;
+                 padding:6px 9px;font-size:12px;font-family:'Inter',sans-serif;
+                 outline:none;background:var(--bg);color:var(--ink);margin-bottom:6px;">
+        <div style="display:flex;gap:6px;">
+          <input type="number" value="${item.precio}" placeholder="Precio"
+            oninput="cmUpdateItem('${item.id}','precio',this.value)"
+            style="flex:1;border:1.5px solid var(--border);border-radius:7px;
+                   padding:6px 9px;font-size:12px;font-family:'Inter',sans-serif;
+                   outline:none;background:var(--bg);color:var(--ink);">
+          <select onchange="cmUpdateItem('${item.id}','activo',this.value==='true')"
+            style="flex:1;border:1.5px solid var(--border);border-radius:7px;
+                   padding:6px 9px;font-size:12px;font-family:'Inter',sans-serif;
+                   outline:none;background:var(--bg);color:var(--ink);">
+            <option value="true" ${item.activo?'selected':''}>Activo</option>
+            <option value="false" ${!item.activo?'selected':''}>Inactivo</option>
+          </select>
+        </div>
+        <input type="text" value="${item.tags}" placeholder="Tags (opcional)"
+          oninput="cmUpdateItem('${item.id}','tags',this.value)"
+          style="width:100%;border:1.5px solid var(--border);border-radius:7px;
+                 padding:6px 9px;font-size:12px;font-family:'Inter',sans-serif;
+                 outline:none;background:var(--bg);color:var(--ink);margin-top:6px;">
+      </div>
+    </div>
+  `).join('');
+}
+
+window.cmUpdateItem = function(id, campo, valor) {
+  const item = cmItems.find(x => x.id === id);
+  if(item) item[campo] = valor;
+};
+
+window.cmEliminarItem = function(id) {
+  cmItems = cmItems.filter(x => x.id !== id);
+  if(cmItems.length === 0) {
+    document.getElementById('cm-ajustes-globales').style.display = 'none';
+    document.getElementById('cm-footer').style.display = 'none';
+  }
+  cmRenderGrid();
+};
+
+// Aplicar valor global a todos los items
+window.cmAplicarGlobal = function(campo, valor) {
+  cmItems.forEach(item => { item[campo] = campo === 'activo' ? (valor !== 'false') : valor; });
+  cmRenderGrid();
+};
+
+// Guardar todos
+window.cmGuardarTodo = async function() {
+  // Validar que todos tengan nombre
+  const sinNombre = cmItems.filter(x => !x.nombre.trim());
+  if(sinNombre.length > 0) { toast(`⚠️ ${sinNombre.length} diseño(s) sin nombre`); return; }
+  if(cmItems.length === 0) { toast('⚠️ No hay imágenes cargadas'); return; }
+
+  const btn     = document.getElementById('cm-btn-guardar');
+  const progDiv = document.getElementById('cm-progreso');
+  const progBar = document.getElementById('cm-prog-bar');
+  const progTxt = document.getElementById('cm-prog-texto');
+
+  btn.disabled  = true;
+  btn.textContent = '⏳ Guardando...';
+  progDiv.style.display = 'block';
+
+  let guardados = 0;
+  let errores   = 0;
+
+  for(let i = 0; i < cmItems.length; i++) {
+    const item = cmItems[i];
+    progTxt.textContent = `Subiendo ${i+1} de ${cmItems.length}: ${item.nombre}`;
+    progBar.style.width = `${Math.round((i / cmItems.length) * 100)}%`;
+
+    try {
+      // Subir imagen a Cloudinary
+      const fd = new FormData();
+      fd.append('file', item.file);
+      fd.append('upload_preset', PRESET);
+      fd.append('folder', 'beloma-catalogo');
+      const res  = await fetch(`https://api.cloudinary.com/v1_1/${CLOUD}/image/upload`, {method:'POST', body:fd});
+      const data = await res.json();
+      const imagenUrl = data.secure_url || '';
+
+      // Guardar en Firebase
+      const docId = uid();
+      await setDoc(doc(db, 'bl_disenos', docId), {
+        id:        docId,
+        nombre:    item.nombre.trim(),
+        categoria: item.categoria.trim(),
+        tags:      item.tags || '',
+        precio:    +item.precio || 0,
+        activo:    item.activo !== false,
+        notas:     '',
+        imagen:    imagenUrl,
+        creado:    new Date().toISOString()
+      });
+      guardados++;
+    } catch(e) {
+      console.error('Error en item', item.nombre, e);
+      errores++;
+    }
+  }
+
+  progBar.style.width = '100%';
+  progTxt.textContent = `✅ Listo: ${guardados} guardados${errores > 0 ? `, ${errores} con error` : ''}`;
+
+  setTimeout(() => {
+    cerrarCargaMasiva();
+    toast(`✅ ${guardados} diseño${guardados !== 1 ? 's' : ''} guardado${guardados !== 1 ? 's' : ''} correctamente`);
+  }, 1200);
 };
 
 window.renderDiseños = function(){
