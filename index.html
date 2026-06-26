@@ -1480,13 +1480,22 @@ tbody td{padding:11px 14px;font-size:13.5px;vertical-align:middle;}
         <div class="form-group"><label>Tags / palabras clave</label><input type="text" id="dis-tags" placeholder="dexter, cartoon, niño, laboratorio"></div>
         <div class="form-group"><label>Precio ($)</label><input type="number" id="dis-precio" placeholder="250" step="0.01"></div>
         <div class="form-group"><label>Color de playera</label>
-          <select id="dis-color">
-            <option value="">— Cualquier color —</option>
+          <input type="text" id="dis-color" placeholder="Ej. Blanca, Negra, Azul marino..." list="colores-sugeridos">
+          <datalist id="colores-sugeridos">
             <option>Blanca</option>
             <option>Negra</option>
-            <option>Color claro</option>
-            <option>Color oscuro</option>
-          </select>
+            <option>Gris</option>
+            <option>Azul marino</option>
+            <option>Azul cielo</option>
+            <option>Rojo</option>
+            <option>Verde</option>
+            <option>Amarilla</option>
+            <option>Rosa</option>
+            <option>Morada</option>
+            <option>Naranja</option>
+            <option>Café</option>
+            <option>Beige</option>
+          </datalist>
         </div>
         <div class="form-group"><label>Género</label>
           <select id="dis-genero">
