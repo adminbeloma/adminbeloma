@@ -4709,13 +4709,24 @@ function renderCortesCaja() {
   if(empty) empty.style.display='none';
   lista.innerHTML = cortesCaja.slice(0,10).map(c=>`
     <div style="padding:10px 0;border-bottom:1px solid var(--border);font-size:13px;">
-      <div style="display:flex;justify-content:space-between;margin-bottom:4px;">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px;">
         <strong>${c.fecha}</strong>
-        <span style="color:${c.diferencia>=0?'var(--green)':'var(--red)'};">Dif: ${c.diferencia>=0?'+':''}${fmtMoney(c.diferencia)}</span>
+        <div style="display:flex;align-items:center;gap:8px;">
+          <span style="color:${c.diferencia>=0?'var(--green)':'var(--red)'};">Dif: ${c.diferencia>=0?'+':''}${fmtMoney(c.diferencia)}</span>
+          <button class="btn btn-danger btn-sm" onclick="eliminarCorte('${c.id}')" title="Eliminar corte">🗑</button>
+        </div>
       </div>
       <div style="color:var(--ink-soft);font-size:12px;">Sistema: ${fmtMoney(c.efectivoSistema)} | Real: ${fmtMoney(c.efectivoReal)}</div>
     </div>`).join('');
 }
+
+window.eliminarCorte = async function(id) {
+  if(!confirm('¿Eliminar este corte? Esta acción no se puede deshacer.')) return;
+  await deleteDoc(doc(db, 'pl_cortes_caja', id));
+  toast('🗑 Corte eliminado');
+  await cargarCortesCaja();
+  renderCortesCaja();
+};
 
 // ═══════════════════════════════════════════════════════════════════
 //  TABS DE REPORTES
