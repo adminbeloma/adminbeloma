@@ -737,7 +737,11 @@ tbody td{padding:11px 14px;font-size:13.5px;vertical-align:middle;}
     <div class="content">
       <div class="stats-row">
         <div class="stat-card stat-blue"><div class="label">Fondo inicial</div><div class="value" id="caja-fondo">$0</div></div>
-        <div class="stat-card stat-green"><div class="label">Ingresos del día</div><div class="value" id="caja-ingresos">$0</div></div>
+        <div class="stat-card stat-green">
+          <div class="label">Ingresos del día</div>
+          <div class="value" id="caja-ingresos">$0</div>
+          <div id="caja-ingresos-desglose" style="font-size:11px;color:var(--ink-soft);margin-top:6px;line-height:1.8;"></div>
+        </div>
         <div class="stat-card stat-red"><div class="label">Gastos locales</div><div class="value" id="caja-gastos">$0</div></div>
         <div class="stat-card"><div class="label">Efectivo en caja</div><div class="value" id="caja-efectivo">$0</div></div>
         <div class="stat-card stat-gold"><div class="label">Anticipos del día</div><div class="value" id="caja-anticipos">$0</div></div>
@@ -3803,20 +3807,48 @@ window.guardarGastoLocal=async function(){
 
 function renderCaja(){
   const h=hoy();
-  const ventasHoyArr=ventas.filter(v=>v.fecha===h);
+  // Solo canales locales para operación diaria (excluir ML, Amazon, Shopify)
+  const CANALES_LOCAL = ['Local','Foráneo'];
+  const ventasHoyArr=ventas.filter(v=>v.fecha===h && CANALES_LOCAL.includes(v.canal));
   const ingresosHoy=ventasHoyArr.reduce((s,v)=>s+(+v.total||0),0);
   const anticiposHoy=pedidos.filter(p=>p.fecha===h).reduce((s,p)=>s+(+p.anticipo||0),0);
   const gastosHoy=gastosLocales.filter(g=>g.fecha===h).reduce((s,g)=>s+(+g.monto||0),0);
-  const efectivo=ingresosHoy+anticiposHoy-gastosHoy;
+
+  // Desglose por método de pago (solo ventas locales)
+  const efectivoVentas=ventasHoyArr.filter(v=>v.metodoPago==='efectivo').reduce((s,v)=>s+(+v.total||0),0);
+  const transferencias=ventasHoyArr.filter(v=>v.metodoPago==='transferencia').reduce((s,v)=>s+(+v.total||0),0);
+  const depositos=ventasHoyArr.filter(v=>v.metodoPago==='deposito').reduce((s,v)=>s+(+v.total||0),0);
+  const tarjeta=ventasHoyArr.filter(v=>v.metodoPago==='tarjeta').reduce((s,v)=>s+(+v.total||0),0);
+  const sinMetodo=ventasHoyArr.filter(v=>!v.metodoPago).reduce((s,v)=>s+(+v.total||0),0);
+
+  // Efectivo en caja = fondo + (ventas en efectivo) + anticipos - gastos
+  const fondoHoy = (window.fondosCaja||[]).find(f=>f.fecha===h);
+  const fondoMonto = fondoHoy ? +fondoHoy.monto : 0;
+  const efectivoCaja = fondoMonto + efectivoVentas + anticiposHoy - gastosHoy;
 
   const elI=document.getElementById('caja-ingresos');
   const elG=document.getElementById('caja-gastos');
   const elE=document.getElementById('caja-efectivo');
   const elA=document.getElementById('caja-anticipos');
+  const elD=document.getElementById('caja-ingresos-desglose');
+
   if(elI) elI.textContent=fmtMoney(ingresosHoy);
   if(elG) elG.textContent=fmtMoney(gastosHoy);
-  if(elE){elE.textContent=fmtMoney(efectivo);elE.style.color=efectivo>=0?'var(--green)':'var(--red)';}
+  if(elE){elE.textContent=fmtMoney(efectivoCaja);elE.style.color=efectivoCaja>=0?'var(--green)':'var(--red)';}
   if(elA) elA.textContent=fmtMoney(anticiposHoy);
+
+  // Mostrar desglose solo si hay ventas
+  if(elD && ingresosHoy > 0) {
+    const lineas = [];
+    if(efectivoVentas>0) lineas.push(`💵 Efectivo: ${fmtMoney(efectivoVentas)}`);
+    if(transferencias>0) lineas.push(`📲 Transferencia: ${fmtMoney(transferencias)}`);
+    if(depositos>0) lineas.push(`🏦 Depósito: ${fmtMoney(depositos)}`);
+    if(tarjeta>0) lineas.push(`💳 Tarjeta: ${fmtMoney(tarjeta)}`);
+    if(sinMetodo>0) lineas.push(`❓ Sin método: ${fmtMoney(sinMetodo)}`);
+    elD.innerHTML = lineas.join('<br>');
+  } else if(elD) {
+    elD.innerHTML = '';
+  }
 
   const lista=document.getElementById('gastos-locales-lista');
   const empty=document.getElementById('gastos-locales-empty');
@@ -4585,21 +4617,37 @@ let _corteActualData = {};
 
 window.abrirCorteCaja = function() {
   const h = hoy();
+  const CANALES_LOCAL = ['Local','Foráneo'];
   const fondo = fondosCaja.find(f => f.fecha === h);
-  const ingresosHoy = ventas.filter(v => v.fecha === h).reduce((s,v) => s + (+v.total||0), 0);
+  // Operación diaria: solo Local y Foráneo
+  const ventasLocales = ventas.filter(v => v.fecha === h && CANALES_LOCAL.includes(v.canal));
+  const ingresosHoy = ventasLocales.reduce((s,v) => s + (+v.total||0), 0);
+  // Desglose por método
+  const enEfectivo = ventasLocales.filter(v=>v.metodoPago==='efectivo').reduce((s,v)=>s+(+v.total||0),0);
+  const enTransf   = ventasLocales.filter(v=>v.metodoPago==='transferencia').reduce((s,v)=>s+(+v.total||0),0);
+  const enDeposito = ventasLocales.filter(v=>v.metodoPago==='deposito').reduce((s,v)=>s+(+v.total||0),0);
+  const enTarjeta  = ventasLocales.filter(v=>v.metodoPago==='tarjeta').reduce((s,v)=>s+(+v.total||0),0);
   const anticiposHoy = (pedidos||[]).filter(p => p.fecha === h).reduce((s,p) => s + (+p.anticipo||0), 0);
   const gastosHoy = (gastosLocales||[]).filter(g => g.fecha === h).reduce((s,g) => s + (+g.monto||0), 0);
   const fondoMonto = fondo ? +fondo.monto : 0;
-  const efectivoSistema = fondoMonto + ingresosHoy + anticiposHoy - gastosHoy;
-  _corteActualData = { fecha: h, fondo: fondoMonto, ingresos: ingresosHoy, anticipos: anticiposHoy, gastos: gastosHoy, efectivoSistema };
+  const efectivoSistema = fondoMonto + enEfectivo + anticiposHoy - gastosHoy;
+
+  _corteActualData = { fecha: h, fondo: fondoMonto, ingresos: ingresosHoy, enEfectivo, enTransf, enDeposito, enTarjeta, anticipos: anticiposHoy, gastos: gastosHoy, efectivoSistema };
+
   document.getElementById('corte-resumen').innerHTML = `
-    <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;">
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;font-size:13px;">
       <span style="color:var(--ink-soft);">📅 Fecha:</span><strong>${h}</strong>
       <span style="color:var(--ink-soft);">💰 Fondo inicial:</span><strong>${fmtMoney(fondoMonto)}</strong>
-      <span style="color:var(--ink-soft);">💚 Ventas del día:</span><strong style="color:var(--green);">${fmtMoney(ingresosHoy)}</strong>
+      <span style="color:var(--ink-soft);">💚 Ingresos Local+Foráneo:</span><strong style="color:var(--green);">${fmtMoney(ingresosHoy)}</strong>
+      <span></span>
+      ${enEfectivo>0?`<span style="color:var(--ink-soft);padding-left:12px;">└ 💵 Efectivo:</span><span>${fmtMoney(enEfectivo)}</span>`:''}
+      ${enTransf>0?`<span style="color:var(--ink-soft);padding-left:12px;">└ 📲 Transferencia:</span><span>${fmtMoney(enTransf)}</span>`:''}
+      ${enDeposito>0?`<span style="color:var(--ink-soft);padding-left:12px;">└ 🏦 Depósito:</span><span>${fmtMoney(enDeposito)}</span>`:''}
+      ${enTarjeta>0?`<span style="color:var(--ink-soft);padding-left:12px;">└ 💳 Tarjeta:</span><span>${fmtMoney(enTarjeta)}</span>`:''}
       <span style="color:var(--ink-soft);">📦 Anticipos:</span><strong style="color:var(--green);">${fmtMoney(anticiposHoy)}</strong>
       <span style="color:var(--ink-soft);">💸 Gastos locales:</span><strong style="color:var(--red);">${fmtMoney(gastosHoy)}</strong>
-      <span style="color:var(--ink-soft);">✅ Sistema dice:</span><strong style="font-size:16px;">${fmtMoney(efectivoSistema)}</strong>
+      <span style="color:var(--ink-soft);border-top:1px solid var(--border);padding-top:6px;margin-top:4px;">✅ Efectivo en caja (sistema):</span>
+      <strong style="font-size:16px;border-top:1px solid var(--border);padding-top:6px;margin-top:4px;">${fmtMoney(efectivoSistema)}</strong>
     </div>`;
   document.getElementById('corte-real').value = '';
   document.getElementById('corte-notas').value = '';
@@ -4621,7 +4669,17 @@ window.guardarCorte = async function() {
   const notas = document.getElementById('corte-notas').value;
   const dif = real - _corteActualData.efectivoSistema;
   const id = uid();
-  const data = { id, fecha:_corteActualData.fecha, fondo:_corteActualData.fondo, ingresos:_corteActualData.ingresos, anticipos:_corteActualData.anticipos, gastos:_corteActualData.gastos, efectivoSistema:_corteActualData.efectivoSistema, efectivoReal:real, diferencia:dif, notas, creado:new Date().toISOString() };
+  const data = {
+    id, fecha:_corteActualData.fecha, fondo:_corteActualData.fondo,
+    ingresos:_corteActualData.ingresos,
+    enEfectivo:_corteActualData.enEfectivo||0,
+    enTransf:_corteActualData.enTransf||0,
+    enDeposito:_corteActualData.enDeposito||0,
+    enTarjeta:_corteActualData.enTarjeta||0,
+    anticipos:_corteActualData.anticipos, gastos:_corteActualData.gastos,
+    efectivoSistema:_corteActualData.efectivoSistema,
+    efectivoReal:real, diferencia:dif, notas, creado:new Date().toISOString()
+  };
   await setDoc(doc(db, 'pl_cortes_caja', id), data);
   closeModal('modal-corte-caja');
   toast('✅ Corte guardado');
@@ -4700,18 +4758,53 @@ window.generarReporteCortes = function() {
   let f=cortesCaja.slice();
   if(desde) f=f.filter(c=>c.fecha>=desde);
   if(hasta) f=f.filter(c=>c.fecha<=hasta);
+
+  // Para el reporte incluimos TODOS los canales (ML, Amazon, Shopify + locales)
+  // Calcular ventas de plataformas por fecha para cada corte
+  const ventasPorFecha = {};
+  ventas.forEach(v => {
+    if(!ventasPorFecha[v.fecha]) ventasPorFecha[v.fecha] = { local:0, plataforma:0 };
+    const esLocal = ['Local','Foráneo'].includes(v.canal);
+    if(esLocal) ventasPorFecha[v.fecha].local += +v.total||0;
+    else ventasPorFecha[v.fecha].plataforma += +v.total||0;
+  });
+
   if(!f.length){cont.innerHTML='<div class="empty-state"><div class="icon">🏪</div><p>No hay cortes.</p></div>';return;}
   const tI=f.reduce((s,c)=>s+(+c.ingresos||0),0);
   const tG=f.reduce((s,c)=>s+(+c.gastos||0),0);
   const tD=f.reduce((s,c)=>s+(+c.diferencia||0),0);
-  cont.innerHTML=`<div style="display:flex;gap:14px;margin-bottom:18px;flex-wrap:wrap;">
-    <div style="background:var(--bg-card);border:1px solid var(--border);border-radius:8px;padding:10px 16px;"><div style="font-size:11px;color:var(--ink-soft);font-weight:600;text-transform:uppercase;">Cortes</div><div style="font-size:22px;font-weight:700;">${f.length}</div></div>
-    <div style="background:var(--bg-card);border:1px solid var(--border);border-radius:8px;padding:10px 16px;"><div style="font-size:11px;color:var(--ink-soft);font-weight:600;text-transform:uppercase;">Total ingresos</div><div style="font-size:22px;font-weight:700;color:var(--green);">${fmtMoney(tI)}</div></div>
-    <div style="background:var(--bg-card);border:1px solid var(--border);border-radius:8px;padding:10px 16px;"><div style="font-size:11px;color:var(--ink-soft);font-weight:600;text-transform:uppercase;">Total gastos</div><div style="font-size:22px;font-weight:700;color:var(--red);">${fmtMoney(tG)}</div></div>
-    <div style="background:var(--bg-card);border:1px solid var(--border);border-radius:8px;padding:10px 16px;"><div style="font-size:11px;color:var(--ink-soft);font-weight:600;text-transform:uppercase;">Diferencia acum.</div><div style="font-size:22px;font-weight:700;color:${tD>=0?'var(--green)':'var(--red)'};">${tD>=0?'+':''}${fmtMoney(tD)}</div></div>
-  </div>
-  <div class="table-wrap"><table><thead><tr><th>Fecha</th><th>Fondo</th><th>Ventas</th><th>Gastos</th><th>Sistema</th><th>Real</th><th>Diferencia</th><th>Notas</th></tr></thead>
-  <tbody>${f.map(c=>`<tr><td>${c.fecha}</td><td>${fmtMoney(c.fondo||0)}</td><td style="color:var(--green);">${fmtMoney(c.ingresos||0)}</td><td style="color:var(--red);">${fmtMoney(c.gastos||0)}</td><td><strong>${fmtMoney(c.efectivoSistema||0)}</strong></td><td>${fmtMoney(c.efectivoReal||0)}</td><td style="font-weight:700;color:${(c.diferencia||0)>=0?'var(--green)':'var(--red)'};">${(c.diferencia||0)>=0?'+':''}${fmtMoney(c.diferencia||0)}</td><td style="font-size:12px;color:var(--ink-soft);">${c.notas||'—'}</td></tr>`).join('')}</tbody></table></div>`;
+  const tP=f.reduce((s,c)=>s+(ventasPorFecha[c.fecha]?.plataforma||0),0);
+
+  cont.innerHTML=`
+    <div style="display:flex;gap:14px;margin-bottom:18px;flex-wrap:wrap;">
+      <div style="background:var(--bg-card);border:1px solid var(--border);border-radius:8px;padding:10px 16px;"><div style="font-size:11px;color:var(--ink-soft);font-weight:600;text-transform:uppercase;">Cortes</div><div style="font-size:22px;font-weight:700;">${f.length}</div></div>
+      <div style="background:var(--bg-card);border:1px solid var(--border);border-radius:8px;padding:10px 16px;"><div style="font-size:11px;color:var(--ink-soft);font-weight:600;text-transform:uppercase;">Ingresos Local+Foráneo</div><div style="font-size:22px;font-weight:700;color:var(--green);">${fmtMoney(tI)}</div></div>
+      <div style="background:var(--bg-card);border:1px solid var(--border);border-radius:8px;padding:10px 16px;"><div style="font-size:11px;color:var(--ink-soft);font-weight:600;text-transform:uppercase;">Ventas Plataformas</div><div style="font-size:22px;font-weight:700;color:var(--green);">${fmtMoney(tP)}</div></div>
+      <div style="background:var(--bg-card);border:1px solid var(--border);border-radius:8px;padding:10px 16px;"><div style="font-size:11px;color:var(--ink-soft);font-weight:600;text-transform:uppercase;">Total gastos</div><div style="font-size:22px;font-weight:700;color:var(--red);">${fmtMoney(tG)}</div></div>
+      <div style="background:var(--bg-card);border:1px solid var(--border);border-radius:8px;padding:10px 16px;"><div style="font-size:11px;color:var(--ink-soft);font-weight:600;text-transform:uppercase;">Diferencia acum.</div><div style="font-size:22px;font-weight:700;color:${tD>=0?'var(--green)':'var(--red)'};">${tD>=0?'+':''}${fmtMoney(tD)}</div></div>
+    </div>
+    <div class="table-wrap"><table>
+      <thead><tr><th>Fecha</th><th>Fondo</th><th>Local+For.</th><th>ML/Amz/Shop</th><th>💵 Efec.</th><th>📲 Transf.</th><th>🏦 Dep.</th><th>💳 Tarjeta</th><th>Gastos</th><th>Sistema</th><th>Real</th><th>Diferencia</th></tr></thead>
+      <tbody>${f.map(c=>{
+        const plat = ventasPorFecha[c.fecha]?.plataforma||0;
+        const dif = c.diferencia||0;
+        return `<tr>
+          <td>${c.fecha}</td>
+          <td>${fmtMoney(c.fondo||0)}</td>
+          <td style="color:var(--green);">${fmtMoney(c.ingresos||0)}</td>
+          <td style="color:var(--green);font-size:12px;">${fmtMoney(plat)}</td>
+          <td style="font-size:12px;">${fmtMoney(c.enEfectivo||0)}</td>
+          <td style="font-size:12px;">${fmtMoney(c.enTransf||0)}</td>
+          <td style="font-size:12px;">${fmtMoney(c.enDeposito||0)}</td>
+          <td style="font-size:12px;">${fmtMoney(c.enTarjeta||0)}</td>
+          <td style="color:var(--red);">${fmtMoney(c.gastos||0)}</td>
+          <td><strong>${fmtMoney(c.efectivoSistema||0)}</strong></td>
+          <td>${fmtMoney(c.efectivoReal||0)}</td>
+          <td style="font-weight:700;color:${dif>=0?'var(--green)':'var(--red)'};">${dif>=0?'+':''}${fmtMoney(dif)}</td>
+        </tr>`;
+      }).join('')}</tbody>
+    </table></div>`;
+};
 };
 
 window.exportarReportePDF = function() {
