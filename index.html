@@ -4536,6 +4536,221 @@ const cfgTC=localStorage.getItem('pl_tinta_color_precio');
 if(cfgTB) document.getElementById('cfg-tinta-blanca-precio').value=cfgTB;
 if(cfgTC) document.getElementById('cfg-tinta-color-precio').value=cfgTC;
 actualizarEjemploTinta();
+
+// ═══════════════════════════════════════════════════════════════════
+//  FONDO DE CAJA
+// ═══════════════════════════════════════════════════════════════════
+let fondosCaja = [];
+
+window.abrirFondoCaja = function() {
+  document.getElementById('fondo-fecha').value = hoy();
+  const fondoHoy = fondosCaja.find(f => f.fecha === hoy());
+  document.getElementById('fondo-monto').value = fondoHoy ? fondoHoy.monto : '';
+  document.getElementById('fondo-notas').value = fondoHoy ? fondoHoy.notas || '' : '';
+  openModal('modal-fondo-caja');
+};
+
+window.guardarFondoCaja = async function() {
+  const fecha = document.getElementById('fondo-fecha').value;
+  const monto = +document.getElementById('fondo-monto').value || 0;
+  const notas = document.getElementById('fondo-notas').value;
+  if (!fecha) { toast('⚠️ Selecciona la fecha'); return; }
+  const id = 'fondo-' + fecha;
+  const data = { id, fecha, monto, notas, creado: new Date().toISOString() };
+  await setDoc(doc(db, 'pl_fondos_caja', id), data);
+  closeModal('modal-fondo-caja');
+  toast('✅ Fondo guardado: ' + fmtMoney(monto));
+  await cargarFondosCaja();
+  actualizarCajaConFondo();
+};
+
+async function cargarFondosCaja() {
+  try {
+    const snap = await getDocs(collection(db, 'pl_fondos_caja'));
+    fondosCaja = snap.docs.map(d => d.data());
+  } catch(e) { fondosCaja = []; }
+}
+
+function actualizarCajaConFondo() {
+  const fondo = fondosCaja.find(f => f.fecha === hoy());
+  const el = document.getElementById('caja-fondo');
+  if(el) el.textContent = fmtMoney(fondo ? fondo.monto : 0);
+}
+
+// ═══════════════════════════════════════════════════════════════════
+//  CORTE DE CAJA
+// ═══════════════════════════════════════════════════════════════════
+let cortesCaja = [];
+let _corteActualData = {};
+
+window.abrirCorteCaja = function() {
+  const h = hoy();
+  const fondo = fondosCaja.find(f => f.fecha === h);
+  const ingresosHoy = ventas.filter(v => v.fecha === h).reduce((s,v) => s + (+v.total||0), 0);
+  const anticiposHoy = (pedidos||[]).filter(p => p.fecha === h).reduce((s,p) => s + (+p.anticipo||0), 0);
+  const gastosHoy = (gastosLocales||[]).filter(g => g.fecha === h).reduce((s,g) => s + (+g.monto||0), 0);
+  const fondoMonto = fondo ? +fondo.monto : 0;
+  const efectivoSistema = fondoMonto + ingresosHoy + anticiposHoy - gastosHoy;
+  _corteActualData = { fecha: h, fondo: fondoMonto, ingresos: ingresosHoy, anticipos: anticiposHoy, gastos: gastosHoy, efectivoSistema };
+  document.getElementById('corte-resumen').innerHTML = `
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;">
+      <span style="color:var(--ink-soft);">📅 Fecha:</span><strong>${h}</strong>
+      <span style="color:var(--ink-soft);">💰 Fondo inicial:</span><strong>${fmtMoney(fondoMonto)}</strong>
+      <span style="color:var(--ink-soft);">💚 Ventas del día:</span><strong style="color:var(--green);">${fmtMoney(ingresosHoy)}</strong>
+      <span style="color:var(--ink-soft);">📦 Anticipos:</span><strong style="color:var(--green);">${fmtMoney(anticiposHoy)}</strong>
+      <span style="color:var(--ink-soft);">💸 Gastos locales:</span><strong style="color:var(--red);">${fmtMoney(gastosHoy)}</strong>
+      <span style="color:var(--ink-soft);">✅ Sistema dice:</span><strong style="font-size:16px;">${fmtMoney(efectivoSistema)}</strong>
+    </div>`;
+  document.getElementById('corte-real').value = '';
+  document.getElementById('corte-notas').value = '';
+  document.getElementById('corte-diferencia-wrap').style.display = 'none';
+  openModal('modal-corte-caja');
+};
+
+window.calcDiferenciaCorte = function() {
+  const real = +document.getElementById('corte-real').value || 0;
+  const dif = real - _corteActualData.efectivoSistema;
+  document.getElementById('corte-diferencia-wrap').style.display = 'block';
+  const el = document.getElementById('corte-diferencia');
+  el.textContent = (dif >= 0 ? '+' : '') + fmtMoney(dif);
+  el.style.color = dif === 0 ? 'var(--green)' : dif > 0 ? 'var(--green)' : 'var(--red)';
+};
+
+window.guardarCorte = async function() {
+  const real = +document.getElementById('corte-real').value || 0;
+  const notas = document.getElementById('corte-notas').value;
+  const dif = real - _corteActualData.efectivoSistema;
+  const id = uid();
+  const data = { id, fecha:_corteActualData.fecha, fondo:_corteActualData.fondo, ingresos:_corteActualData.ingresos, anticipos:_corteActualData.anticipos, gastos:_corteActualData.gastos, efectivoSistema:_corteActualData.efectivoSistema, efectivoReal:real, diferencia:dif, notas, creado:new Date().toISOString() };
+  await setDoc(doc(db, 'pl_cortes_caja', id), data);
+  closeModal('modal-corte-caja');
+  toast('✅ Corte guardado');
+  await cargarCortesCaja();
+  renderCortesCaja();
+};
+
+window.copiarCorte = function() {
+  const real = +document.getElementById('corte-real').value || 0;
+  const dif = real - _corteActualData.efectivoSistema;
+  const msg = `🏪 *CORTE DE CAJA — ${_corteActualData.fecha}*\n\n💰 Fondo: ${fmtMoney(_corteActualData.fondo)}\n💚 Ventas: ${fmtMoney(_corteActualData.ingresos)}\n📦 Anticipos: ${fmtMoney(_corteActualData.anticipos)}\n💸 Gastos: ${fmtMoney(_corteActualData.gastos)}\n\n✅ Sistema: ${fmtMoney(_corteActualData.efectivoSistema)}\n💵 Real: ${fmtMoney(real)}\n${dif>=0?'📈':'📉'} Diferencia: ${fmtMoney(dif)}\n\n_Playeras Beloma_`;
+  navigator.clipboard?.writeText(msg).then(() => toast('📋 Corte copiado'));
+};
+
+async function cargarCortesCaja() {
+  try {
+    const snap = await getDocs(collection(db, 'pl_cortes_caja'));
+    cortesCaja = snap.docs.map(d => d.data()).sort((a,b) => b.fecha.localeCompare(a.fecha));
+  } catch(e) { cortesCaja = []; }
+}
+
+function renderCortesCaja() {
+  const lista = document.getElementById('cortes-lista');
+  const empty = document.getElementById('cortes-empty');
+  if(!lista) return;
+  if(!cortesCaja.length) { lista.innerHTML=''; if(empty) empty.style.display='block'; return; }
+  if(empty) empty.style.display='none';
+  lista.innerHTML = cortesCaja.slice(0,10).map(c=>`
+    <div style="padding:10px 0;border-bottom:1px solid var(--border);font-size:13px;">
+      <div style="display:flex;justify-content:space-between;margin-bottom:4px;">
+        <strong>${c.fecha}</strong>
+        <span style="color:${c.diferencia>=0?'var(--green)':'var(--red)'};">Dif: ${c.diferencia>=0?'+':''}${fmtMoney(c.diferencia)}</span>
+      </div>
+      <div style="color:var(--ink-soft);font-size:12px;">Sistema: ${fmtMoney(c.efectivoSistema)} | Real: ${fmtMoney(c.efectivoReal)}</div>
+    </div>`).join('');
+}
+
+// ═══════════════════════════════════════════════════════════════════
+//  TABS DE REPORTES
+// ═══════════════════════════════════════════════════════════════════
+let tabReporteActual = 'ventas';
+
+window.cambiarTabReporte = function(tab) {
+  tabReporteActual = tab;
+  document.querySelectorAll('.reporte-tab').forEach(b => b.classList.toggle('activo', b.dataset.tab===tab));
+  ['ventas','clientes','cortes'].forEach(t => {
+    document.getElementById('reporte-tab-'+t).style.display = t===tab ? 'block' : 'none';
+  });
+  if(tab==='clientes') generarReporteClientes();
+  if(tab==='cortes') generarReporteCortes();
+};
+
+window.generarReporteClientes = function() {
+  const q=(document.getElementById('reporte-cli-buscar')?.value||'').toLowerCase();
+  const canal=document.getElementById('reporte-cli-canal')?.value||'';
+  const cont=document.getElementById('reporte-clientes-contenido');
+  if(!cont) return;
+  const mapa={};
+  ventas.forEach(v=>{const n=(v.cliente||'Público en general').trim();if(canal&&v.canal!==canal)return;if(q&&!n.toLowerCase().includes(q))return;if(!mapa[n])mapa[n]={nombre:n,ventas:0,total:0,canales:new Set(),ultima:''};mapa[n].ventas++;mapa[n].total+=+v.total||0;mapa[n].canales.add(v.canal||'Local');if(v.fecha>mapa[n].ultima)mapa[n].ultima=v.fecha;});
+  const lista=Object.values(mapa).sort((a,b)=>b.total-a.total);
+  if(!lista.length){cont.innerHTML='<div class="empty-state"><div class="icon">👥</div><p>No hay clientes.</p></div>';return;}
+  const tot=lista.reduce((s,c)=>s+c.total,0);
+  cont.innerHTML=`<div style="display:flex;gap:14px;margin-bottom:18px;flex-wrap:wrap;">
+    <div style="background:var(--bg-card);border:1px solid var(--border);border-radius:8px;padding:10px 16px;"><div style="font-size:11px;color:var(--ink-soft);font-weight:600;text-transform:uppercase;">Clientes únicos</div><div style="font-size:22px;font-weight:700;">${lista.length}</div></div>
+    <div style="background:var(--bg-card);border:1px solid var(--border);border-radius:8px;padding:10px 16px;"><div style="font-size:11px;color:var(--ink-soft);font-weight:600;text-transform:uppercase;">Total facturado</div><div style="font-size:22px;font-weight:700;color:var(--green);">${fmtMoney(tot)}</div></div>
+  </div>
+  <div class="table-wrap"><table><thead><tr><th>#</th><th>Cliente</th><th>Ventas</th><th>Total</th><th>Canales</th><th>Última compra</th></tr></thead>
+  <tbody>${lista.map((c,i)=>`<tr><td style="color:var(--ink-soft);">${i+1}</td><td><strong>${c.nombre}</strong></td><td>${c.ventas}</td><td style="color:var(--green);font-weight:700;">${fmtMoney(c.total)}</td><td style="font-size:12px;">${[...c.canales].join(', ')}</td><td style="font-size:12px;color:var(--ink-soft);">${c.ultima}</td></tr>`).join('')}</tbody></table></div>`;
+};
+
+window.generarReporteCortes = function() {
+  const desde=document.getElementById('reporte-corte-desde')?.value||'';
+  const hasta=document.getElementById('reporte-corte-hasta')?.value||'';
+  const cont=document.getElementById('reporte-cortes-contenido');
+  if(!cont) return;
+  let f=cortesCaja.slice();
+  if(desde) f=f.filter(c=>c.fecha>=desde);
+  if(hasta) f=f.filter(c=>c.fecha<=hasta);
+  if(!f.length){cont.innerHTML='<div class="empty-state"><div class="icon">🏪</div><p>No hay cortes.</p></div>';return;}
+  const tI=f.reduce((s,c)=>s+(+c.ingresos||0),0);
+  const tG=f.reduce((s,c)=>s+(+c.gastos||0),0);
+  const tD=f.reduce((s,c)=>s+(+c.diferencia||0),0);
+  cont.innerHTML=`<div style="display:flex;gap:14px;margin-bottom:18px;flex-wrap:wrap;">
+    <div style="background:var(--bg-card);border:1px solid var(--border);border-radius:8px;padding:10px 16px;"><div style="font-size:11px;color:var(--ink-soft);font-weight:600;text-transform:uppercase;">Cortes</div><div style="font-size:22px;font-weight:700;">${f.length}</div></div>
+    <div style="background:var(--bg-card);border:1px solid var(--border);border-radius:8px;padding:10px 16px;"><div style="font-size:11px;color:var(--ink-soft);font-weight:600;text-transform:uppercase;">Total ingresos</div><div style="font-size:22px;font-weight:700;color:var(--green);">${fmtMoney(tI)}</div></div>
+    <div style="background:var(--bg-card);border:1px solid var(--border);border-radius:8px;padding:10px 16px;"><div style="font-size:11px;color:var(--ink-soft);font-weight:600;text-transform:uppercase;">Total gastos</div><div style="font-size:22px;font-weight:700;color:var(--red);">${fmtMoney(tG)}</div></div>
+    <div style="background:var(--bg-card);border:1px solid var(--border);border-radius:8px;padding:10px 16px;"><div style="font-size:11px;color:var(--ink-soft);font-weight:600;text-transform:uppercase;">Diferencia acum.</div><div style="font-size:22px;font-weight:700;color:${tD>=0?'var(--green)':'var(--red)'};">${tD>=0?'+':''}${fmtMoney(tD)}</div></div>
+  </div>
+  <div class="table-wrap"><table><thead><tr><th>Fecha</th><th>Fondo</th><th>Ventas</th><th>Gastos</th><th>Sistema</th><th>Real</th><th>Diferencia</th><th>Notas</th></tr></thead>
+  <tbody>${f.map(c=>`<tr><td>${c.fecha}</td><td>${fmtMoney(c.fondo||0)}</td><td style="color:var(--green);">${fmtMoney(c.ingresos||0)}</td><td style="color:var(--red);">${fmtMoney(c.gastos||0)}</td><td><strong>${fmtMoney(c.efectivoSistema||0)}</strong></td><td>${fmtMoney(c.efectivoReal||0)}</td><td style="font-weight:700;color:${(c.diferencia||0)>=0?'var(--green)':'var(--red)'};">${(c.diferencia||0)>=0?'+':''}${fmtMoney(c.diferencia||0)}</td><td style="font-size:12px;color:var(--ink-soft);">${c.notas||'—'}</td></tr>`).join('')}</tbody></table></div>`;
+};
+
+window.exportarReportePDF = function() {
+  const ids={ventas:'reporte-contenido',clientes:'reporte-clientes-contenido',cortes:'reporte-cortes-contenido'};
+  const titulos={ventas:'📊 Reporte de Ventas',clientes:'👥 Registro de Clientes',cortes:'🏪 Cortes de Caja'};
+  const cont=document.getElementById(ids[tabReporteActual])?.innerHTML;
+  if(!cont){toast('⚠️ Genera el reporte primero');return;}
+  const win=window.open('','_blank');
+  win.document.write(`<html><head><title>${titulos[tabReporteActual]}</title><style>body{font-family:Arial,sans-serif;padding:24px;font-size:13px;}table{width:100%;border-collapse:collapse;}th,td{border:1px solid #ddd;padding:8px;text-align:left;}th{background:#f5f5f5;}</style></head><body><h1>${titulos[tabReporteActual]}</h1><p style="color:#666;">Playeras Beloma · ${new Date().toLocaleString('es-MX')}</p>${cont}</body></html>`);
+  win.document.close();win.print();
+};
+
+window.exportarReporteExcel = function() {
+  if(tabReporteActual==='ventas'){
+    const desde=document.getElementById('reporte-desde')?.value||'';const hasta=document.getElementById('reporte-hasta')?.value||'';const cF=document.getElementById('reporte-canal')?.value||'';
+    let vF=ventas.slice();if(desde)vF=vF.filter(v=>v.fecha>=desde);if(hasta)vF=vF.filter(v=>v.fecha<=hasta);if(cF)vF=vF.filter(v=>v.canal===cF);
+    if(!vF.length){toast('⚠️ No hay ventas');return;}
+    _csv('Ventas_Beloma',['Folio','Fecha','Canal','Cliente','Producto','Cantidad','Precio','Descuento','Total','Método Pago','Notas'],vF.map(v=>[v.folio||'',v.fecha||'',v.canal||'',v.cliente||'',v.producto||'',v.cantidad||1,v.precio||0,v.descuento||0,v.total||0,v.metodoPago||'',v.notas||'']));
+  } else if(tabReporteActual==='clientes'){
+    const mapa={};ventas.forEach(v=>{const n=(v.cliente||'Público en general').trim();if(!mapa[n])mapa[n]={nombre:n,ventas:0,total:0,ultima:''};mapa[n].ventas++;mapa[n].total+=+v.total||0;if(v.fecha>mapa[n].ultima)mapa[n].ultima=v.fecha;});
+    const lista=Object.values(mapa).sort((a,b)=>b.total-a.total);if(!lista.length){toast('⚠️ No hay datos');return;}
+    _csv('Clientes_Beloma',['Cliente','Ventas','Total','Última compra'],lista.map(c=>[c.nombre,c.ventas,c.total,c.ultima]));
+  } else {
+    if(!cortesCaja.length){toast('⚠️ No hay cortes');return;}
+    _csv('Cortes_Caja_Beloma',['Fecha','Fondo','Ventas','Gastos','Sistema','Real','Diferencia','Notas'],cortesCaja.map(c=>[c.fecha,c.fondo||0,c.ingresos||0,c.gastos||0,c.efectivoSistema||0,c.efectivoReal||0,c.diferencia||0,c.notas||'']));
+  }
+};
+
+function _csv(nombre,enc,filas){
+  const bom='\uFEFF';
+  const csv=bom+[enc,...filas].map(r=>r.map(c=>'"'+String(c).replace(/"/g,'""')+'"').join(',')).join('\r\n');
+  const blob=new Blob([csv],{type:'text/csv;charset=utf-8;'});
+  const url=URL.createObjectURL(blob);
+  const a=document.createElement('a');a.href=url;a.download=nombre+'_'+hoy()+'.csv';a.click();
+  URL.revokeObjectURL(url);toast('📊 Excel descargado');
+}
+
+// Carga inicial
+(async function(){await cargarFondosCaja();await cargarCortesCaja();actualizarCajaConFondo();renderCortesCaja();})();
 </script>
 </body>
 </html>
@@ -4776,430 +4991,5 @@ function cargarDatosTransferenciaPreview(){
     const el=document.getElementById('cfg-'+k);
     if(val&&el) el.value=val;
   });
-})();
-</script>
-<script>
-// ═══════════════════════════════════════════════════════════════════
-//  FONDO DE CAJA
-// ═══════════════════════════════════════════════════════════════════
-let fondosCaja = [];
-
-window.abrirFondoCaja = function() {
-  document.getElementById('fondo-fecha').value = hoy();
-  const fondoHoy = fondosCaja.find(f => f.fecha === hoy());
-  document.getElementById('fondo-monto').value = fondoHoy ? fondoHoy.monto : '';
-  document.getElementById('fondo-notas').value = fondoHoy ? fondoHoy.notas || '' : '';
-  openModal('modal-fondo-caja');
-};
-
-window.guardarFondoCaja = async function() {
-  const fecha = document.getElementById('fondo-fecha').value;
-  const monto = +document.getElementById('fondo-monto').value || 0;
-  const notas = document.getElementById('fondo-notas').value;
-  if (!fecha) { toast('⚠️ Selecciona la fecha'); return; }
-  const id = 'fondo-' + fecha;
-  const data = { id, fecha, monto, notas, creado: new Date().toISOString() };
-  await setDoc(doc(db, 'pl_fondos_caja', id), data);
-  closeModal('modal-fondo-caja');
-  toast('✅ Fondo guardado: ' + fmtMoney(monto));
-  await cargarFondosCaja();
-  actualizarCaja();
-};
-
-async function cargarFondosCaja() {
-  try {
-    const snap = await getDocs(collection(db, 'pl_fondos_caja'));
-    fondosCaja = snap.docs.map(d => d.data());
-  } catch(e) { fondosCaja = []; }
-}
-
-// Inyectar fondo en actualizarCaja
-const _origActualizarCaja = window.actualizarCaja;
-window.actualizarCaja = function() {
-  if(_origActualizarCaja) _origActualizarCaja();
-  const fondo = fondosCaja.find(f => f.fecha === hoy());
-  const el = document.getElementById('caja-fondo');
-  if(el) el.textContent = fmtMoney(fondo ? fondo.monto : 0);
-};
-
-// ═══════════════════════════════════════════════════════════════════
-//  CORTE DE CAJA
-// ═══════════════════════════════════════════════════════════════════
-let cortesCaja = [];
-let _corteActualData = {};
-
-window.abrirCorteCaja = function() {
-  const h = hoy();
-  const fondo = fondosCaja.find(f => f.fecha === h);
-  const ingresosHoy = ventas.filter(v => v.fecha === h).reduce((s,v) => s + (+v.total||0), 0);
-  const anticiposHoy = (window.pedidos||[]).filter(p => p.fecha === h).reduce((s,p) => s + (+p.anticipo||0), 0);
-  const gastosHoy = (window.gastosLocales||[]).filter(g => g.fecha === h).reduce((s,g) => s + (+g.monto||0), 0);
-  const fondoMonto = fondo ? +fondo.monto : 0;
-  const efectivoSistema = fondoMonto + ingresosHoy + anticiposHoy - gastosHoy;
-
-  _corteActualData = { fecha: h, fondo: fondoMonto, ingresos: ingresosHoy, anticipos: anticiposHoy, gastos: gastosHoy, efectivoSistema };
-
-  document.getElementById('corte-resumen').innerHTML = `
-    <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;">
-      <span style="color:var(--ink-soft);">📅 Fecha:</span><strong>${h}</strong>
-      <span style="color:var(--ink-soft);">💰 Fondo inicial:</span><strong>${fmtMoney(fondoMonto)}</strong>
-      <span style="color:var(--ink-soft);">💚 Ventas del día:</span><strong style="color:var(--green);">${fmtMoney(ingresosHoy)}</strong>
-      <span style="color:var(--ink-soft);">📦 Anticipos:</span><strong style="color:var(--green);">${fmtMoney(anticiposHoy)}</strong>
-      <span style="color:var(--ink-soft);">💸 Gastos locales:</span><strong style="color:var(--red);">${fmtMoney(gastosHoy)}</strong>
-      <span style="color:var(--ink-soft);">✅ Sistema dice:</span><strong style="font-size:16px;">${fmtMoney(efectivoSistema)}</strong>
-    </div>`;
-  document.getElementById('corte-real').value = '';
-  document.getElementById('corte-notas').value = '';
-  document.getElementById('corte-diferencia-wrap').style.display = 'none';
-  openModal('modal-corte-caja');
-};
-
-window.calcDiferenciaCorte = function() {
-  const real = +document.getElementById('corte-real').value || 0;
-  const dif = real - _corteActualData.efectivoSistema;
-  const wrap = document.getElementById('corte-diferencia-wrap');
-  const el = document.getElementById('corte-diferencia');
-  wrap.style.display = 'block';
-  el.textContent = (dif >= 0 ? '+' : '') + fmtMoney(dif);
-  el.style.color = dif === 0 ? 'var(--green)' : dif > 0 ? 'var(--green)' : 'var(--red)';
-};
-
-window.guardarCorte = async function() {
-  const real = +document.getElementById('corte-real').value || 0;
-  const notas = document.getElementById('corte-notas').value;
-  const dif = real - _corteActualData.efectivoSistema;
-  const id = uid();
-  const data = {
-    id,
-    fecha: _corteActualData.fecha,
-    fondo: _corteActualData.fondo,
-    ingresos: _corteActualData.ingresos,
-    anticipos: _corteActualData.anticipos,
-    gastos: _corteActualData.gastos,
-    efectivoSistema: _corteActualData.efectivoSistema,
-    efectivoReal: real,
-    diferencia: dif,
-    notas,
-    creado: new Date().toISOString()
-  };
-  await setDoc(doc(db, 'pl_cortes_caja', id), data);
-  closeModal('modal-corte-caja');
-  toast('✅ Corte guardado');
-  await cargarCortesCaja();
-  renderCortesCaja();
-};
-
-window.copiarCorte = function() {
-  const real = +document.getElementById('corte-real').value || 0;
-  const dif = real - _corteActualData.efectivoSistema;
-  const msg = `🏪 *CORTE DE CAJA — ${_corteActualData.fecha}*\n\n💰 Fondo inicial: ${fmtMoney(_corteActualData.fondo)}\n💚 Ventas: ${fmtMoney(_corteActualData.ingresos)}\n📦 Anticipos: ${fmtMoney(_corteActualData.anticipos)}\n💸 Gastos: ${fmtMoney(_corteActualData.gastos)}\n\n✅ Sistema: ${fmtMoney(_corteActualData.efectivoSistema)}\n💵 Real: ${fmtMoney(real)}\n${dif >= 0 ? '📈' : '📉'} Diferencia: ${fmtMoney(dif)}\n\n_Playeras Beloma_`;
-  navigator.clipboard?.writeText(msg).then(() => toast('📋 Corte copiado'));
-};
-
-async function cargarCortesCaja() {
-  try {
-    const snap = await getDocs(collection(db, 'pl_cortes_caja'));
-    cortesCaja = snap.docs.map(d => d.data()).sort((a,b) => b.fecha.localeCompare(a.fecha));
-  } catch(e) { cortesCaja = []; }
-}
-
-function renderCortesCaja() {
-  const lista = document.getElementById('cortes-lista');
-  const empty = document.getElementById('cortes-empty');
-  if(!lista) return;
-  const recientes = cortesCaja.slice(0, 10);
-  if(recientes.length === 0) {
-    if(lista) lista.innerHTML = '';
-    if(empty) empty.style.display = 'block';
-    return;
-  }
-  if(empty) empty.style.display = 'none';
-  lista.innerHTML = recientes.map(c => `
-    <div style="padding:10px 0;border-bottom:1px solid var(--border);font-size:13px;">
-      <div style="display:flex;justify-content:space-between;margin-bottom:4px;">
-        <strong>${c.fecha}</strong>
-        <span style="color:${c.diferencia>=0?'var(--green)':'var(--red)'}">
-          Dif: ${c.diferencia>=0?'+':''}${fmtMoney(c.diferencia)}
-        </span>
-      </div>
-      <div style="color:var(--ink-soft);font-size:12px;">
-        Sistema: ${fmtMoney(c.efectivoSistema)} | Real: ${fmtMoney(c.efectivoReal)}
-      </div>
-    </div>`).join('');
-}
-
-// ═══════════════════════════════════════════════════════════════════
-//  TABS DE REPORTES
-// ═══════════════════════════════════════════════════════════════════
-let tabReporteActual = 'ventas';
-
-window.cambiarTabReporte = function(tab) {
-  tabReporteActual = tab;
-  document.querySelectorAll('.reporte-tab').forEach(b => b.classList.toggle('activo', b.dataset.tab === tab));
-  ['ventas','clientes','cortes'].forEach(t => {
-    document.getElementById('reporte-tab-'+t).style.display = t === tab ? 'block' : 'none';
-  });
-  if(tab === 'clientes') generarReporteClientes();
-  if(tab === 'cortes') generarReporteCortes();
-};
-
-// ═══════════════════════════════════════════════════════════════════
-//  REPORTE DE CLIENTES
-// ═══════════════════════════════════════════════════════════════════
-window.generarReporteClientes = function() {
-  const q = (document.getElementById('reporte-cli-buscar')?.value || '').toLowerCase();
-  const canal = document.getElementById('reporte-cli-canal')?.value || '';
-  const cont = document.getElementById('reporte-clientes-contenido');
-  if(!cont) return;
-
-  // Agrupar ventas por cliente
-  const mapaClientes = {};
-  ventas.forEach(v => {
-    const nombre = (v.cliente || 'Público en general').trim();
-    if(canal && v.canal !== canal) return;
-    if(q && !nombre.toLowerCase().includes(q)) return;
-    if(!mapaClientes[nombre]) mapaClientes[nombre] = { nombre, ventas: 0, total: 0, canales: new Set(), ultimaFecha: '' };
-    mapaClientes[nombre].ventas++;
-    mapaClientes[nombre].total += +v.total || 0;
-    mapaClientes[nombre].canales.add(v.canal || 'Local');
-    if(v.fecha > mapaClientes[nombre].ultimaFecha) mapaClientes[nombre].ultimaFecha = v.fecha;
-  });
-
-  const lista = Object.values(mapaClientes).sort((a,b) => b.total - a.total);
-  const totalGeneral = lista.reduce((s,c) => s + c.total, 0);
-
-  if(lista.length === 0) {
-    cont.innerHTML = '<div class="empty-state"><div class="icon">👥</div><p>No hay clientes para mostrar.</p></div>';
-    return;
-  }
-
-  cont.innerHTML = `
-    <div style="display:flex;gap:14px;margin-bottom:18px;flex-wrap:wrap;">
-      <div style="background:var(--bg-card);border:1px solid var(--border);border-radius:8px;padding:10px 16px;">
-        <div style="font-size:11px;color:var(--ink-soft);font-weight:600;text-transform:uppercase;">Clientes únicos</div>
-        <div style="font-size:22px;font-weight:700;">${lista.length}</div>
-      </div>
-      <div style="background:var(--bg-card);border:1px solid var(--border);border-radius:8px;padding:10px 16px;">
-        <div style="font-size:11px;color:var(--ink-soft);font-weight:600;text-transform:uppercase;">Total facturado</div>
-        <div style="font-size:22px;font-weight:700;color:var(--green);">${fmtMoney(totalGeneral)}</div>
-      </div>
-    </div>
-    <div class="table-wrap">
-      <table>
-        <thead><tr><th>#</th><th>Cliente</th><th>Ventas</th><th>Total</th><th>Canales</th><th>Última compra</th></tr></thead>
-        <tbody>
-          ${lista.map((c,i) => `
-            <tr>
-              <td style="color:var(--ink-soft);">${i+1}</td>
-              <td><strong>${c.nombre}</strong></td>
-              <td>${c.ventas}</td>
-              <td style="color:var(--green);font-weight:700;">${fmtMoney(c.total)}</td>
-              <td style="font-size:12px;">${[...c.canales].join(', ')}</td>
-              <td style="font-size:12px;color:var(--ink-soft);">${c.ultimaFecha}</td>
-            </tr>`).join('')}
-        </tbody>
-      </table>
-    </div>`;
-};
-
-// ═══════════════════════════════════════════════════════════════════
-//  REPORTE DE CORTES DE CAJA
-// ═══════════════════════════════════════════════════════════════════
-window.generarReporteCortes = function() {
-  const desde = document.getElementById('reporte-corte-desde')?.value || '';
-  const hasta = document.getElementById('reporte-corte-hasta')?.value || '';
-  const cont = document.getElementById('reporte-cortes-contenido');
-  if(!cont) return;
-
-  let filtrados = cortesCaja.slice();
-  if(desde) filtrados = filtrados.filter(c => c.fecha >= desde);
-  if(hasta) filtrados = filtrados.filter(c => c.fecha <= hasta);
-
-  if(filtrados.length === 0) {
-    cont.innerHTML = '<div class="empty-state"><div class="icon">🏪</div><p>No hay cortes en este período.</p></div>';
-    return;
-  }
-
-  const totalIngresos = filtrados.reduce((s,c) => s + (+c.ingresos||0), 0);
-  const totalGastos   = filtrados.reduce((s,c) => s + (+c.gastos||0), 0);
-  const totalDif      = filtrados.reduce((s,c) => s + (+c.diferencia||0), 0);
-
-  cont.innerHTML = `
-    <div style="display:flex;gap:14px;margin-bottom:18px;flex-wrap:wrap;">
-      <div style="background:var(--bg-card);border:1px solid var(--border);border-radius:8px;padding:10px 16px;">
-        <div style="font-size:11px;color:var(--ink-soft);font-weight:600;text-transform:uppercase;">Cortes</div>
-        <div style="font-size:22px;font-weight:700;">${filtrados.length}</div>
-      </div>
-      <div style="background:var(--bg-card);border:1px solid var(--border);border-radius:8px;padding:10px 16px;">
-        <div style="font-size:11px;color:var(--ink-soft);font-weight:600;text-transform:uppercase;">Total ingresos</div>
-        <div style="font-size:22px;font-weight:700;color:var(--green);">${fmtMoney(totalIngresos)}</div>
-      </div>
-      <div style="background:var(--bg-card);border:1px solid var(--border);border-radius:8px;padding:10px 16px;">
-        <div style="font-size:11px;color:var(--ink-soft);font-weight:600;text-transform:uppercase;">Total gastos</div>
-        <div style="font-size:22px;font-weight:700;color:var(--red);">${fmtMoney(totalGastos)}</div>
-      </div>
-      <div style="background:var(--bg-card);border:1px solid var(--border);border-radius:8px;padding:10px 16px;">
-        <div style="font-size:11px;color:var(--ink-soft);font-weight:600;text-transform:uppercase;">Diferencia acum.</div>
-        <div style="font-size:22px;font-weight:700;color:${totalDif>=0?'var(--green)':'var(--red)'};">${totalDif>=0?'+':''}${fmtMoney(totalDif)}</div>
-      </div>
-    </div>
-    <div class="table-wrap">
-      <table>
-        <thead><tr><th>Fecha</th><th>Fondo</th><th>Ventas</th><th>Gastos</th><th>Sistema</th><th>Real</th><th>Diferencia</th><th>Notas</th></tr></thead>
-        <tbody>
-          ${filtrados.map(c => `
-            <tr>
-              <td>${c.fecha}</td>
-              <td>${fmtMoney(c.fondo||0)}</td>
-              <td style="color:var(--green);">${fmtMoney(c.ingresos||0)}</td>
-              <td style="color:var(--red);">${fmtMoney(c.gastos||0)}</td>
-              <td><strong>${fmtMoney(c.efectivoSistema||0)}</strong></td>
-              <td>${fmtMoney(c.efectivoReal||0)}</td>
-              <td style="font-weight:700;color:${(c.diferencia||0)>=0?'var(--green)':'var(--red)'};">
-                ${(c.diferencia||0)>=0?'+':''}${fmtMoney(c.diferencia||0)}
-              </td>
-              <td style="font-size:12px;color:var(--ink-soft);">${c.notas||'—'}</td>
-            </tr>`).join('')}
-        </tbody>
-      </table>
-    </div>`;
-};
-
-// ═══════════════════════════════════════════════════════════════════
-//  EXPORTAR PDF Y EXCEL — MEJORADO
-// ═══════════════════════════════════════════════════════════════════
-window.exportarReportePDF = function() {
-  if(tabReporteActual === 'ventas') exportarReportePDFVentas();
-  else if(tabReporteActual === 'clientes') exportarReportePDFClientes();
-  else if(tabReporteActual === 'cortes') exportarReportePDFCortes();
-};
-
-window.exportarReporteExcel = function() {
-  if(tabReporteActual === 'ventas') exportarReporteExcelVentas();
-  else if(tabReporteActual === 'clientes') exportarReporteExcelClientes();
-  else if(tabReporteActual === 'cortes') exportarReporteExcelCortes();
-};
-
-function exportarReportePDFVentas() {
-  const contenido = document.getElementById('reporte-contenido').innerHTML;
-  if(!contenido) { toast('⚠️ Genera el reporte primero'); return; }
-  const win = window.open('','_blank');
-  win.document.write(`<html><head><title>Reporte de Ventas — Beloma</title>
-    <style>body{font-family:Arial,sans-serif;padding:24px;font-size:13px;}
-    table{width:100%;border-collapse:collapse;margin-top:12px;}
-    th,td{border:1px solid #ddd;padding:8px 10px;text-align:left;}
-    th{background:#f5f5f5;font-weight:700;}h1{font-size:20px;margin-bottom:4px;}
-    .no-print{display:none;}</style></head>
-    <body><h1>📊 Reporte de Ventas</h1>
-    <p style="color:#666;">Playeras Beloma · Generado: ${new Date().toLocaleString('es-MX')}</p>
-    ${contenido}</body></html>`);
-  win.document.close();
-  win.print();
-}
-
-function exportarReportePDFClientes() {
-  const contenido = document.getElementById('reporte-clientes-contenido').innerHTML;
-  if(!contenido) { toast('⚠️ No hay datos'); return; }
-  const win = window.open('','_blank');
-  win.document.write(`<html><head><title>Registro de Clientes — Beloma</title>
-    <style>body{font-family:Arial,sans-serif;padding:24px;font-size:13px;}
-    table{width:100%;border-collapse:collapse;margin-top:12px;}
-    th,td{border:1px solid #ddd;padding:8px 10px;text-align:left;}
-    th{background:#f5f5f5;}</style></head>
-    <body><h1>👥 Registro de Clientes</h1>
-    <p style="color:#666;">Playeras Beloma · ${new Date().toLocaleString('es-MX')}</p>
-    ${contenido}</body></html>`);
-  win.document.close();
-  win.print();
-}
-
-function exportarReportePDFCortes() {
-  const contenido = document.getElementById('reporte-cortes-contenido').innerHTML;
-  if(!contenido) { toast('⚠️ No hay datos'); return; }
-  const win = window.open('','_blank');
-  win.document.write(`<html><head><title>Cortes de Caja — Beloma</title>
-    <style>body{font-family:Arial,sans-serif;padding:24px;font-size:13px;}
-    table{width:100%;border-collapse:collapse;margin-top:12px;}
-    th,td{border:1px solid #ddd;padding:8px 10px;text-align:left;}
-    th{background:#f5f5f5;}</style></head>
-    <body><h1>🏪 Cortes de Caja</h1>
-    <p style="color:#666;">Playeras Beloma · ${new Date().toLocaleString('es-MX')}</p>
-    ${contenido}</body></html>`);
-  win.document.close();
-  win.print();
-}
-
-function exportarReporteExcelVentas() {
-  const desde = document.getElementById('reporte-desde')?.value || '';
-  const hasta = document.getElementById('reporte-hasta')?.value || '';
-  const canalFiltro = document.getElementById('reporte-canal')?.value || '';
-  let vFiltradas = ventas.slice();
-  if(desde) vFiltradas = vFiltradas.filter(v => v.fecha >= desde);
-  if(hasta) vFiltradas = vFiltradas.filter(v => v.fecha <= hasta);
-  if(canalFiltro) vFiltradas = vFiltradas.filter(v => v.canal === canalFiltro);
-  if(vFiltradas.length === 0) { toast('⚠️ No hay ventas para exportar'); return; }
-  const encabezado = ['Folio','Fecha','Canal','Cliente','Producto','Cantidad','Precio','Descuento','Total','Método Pago','Notas'];
-  const filas = vFiltradas.map(v => [
-    v.folio||'', v.fecha||'', v.canal||'', v.cliente||'', v.producto||'',
-    v.cantidad||1, v.precio||0, v.descuento||0, v.total||0,
-    v.metodoPago||'', v.notas||''
-  ]);
-  descargarExcel('Ventas_Beloma', encabezado, filas);
-}
-
-function exportarReporteExcelClientes() {
-  const q = (document.getElementById('reporte-cli-buscar')?.value || '').toLowerCase();
-  const canal = document.getElementById('reporte-cli-canal')?.value || '';
-  const mapaClientes = {};
-  ventas.forEach(v => {
-    const nombre = (v.cliente || 'Público en general').trim();
-    if(canal && v.canal !== canal) return;
-    if(q && !nombre.toLowerCase().includes(q)) return;
-    if(!mapaClientes[nombre]) mapaClientes[nombre] = { nombre, ventas: 0, total: 0, ultima: '' };
-    mapaClientes[nombre].ventas++;
-    mapaClientes[nombre].total += +v.total || 0;
-    if(v.fecha > mapaClientes[nombre].ultima) mapaClientes[nombre].ultima = v.fecha;
-  });
-  const lista = Object.values(mapaClientes).sort((a,b) => b.total - a.total);
-  if(lista.length === 0) { toast('⚠️ No hay datos'); return; }
-  const encabezado = ['Cliente','Ventas','Total','Última compra'];
-  const filas = lista.map(c => [c.nombre, c.ventas, c.total, c.ultima]);
-  descargarExcel('Clientes_Beloma', encabezado, filas);
-}
-
-function exportarReporteExcelCortes() {
-  if(cortesCaja.length === 0) { toast('⚠️ No hay cortes'); return; }
-  const encabezado = ['Fecha','Fondo','Ventas','Anticipos','Gastos','Sistema','Real','Diferencia','Notas'];
-  const filas = cortesCaja.map(c => [
-    c.fecha, c.fondo||0, c.ingresos||0, c.anticipos||0,
-    c.gastos||0, c.efectivoSistema||0, c.efectivoReal||0,
-    c.diferencia||0, c.notas||''
-  ]);
-  descargarExcel('Cortes_Caja_Beloma', encabezado, filas);
-}
-
-// Helper para generar CSV descargable como Excel
-function descargarExcel(nombre, encabezado, filas) {
-  const bom = '\uFEFF'; // BOM para UTF-8 en Excel
-  const csv = bom + [encabezado, ...filas].map(r =>
-    r.map(c => '"' + String(c).replace(/"/g,'""') + '"').join(',')
-  ).join('\r\n');
-  const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement('a');
-  a.href = url;
-  a.download = nombre + '_' + hoy() + '.csv';
-  a.click();
-  URL.revokeObjectURL(url);
-  toast('📊 Excel descargado');
-}
-
-// ═══════════════════════════════════════════════════════════════════
-//  CARGA INICIAL — Fondos y Cortes
-// ═══════════════════════════════════════════════════════════════════
-(async function() {
-  await cargarFondosCaja();
-  await cargarCortesCaja();
-  renderCortesCaja();
 })();
 </script>
