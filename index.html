@@ -290,7 +290,6 @@ tbody td{padding:11px 14px;font-size:13.5px;vertical-align:middle;}
     <div class="topbar">
       <h1>Ventas</h1>
       <div class="actions">
-        <button class="btn btn-ghost btn-sm" onclick="openVentaModal('ml')">🛒 Mercado Libre</button>
         <button class="btn btn-accent" onclick="openVentaModal()">+ Nueva Venta</button>
       </div>
     </div>
@@ -842,9 +841,8 @@ tbody td{padding:11px 14px;font-size:13.5px;vertical-align:middle;}
       <div class="form-grid">
         <div class="form-group"><label>Fecha *</label><input type="date" id="v-fecha"></div>
         <div class="form-group"><label>Canal *</label>
-          <select id="v-canal" onchange="toggleEnvioFields()">
+          <select id="v-canal" onchange="onCanalChange()">
             <option value="Local">Local</option>
-            <option value="WhatsApp">WhatsApp</option>
             <option value="Foráneo">Foráneo</option>
             <option value="Mercado Libre">Mercado Libre</option>
             <option value="Amazon">Amazon</option>
@@ -856,16 +854,25 @@ tbody td{padding:11px 14px;font-size:13.5px;vertical-align:middle;}
           <label>Ciudad de destino</label>
           <input type="text" id="v-ciudad" placeholder="Ej. Guadalajara, Jalisco">
         </div>
+        <!-- Ciudad y Estado para ML -->
+        <div class="form-group" id="v-ml-ciudad-group" style="display:none;">
+          <label>Ciudad</label>
+          <input type="text" id="v-ml-ciudad" placeholder="Ej. CDMX, Monterrey...">
+        </div>
+        <div class="form-group" id="v-ml-estado-group" style="display:none;">
+          <label>Estado</label>
+          <input type="text" id="v-ml-estado" placeholder="Ej. Jalisco, Nuevo León...">
+        </div>
         <!-- FOLIO -->
         <div class="form-group">
           <label>Folio</label>
           <input type="text" id="v-folio" placeholder="Auto" style="font-weight:700;letter-spacing:0.05em;">
-          <div style="font-size:11px;color:var(--ink-soft);margin-top:3px;" id="v-folio-hint">Se genera automáticamente para ventas locales y WhatsApp</div>
+          <div style="font-size:11px;color:var(--ink-soft);margin-top:3px;" id="v-folio-hint">Se genera automáticamente</div>
         </div>
         <!-- CLIENTE -->
         <div class="form-group">
-          <label>Cliente</label>
-          <div style="display:flex;gap:6px;align-items:center;">
+          <label id="v-cliente-label">Cliente</label>
+          <div style="display:flex;gap:6px;align-items:center;" id="v-cliente-buscar-wrap">
             <div style="position:relative;flex:1;">
               <input type="text" id="v-cliente" placeholder="Público en general" autocomplete="off"
                 oninput="buscarClienteVenta(this.value)"
@@ -874,7 +881,7 @@ tbody td{padding:11px 14px;font-size:13.5px;vertical-align:middle;}
                 background:var(--bg-card);border:1px solid var(--border);border-radius:8px;
                 box-shadow:0 4px 16px rgba(0,0,0,0.15);z-index:200;max-height:180px;overflow-y:auto;"></div>
             </div>
-            <button type="button" class="btn btn-ghost btn-sm" onclick="openClienteModal()"
+            <button type="button" class="btn btn-ghost btn-sm" id="v-cliente-btn-nuevo" onclick="openClienteModal()"
               title="Nuevo cliente" style="white-space:nowrap;">+ Nuevo</button>
           </div>
         </div>
@@ -946,7 +953,7 @@ tbody td{padding:11px 14px;font-size:13.5px;vertical-align:middle;}
         <div class="form-group full"><label>Notas</label><textarea id="v-notas" placeholder="Detalles del pedido..."></textarea></div>
 
         <!-- ══ MÉTODO DE PAGO ══ -->
-        <div class="form-group full">
+        <div class="form-group full" id="v-metodo-pago-section">
           <label>💳 Método de pago</label>
           <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:10px;">
             <button type="button" class="btn-pago" data-pago="efectivo" onclick="selPago('efectivo')">💵 Efectivo</button>
@@ -2025,10 +2032,9 @@ window.openVentaModal=function(tipo, ventaId){
   }
   // Actualizar folio al cambiar canal
   document.getElementById('v-canal').onchange=function(){
-    toggleEnvioFields();
-    asignarFolioSegunCanal(this.value);
+    onCanalChange();
   };
-  cargarDatosTransferenciaPreview();
+  onCanalChange();
   openModal('modal-venta');
 };
 
@@ -4396,7 +4402,7 @@ window.showSection = function(sec) {
 
 // INIT
 document.getElementById('fecha-hoy').textContent=new Date().toLocaleDateString('es-MX',{weekday:'long',year:'numeric',month:'long',day:'numeric'});
-document.querySelectorAll(".modal-overlay").forEach(o=>{o.addEventListener("click",e=>{if(e.target!==o)return;if(o.id==="modal-diseno"){cerrarDisenoConAdvertencia();return;}if(o.id==="modal-carga-masiva"){cerrarCargaMasivaConAdvertencia();return;}o.classList.remove("open");});});
+document.querySelectorAll(".modal-overlay").forEach(o=>{o.addEventListener("click",e=>{if(e.target!==o)return;if(o.id==="modal-diseno"){cerrarDisenoConAdvertencia();return;}if(o.id==="modal-carga-masiva"){cerrarCargaMasivaConAdvertencia();return;}if(o.id==="modal-venta")return;o.classList.remove("open");});});
 const cfgP=localStorage.getItem('pl_precio');const cfgC=localStorage.getItem('pl_costo_var');
 if(cfgP)document.getElementById('cfg-precio').value=cfgP;
 if(cfgC)document.getElementById('cfg-costo-var').value=cfgC;
@@ -4512,14 +4518,14 @@ window.confirmarCerrarCargaMasiva = function(){
 //  FOLIO AUTOMÁTICO
 // ══════════════════════════════════════════════════════
 function generarFolio(canal){
-  const prefijo=canal==='WhatsApp'?'WA':'BL';
+  const prefijo = canal==='Foráneo' ? 'FOR' : 'BL';
   return prefijo+'-'+String(Date.now()).slice(-6);
 }
 function asignarFolioSegunCanal(canal){
   const input=document.getElementById('v-folio');
   const hint=document.getElementById('v-folio-hint');
   if(!input||!hint) return;
-  const canalesAuto=['Local','WhatsApp'];
+  const canalesAuto=['Local','Foráneo'];
   if(canalesAuto.includes(canal)){
     input.value=generarFolio(canal);
     input.readOnly=false;
@@ -4532,6 +4538,42 @@ function asignarFolioSegunCanal(canal){
     hint.textContent='Ingresa el folio/orden de '+canal;
   }
 }
+
+// Canales que usan marketplace (sin método de pago ni "Público en general")
+const CANALES_MARKETPLACE = ['Mercado Libre','Amazon','Shopify'];
+
+window.onCanalChange = function(){
+  const canal = document.getElementById('v-canal').value;
+  toggleEnvioFields();
+  asignarFolioSegunCanal(canal);
+
+  // Método de pago: ocultar en marketplaces
+  const secPago = document.getElementById('v-metodo-pago-section');
+  if(secPago) secPago.style.display = CANALES_MARKETPLACE.includes(canal) ? 'none' : '';
+
+  // Cliente: comportamiento según canal
+  const clienteInput = document.getElementById('v-cliente');
+  const clienteBuscarWrap = document.getElementById('v-cliente-buscar-wrap');
+  const clienteLabel = document.getElementById('v-cliente-label');
+  if(CANALES_MARKETPLACE.includes(canal)){
+    if(clienteInput) clienteInput.placeholder = 'Nombre del cliente';
+    // Ocultar botón "+ Nuevo" en marketplaces
+    const btnNuevo = document.getElementById('v-cliente-btn-nuevo');
+    if(btnNuevo) btnNuevo.style.display = 'none';
+    if(clienteLabel) clienteLabel.textContent = 'Nombre del cliente';
+  } else {
+    if(clienteInput) clienteInput.placeholder = 'Público en general';
+    const btnNuevo = document.getElementById('v-cliente-btn-nuevo');
+    if(btnNuevo) btnNuevo.style.display = '';
+    if(clienteLabel) clienteLabel.textContent = 'Cliente';
+  }
+
+  // Ciudad/Estado solo para ML
+  const mlCiudadGroup = document.getElementById('v-ml-ciudad-group');
+  const mlEstadoGroup = document.getElementById('v-ml-estado-group');
+  if(mlCiudadGroup) mlCiudadGroup.style.display = canal==='Mercado Libre' ? '' : 'none';
+  if(mlEstadoGroup) mlEstadoGroup.style.display = canal==='Mercado Libre' ? '' : 'none';
+};
 
 // ══════════════════════════════════════════════════════
 //  BÚSQUEDA DE CLIENTES EN NUEVA VENTA
