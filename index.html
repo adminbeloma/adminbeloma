@@ -1935,6 +1935,39 @@ tbody td{padding:11px 14px;font-size:13.5px;vertical-align:middle;}
   </div>
 </div>
 
+<!-- MODAL AGREGAR AL CATÁLOGO -->
+<div class="modal-overlay" id="modal-agregar-catalogo" style="z-index:1300;">
+  <div class="modal" style="max-width:420px;">
+    <div class="modal-header">
+      <h2>+ Agregar al catálogo</h2>
+      <button class="modal-close" onclick="closeModal('modal-agregar-catalogo')">×</button>
+    </div>
+    <div class="modal-body">
+      <img id="mc-preview" src="" style="width:100%;aspect-ratio:1;object-fit:cover;border-radius:10px;margin-bottom:14px;background:#eee;">
+      <div class="form-group">
+        <label>Nombre *</label>
+        <input type="text" id="mc-nombre" placeholder="Nombre del diseño">
+      </div>
+      <div class="form-group">
+        <label>Categoría</label>
+        <input type="text" id="mc-categoria" placeholder="Anime, Películas, etc.">
+      </div>
+      <div class="form-group">
+        <label>Precio ($) *</label>
+        <input type="number" id="mc-precio" placeholder="200" step="0.01">
+      </div>
+      <div class="form-group">
+        <label>Tags (opcional)</label>
+        <input type="text" id="mc-tags" placeholder="dragon ball, goku, anime">
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-ghost" onclick="closeModal('modal-agregar-catalogo')">Cancelar</button>
+      <button class="btn btn-accent" onclick="guardarMuestraEnCatalogo()">✅ Agregar</button>
+    </div>
+  </div>
+</div>
+
 <div id="toast"></div>
 
 <script type="module">
@@ -5149,19 +5182,15 @@ async function cargarPaginaMuestras(folderId, pageToken) {
     return;
   }
 
+  const cat = document.getElementById('muestras-cat').value;
   estado.style.display = 'none';
-  grid.innerHTML = imgs.map(img => `
-    <div style="background:var(--bg-card);border:1px solid var(--border);border-radius:10px;
-                overflow:hidden;cursor:pointer;" onclick="window.open('${img.webViewLink}','_blank')"
-         title="${img.name}">
-      <img src="${img.thumbnailLink}" alt="${img.name}"
-        style="width:100%;aspect-ratio:1;object-fit:cover;background:#eee;"
-        onerror="this.style.background='#ddd';this.src='';">
-      <div style="padding:6px 8px;font-size:11px;color:var(--ink-soft);
-                  white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">
-        ${img.name}
-      </div>
-    </div>`).join('');
+
+  // Si se hace click en nueva página, agregar al grid existente
+  if(pageToken) {
+    grid.innerHTML += renderMuestrasCards(imgs, cat);
+  } else {
+    grid.innerHTML = renderMuestrasCards(imgs, cat);
+  }
 
   // Paginación
   pag.innerHTML = '';
@@ -5174,6 +5203,34 @@ async function cargarPaginaMuestras(folderId, pageToken) {
   }
 }
 
+function renderMuestrasCards(imgs, cat) {
+  return imgs.map(img => {
+    // URL directa de Drive para mostrar en catálogo
+    const driveUrl = `https://drive.google.com/thumbnail?id=${img.id}&sz=w400`;
+    const escapedName = img.name.replace(/'/g, "\\'").replace(/"/g, '&quot;');
+    const escapedId   = img.id;
+    return `
+    <div id="mcard-${img.id}" style="background:var(--bg-card);border:1px solid var(--border);
+                border-radius:10px;overflow:hidden;position:relative;">
+      <img src="${img.thumbnailLink}" alt="${img.name}"
+        style="width:100%;aspect-ratio:1;object-fit:cover;background:#eee;cursor:pointer;"
+        onclick="window.open('${img.webViewLink}','_blank')"
+        onerror="this.style.background='#ddd';this.src='';">
+      <div style="padding:6px 8px 8px;">
+        <div style="font-size:11px;color:var(--ink-soft);white-space:nowrap;overflow:hidden;
+                    text-overflow:ellipsis;margin-bottom:6px;" title="${img.name}">
+          ${img.name}
+        </div>
+        <button onclick="abrirModalAgregarCatalogo('${escapedId}','${escapedName}','${cat}','${driveUrl}')"
+          style="width:100%;background:var(--green);color:#fff;border:none;border-radius:6px;
+                 padding:6px;font-size:11px;font-weight:600;cursor:pointer;font-family:'Inter',sans-serif;">
+          + Catálogo
+        </button>
+      </div>
+    </div>`;
+  }).join('');
+}
+
 window.limpiarMuestras = function() {
   document.getElementById('muestras-cat').value  = '';
   document.getElementById('muestras-tema').value = '';
@@ -5182,6 +5239,47 @@ window.limpiarMuestras = function() {
   document.getElementById('muestras-paginacion').innerHTML = '';
   document.getElementById('muestras-estado').textContent = 'Selecciona una categoría y busca para ver las muestras.';
   document.getElementById('muestras-estado').style.display = 'block';
+};
+
+// ── AGREGAR MUESTRA AL CATÁLOGO ───────────────────────────
+let _muestraTemp = {};
+
+window.abrirModalAgregarCatalogo = function(id, nombre, cat, driveUrl) {
+  _muestraTemp = { id, nombre, cat, driveUrl };
+  document.getElementById('mc-nombre').value    = nombre.replace(/\.\w+$/, '').replace(/[-_]/g, ' ');
+  document.getElementById('mc-categoria').value = cat || '';
+  document.getElementById('mc-precio').value    = '';
+  document.getElementById('mc-tags').value      = '';
+  document.getElementById('mc-preview').src     = driveUrl;
+  openModal('modal-agregar-catalogo');
+};
+
+window.guardarMuestraEnCatalogo = async function() {
+  const nombre    = document.getElementById('mc-nombre').value.trim();
+  const categoria = document.getElementById('mc-categoria').value.trim();
+  const precio    = +document.getElementById('mc-precio').value || 0;
+  const tags      = document.getElementById('mc-tags').value.trim();
+  if(!nombre) { toast('⚠️ Ingresa el nombre'); return; }
+  if(!precio) { toast('⚠️ Ingresa el precio'); return; }
+
+  const id = 'bl-' + Date.now();
+  await setDoc(doc(db, 'bl_disenos', id), {
+    id, nombre, categoria, precio, tags,
+    imagen: _muestraTemp.driveUrl,
+    driveId: _muestraTemp.id,
+    activo: true,
+    creado: new Date().toISOString()
+  });
+
+  // Marcar la card como agregada
+  const card = document.getElementById('mcard-' + _muestraTemp.id);
+  if(card) {
+    const btn = card.querySelector('button');
+    if(btn) { btn.textContent = '✅ En catálogo'; btn.style.background = '#888'; btn.disabled = true; }
+  }
+
+  closeModal('modal-agregar-catalogo');
+  toast('✅ Agregado al catálogo');
 };
 </script>
 
