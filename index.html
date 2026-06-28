@@ -236,8 +236,7 @@ tbody td{padding:11px 14px;font-size:13.5px;vertical-align:middle;}
     <a onclick="showSection('proveedores')" id="nav-proveedores" class="admin-only" style="display:none;"><span class="icon">🏭</span><span>Proveedores</span></a>
     <a onclick="showSection('config')" id="nav-config" class="admin-only" style="display:none;"><span class="icon">⚙️</span><span>Config</span></a>
     <div class="nav-group admin-only" style="display:none;">Admin</div>
-    <a onclick="showSection('catalogo')" id="nav-catalogo" class="admin-only" style="display:none;"><span class="icon">🎨</span><span>Catálogo</span></a>
-    <a onclick="showSection('muestras')" id="nav-muestras" class="admin-only" style="display:none;"><span class="icon">🖼️</span><span>Muestras</span></a>
+    <a onclick="showSection('muestras')" id="nav-muestras" class="admin-only" style="display:none;"><span class="icon">🎨</span><span>Catálogo</span></a>
     <a onclick="showSection('banco')" id="nav-banco" class="admin-only" style="display:none;"><span class="icon">🏦</span><span>Conciliación</span></a>
   </nav>
   <div class="sidebar-footer">v1.0 · Beloma · playerasbeloma.com</div>
@@ -806,7 +805,7 @@ tbody td{padding:11px 14px;font-size:13.5px;vertical-align:middle;}
   <!-- SECCIÓN MUESTRAS -->
   <div id="section-muestras" class="section">
     <div class="topbar">
-      <h1>🖼️ Catálogo de Muestras</h1>
+      <h1>🎨 Catálogo</h1>
     </div>
     <div class="content">
       <!-- Filtros de búsqueda -->
@@ -844,6 +843,15 @@ tbody td{padding:11px 14px;font-size:13.5px;vertical-align:middle;}
           </div>
           <button class="btn btn-primary" onclick="buscarMuestras()">🔍 Buscar</button>
           <button class="btn btn-ghost btn-sm" onclick="limpiarMuestras()">✕ Limpiar</button>
+        </div>
+        <!-- Búsqueda por nombre de archivo -->
+        <div style="display:flex;gap:10px;align-items:flex-end;margin-top:10px;flex-wrap:wrap;">
+          <div style="flex:1;min-width:200px;">
+            <label style="font-size:12px;color:var(--ink-soft);font-weight:600;display:block;margin-bottom:6px;">🔍 Buscar por nombre de archivo</label>
+            <input type="text" id="muestras-archivo" placeholder="ej. starwars0001, dragonball..."
+              style="width:100%;border:1.5px solid var(--border);border-radius:8px;padding:9px 12px;font-size:13px;outline:none;">
+          </div>
+          <button class="btn btn-primary" onclick="buscarPorArchivo()">Buscar archivo</button>
         </div>
       </div>
 
@@ -1933,6 +1941,30 @@ tbody td{padding:11px 14px;font-size:13.5px;vertical-align:middle;}
       <button class="btn btn-accent" onclick="guardarCorte()">Guardar Corte</button>
     </div>
   </div>
+</div>
+
+<!-- MODAL VISOR DE IMÁGENES DRIVE -->
+<div id="modal-visor-drive" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.92);
+  z-index:2000;align-items:center;justify-content:center;flex-direction:column;">
+  <!-- Cerrar -->
+  <button onclick="cerrarVisorDrive()" style="position:absolute;top:16px;right:20px;
+    background:none;border:none;color:#fff;font-size:32px;cursor:pointer;z-index:10;">×</button>
+  <!-- Contador -->
+  <div id="visor-contador" style="position:absolute;top:18px;left:50%;transform:translateX(-50%);
+    color:rgba(255,255,255,0.6);font-size:13px;"></div>
+  <!-- Nombre -->
+  <div id="visor-nombre" style="position:absolute;bottom:16px;left:50%;transform:translateX(-50%);
+    color:rgba(255,255,255,0.7);font-size:12px;max-width:80%;text-align:center;"></div>
+  <!-- Flecha izquierda -->
+  <button onclick="visorNavegar(-1)" style="position:absolute;left:16px;top:50%;transform:translateY(-50%);
+    background:rgba(255,255,255,0.15);border:none;color:#fff;font-size:28px;cursor:pointer;
+    border-radius:50%;width:48px;height:48px;display:flex;align-items:center;justify-content:center;">‹</button>
+  <!-- Imagen -->
+  <img id="visor-img" src="" style="max-width:90vw;max-height:85vh;object-fit:contain;border-radius:8px;">
+  <!-- Flecha derecha -->
+  <button onclick="visorNavegar(1)" style="position:absolute;right:16px;top:50%;transform:translateY(-50%);
+    background:rgba(255,255,255,0.15);border:none;color:#fff;font-size:28px;cursor:pointer;
+    border-radius:50%;width:48px;height:48px;display:flex;align-items:center;justify-content:center;">›</button>
 </div>
 
 <!-- MODAL AGREGAR AL CATÁLOGO -->
@@ -5110,17 +5142,18 @@ async function getDriveFolderId(parentId, nombre) {
   return data.files?.[0] || null;
 }
 
-async function getDriveImages(folderId, pageToken = null) {
-  let url = `https://www.googleapis.com/drive/v3/files?q='${folderId}'+in+parents+and+mimeType+contains+'image/'+and+trashed=false&fields=nextPageToken,files(id,name,thumbnailLink,webViewLink)&pageSize=48&key=${DRIVE_API_KEY}`;
+async function getDriveImages(folderId, pageToken = null, nombreFiltro = '') {
+  let qBase = `'${folderId}'+in+parents+and+mimeType+contains+'image/'+and+trashed=false`;
+  if(nombreFiltro) qBase += `+and+name+contains+'${encodeURIComponent(nombreFiltro)}'`;
+  let url = `https://www.googleapis.com/drive/v3/files?q=${qBase}&fields=nextPageToken,files(id,name,thumbnailLink,webViewLink)&pageSize=96&orderBy=name&key=${DRIVE_API_KEY}`;
   if(pageToken) url += `&pageToken=${pageToken}`;
-  const res  = await fetch(url);
+  const res = await fetch(url);
   return res.json();
 }
 
 window.buscarMuestras = async function() {
-  const cat   = document.getElementById('muestras-cat').value;
-  const tema  = document.getElementById('muestras-tema').value.trim();
-  const sub   = document.getElementById('muestras-sub').value.trim();
+  const cat    = document.getElementById('muestras-cat').value;
+  const tema   = document.getElementById('muestras-tema').value.trim();
   const estado = document.getElementById('muestras-estado');
   const grid   = document.getElementById('muestras-grid');
   const pag    = document.getElementById('muestras-paginacion');
@@ -5133,36 +5166,37 @@ window.buscarMuestras = async function() {
   pag.innerHTML  = '';
 
   try {
-    // 1. Carpeta de categoría
     const catFolder = await getDriveFolderId(DRIVE_ROOT_ID, cat);
-    if(!catFolder) { estado.textContent = `No se encontró la carpeta "${cat}" en Drive.`; return; }
+    if(!catFolder) { estado.textContent = `No se encontró "${cat}" en Drive.`; return; }
 
-    // Si no hay tema → mostrar subcarpetas de la categoría
     if(!tema) {
+      // Sin tema → mostrar subcarpetas de la categoría
       await mostrarSubcarpetas(catFolder.id, cat, cat);
       return;
     }
 
-    let targetId = catFolder.id;
-    let breadcrumb = cat;
-
-    // 2. Carpeta de tema
+    // Con tema → buscar subcarpeta y mostrar su contenido recursivamente
     const temaFolder = await getDriveFolderId(catFolder.id, tema);
     if(!temaFolder) { estado.textContent = `No se encontró "${tema}" dentro de ${cat}.`; return; }
-    targetId = temaFolder.id;
-    breadcrumb += ` → ${temaFolder.name}`;
 
-    // 3. Subcarpeta opcional
-    if(sub) {
-      const subFolder = await getDriveFolderId(temaFolder.id, sub);
-      if(!subFolder) { estado.textContent = `No se encontró "${sub}" dentro de ${temaFolder.name}.`; return; }
-      targetId = subFolder.id;
-      breadcrumb += ` → ${subFolder.name}`;
+    const breadcrumb = `${cat} → ${temaFolder.name}`;
+    estado.innerHTML = `<div style="display:flex;align-items:center;gap:10px;">
+      <button onclick="mostrarSubcarpetas('${catFolder.id}','${cat}','${cat}')"
+        class="btn btn-ghost btn-sm">← Volver</button>
+      <span style="font-size:12px;color:var(--ink-soft);">📂 ${breadcrumb}</span>
+    </div>`;
+
+    // Verificar si tiene subcarpetas
+    const urlC = `https://www.googleapis.com/drive/v3/files?q='${temaFolder.id}'+in+parents+and+mimeType='application/vnd.google-apps.folder'+and+trashed=false&fields=files(id,name)&orderBy=name&key=${DRIVE_API_KEY}`;
+    const resC = await fetch(urlC);
+    const dataC = await resC.json();
+    const subs = dataC.files || [];
+
+    if(subs.length > 0) {
+      grid.innerHTML = renderCarpetasGrid(subs, breadcrumb, temaFolder.id);
+    } else {
+      await cargarPaginaMuestras(temaFolder.id, null, breadcrumb);
     }
-
-    muestrasCarpetaId = targetId;
-    estado.innerHTML = `<span style="font-size:12px;color:var(--ink-soft);">📂 ${breadcrumb}</span>`;
-    await cargarPaginaMuestras(targetId, null, breadcrumb);
 
   } catch(e) {
     estado.textContent = '❌ Error al conectar con Google Drive.';
@@ -5174,65 +5208,122 @@ async function mostrarSubcarpetas(parentId, cat, breadcrumb) {
   const estado = document.getElementById('muestras-estado');
   const grid   = document.getElementById('muestras-grid');
   const pag    = document.getElementById('muestras-paginacion');
-
-  estado.textContent = '⏳ Cargando subcarpetas...';
+  estado.textContent = '⏳ Cargando...';
   pag.innerHTML = '';
-
-  // Obtener subcarpetas
   const url = `https://www.googleapis.com/drive/v3/files?q='${parentId}'+in+parents+and+mimeType='application/vnd.google-apps.folder'+and+trashed=false&fields=files(id,name)&orderBy=name&key=${DRIVE_API_KEY}`;
-  const res  = await fetch(url);
+  const res = await fetch(url);
   const data = await res.json();
   const carpetas = data.files || [];
-
   if(!carpetas.length) {
-    // No hay subcarpetas — mostrar imágenes directamente
     estado.innerHTML = `<span style="font-size:12px;color:var(--ink-soft);">📂 ${breadcrumb}</span>`;
     await cargarPaginaMuestras(parentId, null, breadcrumb);
     return;
   }
-
   estado.innerHTML = `<span style="font-size:12px;color:var(--ink-soft);">📂 ${breadcrumb} — ${carpetas.length} subcarpetas</span>`;
+  grid.innerHTML = renderCarpetasGrid(carpetas, breadcrumb, parentId);
+}
 
-  grid.innerHTML = carpetas.map(c => `
-    <div onclick="abrirSubcarpeta('${c.id}','${c.name.replace(/'/g,"\\'")}','${breadcrumb} → ${c.name.replace(/'/g,"\\'")}','${parentId}')"
+function renderCarpetasGrid(carpetas, breadcrumb, parentId) {
+  return carpetas.map(c => {
+    const nb = (breadcrumb + ' → ' + c.name).replace(/'/g, "\'");
+    return `<div onclick="abrirSubcarpeta('${c.id}','${c.name.replace(/'/g,"\'")}','${nb}','${parentId}')"
       style="background:var(--bg-card);border:1px solid var(--border);border-radius:10px;
              padding:14px 10px;text-align:center;cursor:pointer;transition:border-color 0.15s;"
-      onmouseover="this.style.borderColor='var(--green)'" 
-      onmouseout="this.style.borderColor='var(--border)'">
+      onmouseover="this.style.borderColor='var(--green)'" onmouseout="this.style.borderColor='var(--border)'">
       <div style="font-size:32px;margin-bottom:8px;">📁</div>
       <div style="font-size:12px;font-weight:600;line-height:1.3;word-break:break-word;">${c.name}</div>
-    </div>`).join('');
+    </div>`;
+  }).join('');
 }
 
 window.abrirSubcarpeta = async function(folderId, nombre, breadcrumb, parentId) {
   const estado = document.getElementById('muestras-estado');
   const grid   = document.getElementById('muestras-grid');
   const pag    = document.getElementById('muestras-paginacion');
-
   grid.innerHTML = '';
   pag.innerHTML  = '';
 
   // Botón volver
-  estado.innerHTML = `
-    <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;">
-      <button onclick="mostrarSubcarpetas('${parentId}','','${breadcrumb.split(' → ').slice(0,-1).join(' → ')}')" 
-        class="btn btn-ghost btn-sm">← Volver</button>
-      <span style="font-size:12px;color:var(--ink-soft);">📂 ${breadcrumb}</span>
-    </div>`;
+  const breadcrumbAnterior = breadcrumb.split(' → ').slice(0, -1).join(' → ');
+  estado.innerHTML = `<div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;">
+    <button onclick="volverANivel('${parentId}','${breadcrumbAnterior.replace(/'/g,"\'")}','${breadcrumb.replace(/'/g,"\'")}','${parentId}')"
+      class="btn btn-ghost btn-sm">← Volver</button>
+    <span style="font-size:12px;color:var(--ink-soft);">📂 ${breadcrumb}</span>
+  </div>`;
 
-  await cargarPaginaMuestras(folderId, null, breadcrumb);
+  // Verificar si hay subcarpetas dentro
+  const urlC = `https://www.googleapis.com/drive/v3/files?q='${folderId}'+in+parents+and+mimeType='application/vnd.google-apps.folder'+and+trashed=false&fields=files(id,name)&orderBy=name&key=${DRIVE_API_KEY}`;
+  const resC = await fetch(urlC);
+  const dataC = await resC.json();
+  const subs = dataC.files || [];
+
+  if(subs.length > 0) {
+    grid.innerHTML = renderCarpetasGrid(subs, breadcrumb, folderId);
+  } else {
+    await cargarPaginaMuestras(folderId, null, breadcrumb);
+  }
 };
 
-async function cargarPaginaMuestras(folderId, pageToken, breadcrumb) {
+window.volverANivel = async function(folderId, breadcrumbAnterior, breadcrumbActual, parentId) {
+  const partes = breadcrumbAnterior.split(' → ');
+  if(partes.length <= 1) {
+    // Volver a la categoría raíz
+    await mostrarSubcarpetas(folderId, '', breadcrumbAnterior);
+  } else {
+    await mostrarSubcarpetas(folderId, '', breadcrumbAnterior);
+  }
+};
+};
+
+window.buscarPorArchivo = async function() {
+  const cat     = document.getElementById('muestras-cat').value;
+  const tema    = document.getElementById('muestras-tema').value.trim();
+  const archivo = document.getElementById('muestras-archivo').value.trim();
+  const estado  = document.getElementById('muestras-estado');
+  const grid    = document.getElementById('muestras-grid');
+  const pag     = document.getElementById('muestras-paginacion');
+
+  if(!cat) { toast('⚠️ Selecciona una categoría primero'); return; }
+  if(!archivo) { toast('⚠️ Escribe el nombre de archivo a buscar'); return; }
+
+  estado.textContent = '⏳ Buscando...';
+  estado.style.display = 'block';
+  grid.innerHTML = '';
+  pag.innerHTML  = '';
+
+  try {
+    const catFolder = await getDriveFolderId(DRIVE_ROOT_ID, cat);
+    if(!catFolder) { estado.textContent = `No se encontró "${cat}"`; return; }
+
+    let targetId = catFolder.id;
+
+    if(tema) {
+      const temaFolder = await getDriveFolderId(catFolder.id, tema);
+      if(temaFolder) targetId = temaFolder.id;
+    }
+
+    const breadcrumb = tema ? `${cat} → ${tema} → "${archivo}"` : `${cat} → "${archivo}"`;
+    estado.innerHTML = `<span style="font-size:12px;color:var(--ink-soft);">📂 ${breadcrumb}</span>`;
+    await cargarPaginaMuestras(targetId, null, breadcrumb, archivo);
+
+  } catch(e) {
+    estado.textContent = '❌ Error al buscar.';
+    console.error(e);
+  }
+};
+
+async function cargarPaginaMuestras(folderId, pageToken, breadcrumb, nombreFiltro = '') {
   const estado = document.getElementById('muestras-estado');
   const grid   = document.getElementById('muestras-grid');
   const pag    = document.getElementById('muestras-paginacion');
 
-  const data = await getDriveImages(folderId, pageToken);
+  const data = await getDriveImages(folderId, pageToken, nombreFiltro);
   const imgs = data.files || [];
 
   if(!imgs.length && !pageToken) {
-    estado.textContent = 'No hay imágenes en esta carpeta.';
+    estado.textContent = nombreFiltro
+      ? `No se encontraron archivos con "${nombreFiltro}".`
+      : 'No hay imágenes en esta carpeta.';
     return;
   }
 
@@ -5249,43 +5340,73 @@ async function cargarPaginaMuestras(folderId, pageToken, breadcrumb) {
     const btn = document.createElement('button');
     btn.className = 'btn btn-ghost btn-sm';
     btn.textContent = 'Ver más →';
-    btn.onclick = () => cargarPaginaMuestras(folderId, data.nextPageToken, breadcrumb);
+    btn.onclick = () => cargarPaginaMuestras(folderId, data.nextPageToken, breadcrumb, nombreFiltro);
     pag.appendChild(btn);
   }
 }
 
+let _visorImagenes = [];
+let _visorIndex = 0;
+
 function renderMuestrasCards(imgs, cat) {
-  return imgs.map(img => {
-    // URL directa de Drive para mostrar en catálogo
-    const driveUrl = `https://drive.google.com/thumbnail?id=${img.id}&sz=w400`;
+  // Guardar lista global para navegación
+  _visorImagenes = imgs;
+  return imgs.map((img, idx) => {
+    const driveUrl = `https://drive.google.com/thumbnail?id=${img.id}&sz=w800`;
     const escapedName = img.name.replace(/'/g, "\\'").replace(/"/g, '&quot;');
-    const escapedId   = img.id;
     return `
     <div id="mcard-${img.id}" style="background:var(--bg-card);border:1px solid var(--border);
                 border-radius:10px;overflow:hidden;position:relative;">
       <img src="${img.thumbnailLink}" alt="${img.name}"
         style="width:100%;aspect-ratio:1;object-fit:cover;background:#eee;cursor:pointer;"
-        onclick="window.open('${img.webViewLink}','_blank')"
+        onclick="abrirVisorDrive(${idx})"
         onerror="this.style.background='#ddd';this.src='';">
       <div style="padding:6px 8px 8px;">
         <div style="font-size:11px;color:var(--ink-soft);white-space:nowrap;overflow:hidden;
-                    text-overflow:ellipsis;margin-bottom:6px;" title="${img.name}">
+                    text-overflow:ellipsis;" title="${img.name}">
           ${img.name}
         </div>
-        <button onclick="abrirModalAgregarCatalogo('${escapedId}','${escapedName}','${cat}','${driveUrl}')"
-          style="width:100%;background:var(--green);color:#fff;border:none;border-radius:6px;
-                 padding:6px;font-size:11px;font-weight:600;cursor:pointer;font-family:'Inter',sans-serif;">
-          + Catálogo
-        </button>
       </div>
     </div>`;
   }).join('');
 }
 
+window.abrirVisorDrive = function(idx) {
+  _visorIndex = idx;
+  const modal = document.getElementById('modal-visor-drive');
+  modal.style.display = 'flex';
+  actualizarVisor();
+  // Teclas de flecha
+  document.onkeydown = function(e) {
+    if(e.key === 'ArrowRight') visorNavegar(1);
+    if(e.key === 'ArrowLeft')  visorNavegar(-1);
+    if(e.key === 'Escape')     cerrarVisorDrive();
+  };
+};
+
+window.cerrarVisorDrive = function() {
+  document.getElementById('modal-visor-drive').style.display = 'none';
+  document.onkeydown = null;
+};
+
+window.visorNavegar = function(dir) {
+  _visorIndex = (_visorIndex + dir + _visorImagenes.length) % _visorImagenes.length;
+  actualizarVisor();
+};
+
+function actualizarVisor() {
+  const img = _visorImagenes[_visorIndex];
+  if(!img) return;
+  document.getElementById('visor-img').src = `https://drive.google.com/thumbnail?id=${img.id}&sz=w1200`;
+  document.getElementById('visor-nombre').textContent = img.name;
+  document.getElementById('visor-contador').textContent = `${_visorIndex + 1} / ${_visorImagenes.length}`;
+}
+
 window.limpiarMuestras = function() {
-  document.getElementById('muestras-cat').value  = '';
-  document.getElementById('muestras-tema').value = '';
-  document.getElementById('muestras-sub').value  = '';
+  document.getElementById('muestras-cat').value     = '';
+  document.getElementById('muestras-tema').value    = '';
+  document.getElementById('muestras-sub').value     = '';
+  document.getElementById('muestras-archivo').value = '';
   document.getElementById('muestras-grid').innerHTML = '';
   document.getElementById('muestras-paginacion').innerHTML = '';
   document.getElementById('muestras-estado').textContent = 'Selecciona una categoría y busca para ver las muestras.';
