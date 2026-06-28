@@ -812,7 +812,7 @@ tbody td{padding:11px 14px;font-size:13.5px;vertical-align:middle;}
       <!-- Filtros de búsqueda -->
       <div class="card" style="margin-bottom:18px;">
         <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:flex-end;">
-          <div style="flex:1;min-width:180px;">
+          <div style="flex:1;min-width:160px;">
             <label style="font-size:12px;color:var(--ink-soft);font-weight:600;display:block;margin-bottom:6px;">Categoría</label>
             <select id="muestras-cat" onchange="buscarMuestras()"
               style="width:100%;border:1.5px solid var(--border);border-radius:8px;padding:9px 12px;font-size:13px;outline:none;">
@@ -832,9 +832,14 @@ tbody td{padding:11px 14px;font-size:13.5px;vertical-align:middle;}
               <option value="Videojuegos">Videojuegos</option>
             </select>
           </div>
-          <div style="flex:1;min-width:180px;">
-            <label style="font-size:12px;color:var(--ink-soft);font-weight:600;display:block;margin-bottom:6px;">Tema / Subcarpeta</label>
-            <input type="text" id="muestras-tema" placeholder="ej. Star Wars, Dragon Ball..."
+          <div style="flex:1;min-width:160px;">
+            <label style="font-size:12px;color:var(--ink-soft);font-weight:600;display:block;margin-bottom:6px;">Tema</label>
+            <input type="text" id="muestras-tema" placeholder="ej. Dragon Ball, Star Wars..."
+              style="width:100%;border:1.5px solid var(--border);border-radius:8px;padding:9px 12px;font-size:13px;outline:none;">
+          </div>
+          <div style="flex:1;min-width:160px;">
+            <label style="font-size:12px;color:var(--ink-soft);font-weight:600;display:block;margin-bottom:6px;">Subcarpeta (opcional)</label>
+            <input type="text" id="muestras-sub" placeholder="ej. Goku, Vegeta..."
               style="width:100%;border:1.5px solid var(--border);border-radius:8px;padding:9px 12px;font-size:13px;outline:none;">
           </div>
           <button class="btn btn-primary" onclick="buscarMuestras()">🔍 Buscar</button>
@@ -5082,6 +5087,7 @@ async function getDriveImages(folderId, pageToken = null) {
 window.buscarMuestras = async function() {
   const cat   = document.getElementById('muestras-cat').value;
   const tema  = document.getElementById('muestras-tema').value.trim();
+  const sub   = document.getElementById('muestras-sub').value.trim();
   const estado = document.getElementById('muestras-estado');
   const grid   = document.getElementById('muestras-grid');
   const pag    = document.getElementById('muestras-paginacion');
@@ -5094,21 +5100,34 @@ window.buscarMuestras = async function() {
   pag.innerHTML  = '';
 
   try {
-    // Buscar carpeta de categoría
+    // 1. Carpeta de categoría
     const catFolder = await getDriveFolderId(DRIVE_ROOT_ID, cat);
     if(!catFolder) { estado.textContent = `No se encontró la carpeta "${cat}" en Drive.`; return; }
 
     let targetId = catFolder.id;
+    let breadcrumb = cat;
 
-    // Si hay tema, buscar subcarpeta
+    // 2. Carpeta de tema
     if(tema) {
       const temaFolder = await getDriveFolderId(catFolder.id, tema);
       if(!temaFolder) { estado.textContent = `No se encontró "${tema}" dentro de ${cat}.`; return; }
       targetId = temaFolder.id;
+      breadcrumb += ` → ${temaFolder.name}`;
+
+      // 3. Subcarpeta
+      if(sub) {
+        const subFolder = await getDriveFolderId(temaFolder.id, sub);
+        if(!subFolder) { estado.textContent = `No se encontró "${sub}" dentro de ${temaFolder.name}.`; return; }
+        targetId = subFolder.id;
+        breadcrumb += ` → ${subFolder.name}`;
+      }
     }
 
     muestrasCarpetaId = targetId;
     muestrasPageToken = null;
+
+    // Mostrar ruta de navegación
+    estado.innerHTML = `<span style="font-size:12px;color:var(--ink-soft);">📂 ${breadcrumb}</span>`;
     await cargarPaginaMuestras(targetId, null);
 
   } catch(e) {
@@ -5158,6 +5177,7 @@ async function cargarPaginaMuestras(folderId, pageToken) {
 window.limpiarMuestras = function() {
   document.getElementById('muestras-cat').value  = '';
   document.getElementById('muestras-tema').value = '';
+  document.getElementById('muestras-sub').value  = '';
   document.getElementById('muestras-grid').innerHTML = '';
   document.getElementById('muestras-paginacion').innerHTML = '';
   document.getElementById('muestras-estado').textContent = 'Selecciona una categoría y busca para ver las muestras.';
