@@ -237,6 +237,7 @@ tbody td{padding:11px 14px;font-size:13.5px;vertical-align:middle;}
     <a onclick="showSection('config')" id="nav-config" class="admin-only" style="display:none;"><span class="icon">⚙️</span><span>Config</span></a>
     <div class="nav-group admin-only" style="display:none;">Admin</div>
     <a onclick="showSection('catalogo')" id="nav-catalogo" class="admin-only" style="display:none;"><span class="icon">🎨</span><span>Catálogo</span></a>
+    <a onclick="showSection('muestras')" id="nav-muestras" class="admin-only" style="display:none;"><span class="icon">🖼️</span><span>Muestras</span></a>
     <a onclick="showSection('banco')" id="nav-banco" class="admin-only" style="display:none;"><span class="icon">🏦</span><span>Conciliación</span></a>
   </nav>
   <div class="sidebar-footer">v1.0 · Beloma · playerasbeloma.com</div>
@@ -802,6 +803,56 @@ tbody td{padding:11px 14px;font-size:13.5px;vertical-align:middle;}
 
 
   <!-- CONCILIACIÓN BANCARIA (SOLO ADMIN) -->
+  <!-- SECCIÓN MUESTRAS -->
+  <div id="section-muestras" class="section">
+    <div class="topbar">
+      <h1>🖼️ Catálogo de Muestras</h1>
+    </div>
+    <div class="content">
+      <!-- Filtros de búsqueda -->
+      <div class="card" style="margin-bottom:18px;">
+        <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:flex-end;">
+          <div style="flex:1;min-width:180px;">
+            <label style="font-size:12px;color:var(--ink-soft);font-weight:600;display:block;margin-bottom:6px;">Categoría</label>
+            <select id="muestras-cat" onchange="buscarMuestras()"
+              style="width:100%;border:1.5px solid var(--border);border-radius:8px;padding:9px 12px;font-size:13px;outline:none;">
+              <option value="">— Todas —</option>
+              <option value="Anime">Anime</option>
+              <option value="Caricaturas Actuales">Caricaturas Actuales</option>
+              <option value="Caricaturas Retro">Caricaturas Retro</option>
+              <option value="Deportes">Deportes</option>
+              <option value="Diseños">Diseños</option>
+              <option value="Grupos Musicales">Grupos Musicales</option>
+              <option value="Juguetes & Juegos">Juguetes &amp; Juegos</option>
+              <option value="Libros, Revistas y Comics">Libros, Revistas y Comics</option>
+              <option value="Peliculas">Peliculas</option>
+              <option value="Personajes">Personajes</option>
+              <option value="Series">Series</option>
+              <option value="Superheroes">Superheroes</option>
+              <option value="Videojuegos">Videojuegos</option>
+            </select>
+          </div>
+          <div style="flex:1;min-width:180px;">
+            <label style="font-size:12px;color:var(--ink-soft);font-weight:600;display:block;margin-bottom:6px;">Tema / Subcarpeta</label>
+            <input type="text" id="muestras-tema" placeholder="ej. Star Wars, Dragon Ball..."
+              style="width:100%;border:1.5px solid var(--border);border-radius:8px;padding:9px 12px;font-size:13px;outline:none;">
+          </div>
+          <button class="btn btn-primary" onclick="buscarMuestras()">🔍 Buscar</button>
+          <button class="btn btn-ghost btn-sm" onclick="limpiarMuestras()">✕ Limpiar</button>
+        </div>
+      </div>
+
+      <!-- Resultado -->
+      <div id="muestras-estado" style="text-align:center;padding:40px;color:var(--ink-soft);font-size:14px;">
+        Selecciona una categoría y busca para ver las muestras.
+      </div>
+      <div id="muestras-grid" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(140px,1fr));gap:12px;"></div>
+
+      <!-- Paginación -->
+      <div id="muestras-paginacion" style="display:flex;gap:8px;justify-content:center;margin-top:18px;flex-wrap:wrap;"></div>
+    </div>
+  </div>
+
   <div id="section-banco" class="section">
     <div class="topbar">
       <h1>🏦 Conciliación Bancaria</h1>
@@ -5006,6 +5057,111 @@ window.cerrarDisenoConAdvertencia = function(){
   } else {
     closeModal('modal-diseno');
   }
+};
+
+// ── BUSCADOR DE MUESTRAS (Google Drive) ──────────────────
+const DRIVE_API_KEY    = 'AIzaSyDQCuGlCxr5fh23vkE0Ysx42ORNB8-9GV4';
+const DRIVE_ROOT_ID    = '1N7efR6KLBl0OvS_EXCWsVg0NhW62OKbs';
+let muestrasPageToken  = null;
+let muestrasCarpetaId  = null;
+
+async function getDriveFolderId(parentId, nombre) {
+  const url = `https://www.googleapis.com/drive/v3/files?q='${parentId}'+in+parents+and+name+contains+'${encodeURIComponent(nombre)}'+and+mimeType='application/vnd.google-apps.folder'+and+trashed=false&fields=files(id,name)&key=${DRIVE_API_KEY}`;
+  const res  = await fetch(url);
+  const data = await res.json();
+  return data.files?.[0] || null;
+}
+
+async function getDriveImages(folderId, pageToken = null) {
+  let url = `https://www.googleapis.com/drive/v3/files?q='${folderId}'+in+parents+and+mimeType+contains+'image/'+and+trashed=false&fields=nextPageToken,files(id,name,thumbnailLink,webViewLink)&pageSize=48&key=${DRIVE_API_KEY}`;
+  if(pageToken) url += `&pageToken=${pageToken}`;
+  const res  = await fetch(url);
+  return res.json();
+}
+
+window.buscarMuestras = async function() {
+  const cat   = document.getElementById('muestras-cat').value;
+  const tema  = document.getElementById('muestras-tema').value.trim();
+  const estado = document.getElementById('muestras-estado');
+  const grid   = document.getElementById('muestras-grid');
+  const pag    = document.getElementById('muestras-paginacion');
+
+  if(!cat) { toast('⚠️ Selecciona una categoría'); return; }
+
+  estado.textContent = '⏳ Buscando...';
+  estado.style.display = 'block';
+  grid.innerHTML = '';
+  pag.innerHTML  = '';
+
+  try {
+    // Buscar carpeta de categoría
+    const catFolder = await getDriveFolderId(DRIVE_ROOT_ID, cat);
+    if(!catFolder) { estado.textContent = `No se encontró la carpeta "${cat}" en Drive.`; return; }
+
+    let targetId = catFolder.id;
+
+    // Si hay tema, buscar subcarpeta
+    if(tema) {
+      const temaFolder = await getDriveFolderId(catFolder.id, tema);
+      if(!temaFolder) { estado.textContent = `No se encontró "${tema}" dentro de ${cat}.`; return; }
+      targetId = temaFolder.id;
+    }
+
+    muestrasCarpetaId = targetId;
+    muestrasPageToken = null;
+    await cargarPaginaMuestras(targetId, null);
+
+  } catch(e) {
+    estado.textContent = '❌ Error al conectar con Google Drive. Verifica la API Key.';
+    console.error(e);
+  }
+};
+
+async function cargarPaginaMuestras(folderId, pageToken) {
+  const estado = document.getElementById('muestras-estado');
+  const grid   = document.getElementById('muestras-grid');
+  const pag    = document.getElementById('muestras-paginacion');
+
+  const data = await getDriveImages(folderId, pageToken);
+  const imgs = data.files || [];
+
+  if(!imgs.length && !pageToken) {
+    estado.textContent = 'No hay imágenes en esta carpeta.';
+    return;
+  }
+
+  estado.style.display = 'none';
+  grid.innerHTML = imgs.map(img => `
+    <div style="background:var(--bg-card);border:1px solid var(--border);border-radius:10px;
+                overflow:hidden;cursor:pointer;" onclick="window.open('${img.webViewLink}','_blank')"
+         title="${img.name}">
+      <img src="${img.thumbnailLink}" alt="${img.name}"
+        style="width:100%;aspect-ratio:1;object-fit:cover;background:#eee;"
+        onerror="this.style.background='#ddd';this.src='';">
+      <div style="padding:6px 8px;font-size:11px;color:var(--ink-soft);
+                  white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">
+        ${img.name}
+      </div>
+    </div>`).join('');
+
+  // Paginación
+  pag.innerHTML = '';
+  if(data.nextPageToken) {
+    const btn = document.createElement('button');
+    btn.className = 'btn btn-ghost btn-sm';
+    btn.textContent = 'Ver más →';
+    btn.onclick = () => cargarPaginaMuestras(folderId, data.nextPageToken);
+    pag.appendChild(btn);
+  }
+}
+
+window.limpiarMuestras = function() {
+  document.getElementById('muestras-cat').value  = '';
+  document.getElementById('muestras-tema').value = '';
+  document.getElementById('muestras-grid').innerHTML = '';
+  document.getElementById('muestras-paginacion').innerHTML = '';
+  document.getElementById('muestras-estado').textContent = 'Selecciona una categoría y busca para ver las muestras.';
+  document.getElementById('muestras-estado').style.display = 'block';
 };
 </script>
 
