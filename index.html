@@ -5137,39 +5137,93 @@ window.buscarMuestras = async function() {
     const catFolder = await getDriveFolderId(DRIVE_ROOT_ID, cat);
     if(!catFolder) { estado.textContent = `No se encontró la carpeta "${cat}" en Drive.`; return; }
 
+    // Si no hay tema → mostrar subcarpetas de la categoría
+    if(!tema) {
+      await mostrarSubcarpetas(catFolder.id, cat, cat);
+      return;
+    }
+
     let targetId = catFolder.id;
     let breadcrumb = cat;
 
     // 2. Carpeta de tema
-    if(tema) {
-      const temaFolder = await getDriveFolderId(catFolder.id, tema);
-      if(!temaFolder) { estado.textContent = `No se encontró "${tema}" dentro de ${cat}.`; return; }
-      targetId = temaFolder.id;
-      breadcrumb += ` → ${temaFolder.name}`;
+    const temaFolder = await getDriveFolderId(catFolder.id, tema);
+    if(!temaFolder) { estado.textContent = `No se encontró "${tema}" dentro de ${cat}.`; return; }
+    targetId = temaFolder.id;
+    breadcrumb += ` → ${temaFolder.name}`;
 
-      // 3. Subcarpeta
-      if(sub) {
-        const subFolder = await getDriveFolderId(temaFolder.id, sub);
-        if(!subFolder) { estado.textContent = `No se encontró "${sub}" dentro de ${temaFolder.name}.`; return; }
-        targetId = subFolder.id;
-        breadcrumb += ` → ${subFolder.name}`;
-      }
+    // 3. Subcarpeta opcional
+    if(sub) {
+      const subFolder = await getDriveFolderId(temaFolder.id, sub);
+      if(!subFolder) { estado.textContent = `No se encontró "${sub}" dentro de ${temaFolder.name}.`; return; }
+      targetId = subFolder.id;
+      breadcrumb += ` → ${subFolder.name}`;
     }
 
     muestrasCarpetaId = targetId;
-    muestrasPageToken = null;
-
-    // Mostrar ruta de navegación
     estado.innerHTML = `<span style="font-size:12px;color:var(--ink-soft);">📂 ${breadcrumb}</span>`;
-    await cargarPaginaMuestras(targetId, null);
+    await cargarPaginaMuestras(targetId, null, breadcrumb);
 
   } catch(e) {
-    estado.textContent = '❌ Error al conectar con Google Drive. Verifica la API Key.';
+    estado.textContent = '❌ Error al conectar con Google Drive.';
     console.error(e);
   }
 };
 
-async function cargarPaginaMuestras(folderId, pageToken) {
+async function mostrarSubcarpetas(parentId, cat, breadcrumb) {
+  const estado = document.getElementById('muestras-estado');
+  const grid   = document.getElementById('muestras-grid');
+  const pag    = document.getElementById('muestras-paginacion');
+
+  estado.textContent = '⏳ Cargando subcarpetas...';
+  pag.innerHTML = '';
+
+  // Obtener subcarpetas
+  const url = `https://www.googleapis.com/drive/v3/files?q='${parentId}'+in+parents+and+mimeType='application/vnd.google-apps.folder'+and+trashed=false&fields=files(id,name)&orderBy=name&key=${DRIVE_API_KEY}`;
+  const res  = await fetch(url);
+  const data = await res.json();
+  const carpetas = data.files || [];
+
+  if(!carpetas.length) {
+    // No hay subcarpetas — mostrar imágenes directamente
+    estado.innerHTML = `<span style="font-size:12px;color:var(--ink-soft);">📂 ${breadcrumb}</span>`;
+    await cargarPaginaMuestras(parentId, null, breadcrumb);
+    return;
+  }
+
+  estado.innerHTML = `<span style="font-size:12px;color:var(--ink-soft);">📂 ${breadcrumb} — ${carpetas.length} subcarpetas</span>`;
+
+  grid.innerHTML = carpetas.map(c => `
+    <div onclick="abrirSubcarpeta('${c.id}','${c.name.replace(/'/g,"\\'")}','${breadcrumb} → ${c.name.replace(/'/g,"\\'")}','${parentId}')"
+      style="background:var(--bg-card);border:1px solid var(--border);border-radius:10px;
+             padding:14px 10px;text-align:center;cursor:pointer;transition:border-color 0.15s;"
+      onmouseover="this.style.borderColor='var(--green)'" 
+      onmouseout="this.style.borderColor='var(--border)'">
+      <div style="font-size:32px;margin-bottom:8px;">📁</div>
+      <div style="font-size:12px;font-weight:600;line-height:1.3;word-break:break-word;">${c.name}</div>
+    </div>`).join('');
+}
+
+window.abrirSubcarpeta = async function(folderId, nombre, breadcrumb, parentId) {
+  const estado = document.getElementById('muestras-estado');
+  const grid   = document.getElementById('muestras-grid');
+  const pag    = document.getElementById('muestras-paginacion');
+
+  grid.innerHTML = '';
+  pag.innerHTML  = '';
+
+  // Botón volver
+  estado.innerHTML = `
+    <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;">
+      <button onclick="mostrarSubcarpetas('${parentId}','','${breadcrumb.split(' → ').slice(0,-1).join(' → ')}')" 
+        class="btn btn-ghost btn-sm">← Volver</button>
+      <span style="font-size:12px;color:var(--ink-soft);">📂 ${breadcrumb}</span>
+    </div>`;
+
+  await cargarPaginaMuestras(folderId, null, breadcrumb);
+};
+
+async function cargarPaginaMuestras(folderId, pageToken, breadcrumb) {
   const estado = document.getElementById('muestras-estado');
   const grid   = document.getElementById('muestras-grid');
   const pag    = document.getElementById('muestras-paginacion');
@@ -5183,22 +5237,19 @@ async function cargarPaginaMuestras(folderId, pageToken) {
   }
 
   const cat = document.getElementById('muestras-cat').value;
-  estado.style.display = 'none';
 
-  // Si se hace click en nueva página, agregar al grid existente
   if(pageToken) {
     grid.innerHTML += renderMuestrasCards(imgs, cat);
   } else {
     grid.innerHTML = renderMuestrasCards(imgs, cat);
   }
 
-  // Paginación
   pag.innerHTML = '';
   if(data.nextPageToken) {
     const btn = document.createElement('button');
     btn.className = 'btn btn-ghost btn-sm';
     btn.textContent = 'Ver más →';
-    btn.onclick = () => cargarPaginaMuestras(folderId, data.nextPageToken);
+    btn.onclick = () => cargarPaginaMuestras(folderId, data.nextPageToken, breadcrumb);
     pag.appendChild(btn);
   }
 }
