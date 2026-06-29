@@ -5267,12 +5267,10 @@ window.abrirSubcarpeta = async function(folderId, nombre, breadcrumb, parentId) 
 window.volverANivel = async function(folderId, breadcrumbAnterior, breadcrumbActual, parentId) {
   const partes = breadcrumbAnterior.split(' → ');
   if(partes.length <= 1) {
-    // Volver a la categoría raíz
     await mostrarSubcarpetas(folderId, '', breadcrumbAnterior);
   } else {
     await mostrarSubcarpetas(folderId, '', breadcrumbAnterior);
   }
-};
 };
 
 window.buscarPorArchivo = async function() {
