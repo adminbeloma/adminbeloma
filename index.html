@@ -5135,11 +5135,24 @@ const DRIVE_ROOT_ID    = '1N7efR6KLBl0OvS_EXCWsVg0NhW62OKbs';
 let muestrasPageToken  = null;
 let muestrasCarpetaId  = null;
 
+function normalizarDrive(texto) {
+  return texto.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().trim();
+}
+
 async function getDriveFolderId(parentId, nombre) {
-  const url = `https://www.googleapis.com/drive/v3/files?q='${parentId}'+in+parents+and+name+contains+'${encodeURIComponent(nombre)}'+and+mimeType='application/vnd.google-apps.folder'+and+trashed=false&fields=files(id,name)&key=${DRIVE_API_KEY}`;
-  const res  = await fetch(url);
-  const data = await res.json();
-  return data.files?.[0] || null;
+  const variantes = new Set([
+    nombre,
+    normalizarDrive(nombre),
+    nombre.charAt(0).toUpperCase() + nombre.slice(1),
+    normalizarDrive(nombre).charAt(0).toUpperCase() + normalizarDrive(nombre).slice(1)
+  ]);
+  for(const v of variantes) {
+    const url = `https://www.googleapis.com/drive/v3/files?q='${parentId}'+in+parents+and+name+contains+'${encodeURIComponent(v)}'+and+mimeType='application/vnd.google-apps.folder'+and+trashed=false&fields=files(id,name)&key=${DRIVE_API_KEY}`;
+    const res  = await fetch(url);
+    const data = await res.json();
+    if(data.files?.length) return data.files[0];
+  }
+  return null;
 }
 
 async function getDriveImages(folderId, pageToken = null, nombreFiltro = '') {
