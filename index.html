@@ -834,12 +834,14 @@ tbody td{padding:11px 14px;font-size:13.5px;vertical-align:middle;}
           <div style="flex:1;min-width:160px;">
             <label style="font-size:12px;color:var(--ink-soft);font-weight:600;display:block;margin-bottom:6px;">Tema</label>
             <input type="text" id="muestras-tema" placeholder="ej. Dragon Ball, Star Wars..."
-              style="width:100%;border:1.5px solid var(--border);border-radius:8px;padding:9px 12px;font-size:13px;outline:none;">
+              style="width:100%;border:1.5px solid var(--border);border-radius:8px;padding:9px 12px;font-size:13px;outline:none;"
+              onkeydown="if(event.key==='Enter')buscarMuestras();">
           </div>
           <div style="flex:1;min-width:160px;">
             <label style="font-size:12px;color:var(--ink-soft);font-weight:600;display:block;margin-bottom:6px;">Subcarpeta (opcional)</label>
             <input type="text" id="muestras-sub" placeholder="ej. Goku, Vegeta..."
-              style="width:100%;border:1.5px solid var(--border);border-radius:8px;padding:9px 12px;font-size:13px;outline:none;">
+              style="width:100%;border:1.5px solid var(--border);border-radius:8px;padding:9px 12px;font-size:13px;outline:none;"
+              onkeydown="if(event.key==='Enter')buscarMuestras();">
           </div>
           <button class="btn btn-primary" onclick="buscarMuestras()">🔍 Buscar</button>
           <button class="btn btn-ghost btn-sm" onclick="limpiarMuestras()">✕ Limpiar</button>
@@ -849,7 +851,8 @@ tbody td{padding:11px 14px;font-size:13.5px;vertical-align:middle;}
           <div style="flex:1;min-width:200px;">
             <label style="font-size:12px;color:var(--ink-soft);font-weight:600;display:block;margin-bottom:6px;">🔍 Buscar por nombre de archivo</label>
             <input type="text" id="muestras-archivo" placeholder="ej. starwars0001, dragonball..."
-              style="width:100%;border:1.5px solid var(--border);border-radius:8px;padding:9px 12px;font-size:13px;outline:none;">
+              style="width:100%;border:1.5px solid var(--border);border-radius:8px;padding:9px 12px;font-size:13px;outline:none;"
+              onkeydown="if(event.key==='Enter')buscarPorArchivo();">
           </div>
           <button class="btn btn-primary" onclick="buscarPorArchivo()">Buscar archivo</button>
         </div>
