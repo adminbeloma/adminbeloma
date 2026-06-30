@@ -820,11 +820,15 @@ tbody td{padding:11px 14px;font-size:13.5px;vertical-align:middle;}
               <option value="Caricaturas Actuales">Caricaturas Actuales</option>
               <option value="Caricaturas Retro">Caricaturas Retro</option>
               <option value="Deportes">Deportes</option>
+              <option value="Días Festivos">Días Festivos</option>
               <option value="Diseños">Diseños</option>
+              <option value="Disney">Disney</option>
+              <option value="Futbol">Futbol</option>
               <option value="Grupos Musicales">Grupos Musicales</option>
               <option value="Juguetes & Juegos">Juguetes &amp; Juegos</option>
               <option value="Libros, Revistas y Comics">Libros, Revistas y Comics</option>
               <option value="Peliculas">Peliculas</option>
+              <option value="Películas Terror">Películas Terror</option>
               <option value="Personajes">Personajes</option>
               <option value="Series">Series</option>
               <option value="Superheroes">Superheroes</option>
@@ -4767,6 +4771,7 @@ window.showSection = function(sec) {
   _origShowSection(sec);
   if(sec==='banco'){ renderCuentas(); renderMovimientos(); }
   if(sec==='catalogo'){ renderDiseños(); actualizarCatsDisenoSelect(); }
+  if(sec==='muestras'){ cargarCategoriasDriveSelect(); }
 };
 
 // INIT
@@ -5158,6 +5163,38 @@ async function getDriveFolderId(parentId, nombre) {
   return null;
 }
 
+async function getAllDriveFolders(parentId) {
+  let todas = [];
+  let pageToken = null;
+  do {
+    let url = `https://www.googleapis.com/drive/v3/files?q='${parentId}'+in+parents+and+mimeType='application/vnd.google-apps.folder'+and+trashed=false&fields=nextPageToken,files(id,name)&orderBy=name&pageSize=1000&key=${DRIVE_API_KEY}`;
+    if(pageToken) url += `&pageToken=${pageToken}`;
+    const res = await fetch(url);
+    const data = await res.json();
+    todas = todas.concat(data.files || []);
+    pageToken = data.nextPageToken || null;
+  } while(pageToken);
+  return todas;
+}
+
+let _categoriasDriveCargadas = false;
+async function cargarCategoriasDriveSelect() {
+  if(_categoriasDriveCargadas) return; // solo una vez por sesión
+  const select = document.getElementById('muestras-cat');
+  if(!select) return;
+  try {
+    const carpetas = await getAllDriveFolders(DRIVE_ROOT_ID);
+    if(!carpetas.length) return; // si falla, deja las opciones fijas como respaldo
+    const valorActual = select.value;
+    select.innerHTML = '<option value="">— Todas —</option>' +
+      carpetas.map(c => `<option value="${c.name.replace(/"/g,'&quot;')}">${c.name}</option>`).join('');
+    select.value = valorActual; // mantener selección si seguía existiendo
+    _categoriasDriveCargadas = true;
+  } catch(e) {
+    console.error('No se pudieron cargar categorías de Drive, usando lista fija.', e);
+  }
+}
+
 async function getDriveImages(folderId, pageToken = null, nombreFiltro = '') {
   let qBase = `'${folderId}'+in+parents+and+mimeType+contains+'image/'+and+trashed=false`;
   if(nombreFiltro) qBase += `+and+name+contains+'${encodeURIComponent(nombreFiltro)}'`;
@@ -5203,10 +5240,7 @@ window.buscarMuestras = async function() {
     </div>`;
 
     // Verificar si tiene subcarpetas
-    const urlC = `https://www.googleapis.com/drive/v3/files?q='${temaFolder.id}'+in+parents+and+mimeType='application/vnd.google-apps.folder'+and+trashed=false&fields=files(id,name)&orderBy=name&key=${DRIVE_API_KEY}`;
-    const resC = await fetch(urlC);
-    const dataC = await resC.json();
-    const subs = dataC.files || [];
+    const subs = await getAllDriveFolders(temaFolder.id);
 
     if(subs.length > 0) {
       grid.innerHTML = renderCarpetasGrid(subs, breadcrumb, temaFolder.id);
@@ -5226,10 +5260,7 @@ async function mostrarSubcarpetas(parentId, cat, breadcrumb) {
   const pag    = document.getElementById('muestras-paginacion');
   estado.textContent = '⏳ Cargando...';
   pag.innerHTML = '';
-  const url = `https://www.googleapis.com/drive/v3/files?q='${parentId}'+in+parents+and+mimeType='application/vnd.google-apps.folder'+and+trashed=false&fields=files(id,name)&orderBy=name&key=${DRIVE_API_KEY}`;
-  const res = await fetch(url);
-  const data = await res.json();
-  const carpetas = data.files || [];
+  const carpetas = await getAllDriveFolders(parentId);
   if(!carpetas.length) {
     estado.innerHTML = `<span style="font-size:12px;color:var(--ink-soft);">📂 ${breadcrumb}</span>`;
     await cargarPaginaMuestras(parentId, null, breadcrumb);
@@ -5268,10 +5299,7 @@ window.abrirSubcarpeta = async function(folderId, nombre, breadcrumb, parentId) 
   </div>`;
 
   // Verificar si hay subcarpetas dentro
-  const urlC = `https://www.googleapis.com/drive/v3/files?q='${folderId}'+in+parents+and+mimeType='application/vnd.google-apps.folder'+and+trashed=false&fields=files(id,name)&orderBy=name&key=${DRIVE_API_KEY}`;
-  const resC = await fetch(urlC);
-  const dataC = await resC.json();
-  const subs = dataC.files || [];
+  const subs = await getAllDriveFolders(folderId);
 
   if(subs.length > 0) {
     grid.innerHTML = renderCarpetasGrid(subs, breadcrumb, folderId);
