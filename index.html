@@ -1023,43 +1023,32 @@ tbody td{padding:11px 14px;font-size:13.5px;vertical-align:middle;}
               title="Nuevo cliente" style="white-space:nowrap;">+ Nuevo</button>
           </div>
         </div>
-        <div class="form-group full"><label>Producto / Descripción *</label><input type="text" id="v-producto" placeholder="Ej. Playera negra estampada logo empresa"></div>
-        <div class="form-group"><label>Género / Categoría</label>
-          <select id="v-genero" onchange="actualizarTallasVenta()">
-            <option value="">— Seleccionar —</option>
-            <option value="Hombre">Hombre</option>
-            <option value="Mujer">Mujer</option>
-            <option value="Juvenil">Juvenil</option>
-            <option value="Niño">Niño</option>
-            <option value="Bebé Playera">Bebé Playera</option>
-            <option value="Pañalero">Pañalero</option>
-          </select>
+        <!-- ══ MULTI-PRODUCTO ══ -->
+        <div class="form-group full" style="margin-bottom:0;">
+          <label style="font-weight:700;">🛒 Productos del pedido</label>
+          <div id="v-items-container" style="display:flex;flex-direction:column;gap:8px;margin-top:6px;"></div>
+          <button type="button" class="btn btn-ghost btn-sm" style="margin-top:8px;" onclick="agregarItemVenta()">+ Agregar producto</button>
         </div>
-        <div class="form-group"><label>Talla</label>
-          <select id="v-talla"><option value="">—</option></select>
+        <!-- Checkbox sin tinta (solo Local) -->
+        <div class="form-group full" id="v-sin-tinta-wrap" style="display:none;margin-top:4px;">
+          <label style="display:flex;align-items:center;gap:8px;cursor:pointer;font-weight:600;">
+            <input type="checkbox" id="v-sin-tinta" onchange="onSinTintaChange()" style="width:16px;height:16px;">
+            Técnica sin gasto de tinta (Bordado, Serigrafía, Vinil, DTF)
+          </label>
         </div>
-        <div class="form-group"><label>Color de playera</label>
-          <select id="v-color" onchange="actualizarTipoPlayera()">
-            <option value="">—</option>
-            <option value="Blanca">Blanca</option>
-            <option value="Negra">Negra</option>
-            <option value="Color claro">Color claro</option>
-            <option value="Color oscuro">Color oscuro</option>
-          </select>
-        </div>
-        <div class="form-group"><label>Tipo de proceso</label>
-          <input type="text" id="v-tipo-proceso" readonly style="background:var(--bg);font-size:12px;" placeholder="Se calcula automático">
-        </div>
-        <div class="form-group"><label>Cantidad *</label><input type="number" id="v-cantidad" placeholder="1" min="1" value="1"></div>
-        <div class="form-group"><label>Precio unitario ($) *</label><input type="number" id="v-precio" placeholder="250" step="0.01"></div>
-        <div class="form-group"><label>Descuento ($)</label><input type="number" id="v-descuento" placeholder="0" value="0" step="0.01"></div>
+        <div class="form-group"><label>Descuento ($)</label><input type="number" id="v-descuento" placeholder="0" value="0" step="0.01" oninput="recalcTotalVenta()"></div>
         <div class="form-group"><label>Total</label><input type="text" id="v-total" readonly style="background:var(--accent-light);font-weight:700;"></div>
-        <div class="form-group"><label>Proveedor playera</label><input type="text" id="v-proveedor" placeholder="Ej. Mark Athletic"></div>
+        <!-- Anticipo en ventas -->
+        <div class="form-group"><label>Anticipo ($)</label><input type="number" id="v-anticipo" placeholder="0.00" step="0.01" value="0" oninput="recalcTotalVenta()"></div>
+        <div class="form-group"><label>Saldo pendiente ($)</label><input type="text" id="v-saldo" readonly style="background:var(--bg);font-weight:700;"></div>
+        <!-- campos legacy ocultos para compatibilidad -->
+        <input type="hidden" id="v-producto"><input type="hidden" id="v-cantidad" value="1"><input type="hidden" id="v-precio" value="0">
         <div class="form-group"><label>🖨️ Tinta blanca (cc)</label><input type="number" id="v-tinta-blanca" placeholder="5.83" step="0.01" value="0"></div>
         <div class="form-group"><label>🎨 Tinta CMYK/color (cc)</label><input type="number" id="v-tinta-color" placeholder="0.62" step="0.01" value="0"></div>
         <div id="v-costo-tinta-info" style="grid-column:1/-1;background:var(--bg);border-radius:8px;padding:10px 12px;font-size:13px;color:var(--ink-soft);display:none;">
           💰 Costo estimado de tinta: <strong id="v-costo-tinta-val">$0.00</strong>
         </div>
+        <div class="form-group"><label>Proveedor playera</label><input type="text" id="v-proveedor" placeholder="Ej. Mark Athletic"></div>
         <div id="v-envio-fields" style="display:none;grid-column:1/-1;">
           <div style="background:var(--bg);border-radius:10px;padding:14px;margin-bottom:4px;">
             <div style="font-weight:700;font-size:13px;margin-bottom:12px;color:var(--ink);">📦 Datos de envío</div>
@@ -1161,6 +1150,7 @@ tbody td{padding:11px 14px;font-size:13.5px;vertical-align:middle;}
     </div>
     <div class="modal-footer">
       <button class="btn btn-ghost" onclick="closeModal('modal-venta')">Cancelar</button>
+      <button class="btn" style="background:#25D366;color:#fff;" onclick="enviarTicketWA()" title="Enviar ticket por WhatsApp">💬 Ticket WA</button>
       <button class="btn btn-accent" onclick="guardarVenta()">Guardar Venta</button>
     </div>
   </div>
@@ -2209,20 +2199,17 @@ function renderDashboard(){
 // ─── VENTAS ───
 window.openVentaModal=function(tipo, ventaId){
   document.getElementById('venta-id').value='';
-  ['v-cliente','v-producto','v-notas','v-proveedor','v-banco-origen'].forEach(f=>{const el=document.getElementById(f);if(el)el.value='';});
+  ['v-cliente','v-notas','v-proveedor','v-banco-origen'].forEach(f=>{const el=document.getElementById(f);if(el)el.value='';});
   document.getElementById('v-fecha').value=hoy();
   document.getElementById('v-canal').value=tipo==='ml'?'Mercado Libre':'Local';
-  document.getElementById('v-genero').value='';
-  document.getElementById('v-talla').value='';
-  document.getElementById('v-color').value='';
-  document.getElementById('v-cantidad').value='1';
-  document.getElementById('v-precio').value='';
   document.getElementById('v-descuento').value='0';
   document.getElementById('v-total').value='';
+  document.getElementById('v-anticipo').value='0';
+  document.getElementById('v-saldo').value='';
   document.getElementById('v-tinta-blanca').value='0';
   document.getElementById('v-tinta-color').value='0';
   document.getElementById('v-costo-tinta-info').style.display='none';
-  document.getElementById('v-tipo-proceso').value='';
+  if(document.getElementById('v-sin-tinta')) document.getElementById('v-sin-tinta').checked=false;
   document.getElementById('v-ciudad').value='';
   document.getElementById('v-guia').value='';
   document.getElementById('v-costo-guia').value='0';
@@ -2235,7 +2222,6 @@ window.openVentaModal=function(tipo, ventaId){
   document.getElementById('v-cambio').value='';
   document.getElementById('v-deposito-lugar').value='';
   document.getElementById('v-tarjeta-tipo').value='';
-  // Ocultar todos los paneles de pago y resetear botones
   ['efectivo','transferencia','deposito','tarjeta'].forEach(p=>{
     document.getElementById('pago-'+p).style.display='none';
   });
@@ -2243,10 +2229,12 @@ window.openVentaModal=function(tipo, ventaId){
   document.querySelectorAll('.btn-deposito').forEach(b=>b.classList.remove('activo'));
   document.getElementById('v-cliente-dropdown').style.display='none';
 
-  // Folio automático para canales locales
+  // Inicializar items vacíos
+  _ventaItems=[];
+  renderItemsVenta();
+
   const canal=document.getElementById('v-canal').value;
   asignarFolioSegunCanal(canal);
-
   document.getElementById('modal-venta-title').textContent='Nueva Venta';
 
   if(tipo==='edit' && ventaId) {
@@ -2256,15 +2244,10 @@ window.openVentaModal=function(tipo, ventaId){
       document.getElementById('v-fecha').value=v.fecha||hoy();
       document.getElementById('v-canal').value=v.canal||'Local';
       document.getElementById('v-cliente').value=v.cliente||'';
-      document.getElementById('v-producto').value=v.producto||'';
-      document.getElementById('v-genero').value=v.genero||'';
-      actualizarTallasVenta();
-      document.getElementById('v-talla').value=v.talla||'';
-      document.getElementById('v-color').value=v.color||'';
-      document.getElementById('v-cantidad').value=v.cantidad||1;
-      document.getElementById('v-precio').value=v.precio||'';
       document.getElementById('v-descuento').value=v.descuento||0;
+      document.getElementById('v-anticipo').value=v.anticipo||0;
       document.getElementById('v-total').value=fmtMoney(v.total||0);
+      document.getElementById('v-saldo').value=fmtMoney(v.saldo||0);
       document.getElementById('v-tinta-blanca').value=v.tintaBlanca||0;
       document.getElementById('v-tinta-color').value=v.tintaColor||0;
       document.getElementById('v-proveedor').value=v.proveedor||'';
@@ -2275,9 +2258,14 @@ window.openVentaModal=function(tipo, ventaId){
       document.getElementById('v-costo-guia').value=v.costoGuia||0;
       document.getElementById('v-guia').value=v.guia||'';
       document.getElementById('v-domicilio-envio').value=v.domicilioEnvio||'';
+      if(v.sinTinta && document.getElementById('v-sin-tinta')) document.getElementById('v-sin-tinta').checked=true;
+      // Cargar items guardados o construir uno legacy
+      _ventaItems=Array.isArray(v.items)&&v.items.length>0?JSON.parse(JSON.stringify(v.items)):[{
+        tipo:v.genero||'Otro',descripcion:v.producto||'',proceso:v.tipoProceso||'DTG',
+        cantidad:v.cantidad||1,precio:v.precio||0}];
+      renderItemsVenta();
       if(v.metodoPago) selPago(v.metodoPago, true);
       toggleEnvioFields();
-      actualizarTipoPlayera();
       document.getElementById('modal-venta-title').textContent='Editar Venta';
     }
   } else if(tipo==='ml'){
@@ -2286,57 +2274,144 @@ window.openVentaModal=function(tipo, ventaId){
     document.getElementById('v-folio').value='';
     document.getElementById('v-folio-hint').textContent='Ingresa el folio de Mercado Libre';
   }
-  // Actualizar folio al cambiar canal
-  document.getElementById('v-canal').onchange=function(){
-    onCanalChange();
-  };
+  document.getElementById('v-canal').onchange=function(){onCanalChange();};
   onCanalChange();
   openModal('modal-venta');
 };
 
-document.getElementById('v-cantidad').addEventListener('input',calcTotal);
-document.getElementById('v-precio').addEventListener('input',calcTotal);
-document.getElementById('v-descuento').addEventListener('input',calcTotal);
-function calcTotal(){
-  const cant=+document.getElementById('v-cantidad').value||0;
-  const precio=+document.getElementById('v-precio').value||0;
-  const desc=+document.getElementById('v-descuento').value||0;
-  document.getElementById('v-total').value=fmtMoney(cant*precio-desc);
+// ══ MULTI-PRODUCTO ══
+// Catálogo de tipos de producto para el selector de ítem
+const ITEM_TIPOS=[
+  {label:'👕 Playera Hombre',value:'Hombre'},
+  {label:'👗 Playera Mujer',value:'Mujer'},
+  {label:'🧒 Playera Niño',value:'Niño'},
+  {label:'☕ Taza',value:'Taza'},
+  {label:'Otro',value:'Otro'},
+];
+const ITEM_PROCESOS=['DTG','DTF','Serigrafía','Vinil','Bordado','Otro'];
+
+let _ventaItems=[];
+
+window.agregarItemVenta=function(item){
+  const idx=_ventaItems.length;
+  const it=item||{tipo:'',descripcion:'',proceso:'DTG',cantidad:1,precio:0};
+  _ventaItems.push(it);
+  renderItemsVenta();
+};
+
+window.eliminarItemVenta=function(idx){
+  _ventaItems.splice(idx,1);
+  renderItemsVenta();
+};
+
+function renderItemsVenta(){
+  const cont=document.getElementById('v-items-container');
+  if(!cont) return;
+  cont.innerHTML=_ventaItems.map((it,idx)=>`
+    <div style="background:var(--bg);border:1px solid var(--border);border-radius:10px;padding:10px 12px;display:grid;grid-template-columns:1fr 1fr 1fr 80px 100px 32px;gap:6px;align-items:end;">
+      <div>
+        <label style="font-size:11px;font-weight:600;color:var(--ink-soft);">Tipo</label>
+        <select onchange="_ventaItems[${idx}].tipo=this.value;renderItemsVenta()" style="width:100%;border:1.5px solid var(--border);border-radius:8px;padding:7px 8px;font-size:12px;background:var(--bg-card);color:var(--ink);">
+          ${ITEM_TIPOS.map(t=>`<option value="${t.value}"${it.tipo===t.value?' selected':''}>${t.label}</option>`).join('')}
+        </select>
+      </div>
+      <div>
+        <label style="font-size:11px;font-weight:600;color:var(--ink-soft);">Descripción</label>
+        <input type="text" value="${it.descripcion||''}" placeholder="Ej. Logo empresa, XL" oninput="_ventaItems[${idx}].descripcion=this.value"
+          style="width:100%;border:1.5px solid var(--border);border-radius:8px;padding:7px 8px;font-size:12px;background:var(--bg-card);color:var(--ink);">
+      </div>
+      <div>
+        <label style="font-size:11px;font-weight:600;color:var(--ink-soft);">Proceso</label>
+        <select onchange="_ventaItems[${idx}].proceso=this.value" style="width:100%;border:1.5px solid var(--border);border-radius:8px;padding:7px 8px;font-size:12px;background:var(--bg-card);color:var(--ink);">
+          ${ITEM_PROCESOS.map(p=>`<option value="${p}"${it.proceso===p?' selected':''}>${p}</option>`).join('')}
+        </select>
+      </div>
+      <div>
+        <label style="font-size:11px;font-weight:600;color:var(--ink-soft);">Cant.</label>
+        <input type="number" value="${it.cantidad||1}" min="1" oninput="_ventaItems[${idx}].cantidad=+this.value||1;recalcTotalVenta()"
+          style="width:100%;border:1.5px solid var(--border);border-radius:8px;padding:7px 8px;font-size:12px;background:var(--bg-card);color:var(--ink);">
+      </div>
+      <div>
+        <label style="font-size:11px;font-weight:600;color:var(--ink-soft);">Precio $</label>
+        <input type="number" value="${it.precio||''}" placeholder="0" step="0.01" oninput="_ventaItems[${idx}].precio=+this.value||0;recalcTotalVenta()"
+          style="width:100%;border:1.5px solid var(--border);border-radius:8px;padding:7px 8px;font-size:12px;background:var(--bg-card);color:var(--ink);">
+      </div>
+      <div style="text-align:center;">
+        <button type="button" onclick="eliminarItemVenta(${idx})" title="Quitar" style="background:none;border:none;font-size:18px;cursor:pointer;color:var(--red);">🗑</button>
+      </div>
+    </div>`).join('');
+  recalcTotalVenta();
 }
 
+window.recalcTotalVenta=function(){
+  const subtotal=_ventaItems.reduce((s,it)=>s+(+it.cantidad||0)*(+it.precio||0),0);
+  const desc=+document.getElementById('v-descuento')?.value||0;
+  const total=Math.max(0,subtotal-desc);
+  const anticipo=+document.getElementById('v-anticipo')?.value||0;
+  const saldo=Math.max(0,total-anticipo);
+  if(document.getElementById('v-total')) document.getElementById('v-total').value=fmtMoney(total);
+  if(document.getElementById('v-saldo')) document.getElementById('v-saldo').value=fmtMoney(saldo);
+};
+
+// compat alias
+function calcTotal(){recalcTotalVenta();}
+
+document.getElementById('v-descuento').addEventListener('input',recalcTotalVenta);
+
+// Checkbox sin tinta
+window.onSinTintaChange=function(){
+  const sinTinta=document.getElementById('v-sin-tinta')?.checked;
+  const tb=document.getElementById('v-tinta-blanca');
+  const tc=document.getElementById('v-tinta-color');
+  const info=document.getElementById('v-costo-tinta-info');
+  if(sinTinta){
+    if(tb){tb.value='0';tb.disabled=true;}
+    if(tc){tc.value='0';tc.disabled=true;}
+    if(info) info.style.display='none';
+  } else {
+    if(tb) tb.disabled=false;
+    if(tc) tc.disabled=false;
+  }
+};
+
 window.guardarVenta=async function(){
-  const producto=document.getElementById('v-producto').value.trim();
-  const precio=+document.getElementById('v-precio').value;
-  if(!producto||!precio){toast('⚠️ Producto y precio son obligatorios');return;}
-  const cant=+document.getElementById('v-cantidad').value||1;
-  const desc=+document.getElementById('v-descuento').value||0;
-  const total=cant*precio-desc;
-  const id=document.getElementById('venta-id').value||uid();
+  if(_ventaItems.length===0){toast('⚠️ Agrega al menos un producto');return;}
   const canal2=document.getElementById('v-canal').value;
   const canalesEnvio=['Foráneo','Mercado Libre','Amazon','Shopify'];
   const tieneEnvio=canalesEnvio.includes(canal2);
   const costoGuia=tieneEnvio?+document.getElementById('v-costo-guia').value||0:0;
-  const tintaBlanca=+document.getElementById('v-tinta-blanca').value||0;
-  const tintaColor=+document.getElementById('v-tinta-color').value||0;
+  const sinTinta=document.getElementById('v-sin-tinta')?.checked||false;
+  const tintaBlanca=sinTinta?0:+document.getElementById('v-tinta-blanca').value||0;
+  const tintaColor=sinTinta?0:+document.getElementById('v-tinta-color').value||0;
   const precioTintaB=+localStorage.getItem('pl_tinta_blanca_precio')||0;
   const precioTintaC=+localStorage.getItem('pl_tinta_color_precio')||0;
-  const costoTinta=(tintaBlanca*precioTintaB+tintaColor*precioTintaC)*cant;
+  const subtotal=_ventaItems.reduce((s,it)=>s+(+it.cantidad||0)*(+it.precio||0),0);
+  const desc=+document.getElementById('v-descuento').value||0;
+  const total=Math.max(0,subtotal-desc);
+  const cantTotal=_ventaItems.reduce((s,it)=>s+(+it.cantidad||1),0);
+  const costoTinta=(tintaBlanca*precioTintaB+tintaColor*precioTintaC)*cantTotal;
   const metodoPago=document.getElementById('v-metodo-pago').value||'';
   const lugDeposito=document.getElementById('v-deposito-lugar').value||'';
   const tipoTarjeta=document.getElementById('v-tarjeta-tipo').value||'';
   const bancoOrigen=document.getElementById('v-banco-origen')?.value||'';
   const pagoCon=+document.getElementById('v-pago-con')?.value||0;
+  const anticipo=+document.getElementById('v-anticipo').value||0;
+  const saldo=Math.max(0,total-anticipo);
+  const id=document.getElementById('venta-id').value||uid();
   const folioVal=document.getElementById('v-folio').value||generarFolio(canal2);
+  // Descripción resumida para registros legacy
+  const productoResumen=_ventaItems.map(it=>`${it.cantidad}x ${it.tipo}${it.descripcion?' ('+it.descripcion+')':''}`).join(', ');
   const data={id,fecha:document.getElementById('v-fecha').value,canal:canal2,
     cliente:document.getElementById('v-cliente').value||'Público en general',
-    producto,genero:document.getElementById('v-genero').value,
-    talla:document.getElementById('v-talla').value,color:document.getElementById('v-color').value,
-    tipoProceso:document.getElementById('v-tipo-proceso').value,
+    producto:productoResumen,items:_ventaItems,
+    genero:'',talla:'',color:'',
+    tipoProceso:_ventaItems.map(it=>it.proceso).filter((v,i,a)=>a.indexOf(v)===i).join(', '),
+    sinTinta,
     ciudad:tieneEnvio?document.getElementById('v-ciudad').value:'',
     paqueteria:tieneEnvio?document.getElementById('v-paqueteria').value:'',
     guia:tieneEnvio?document.getElementById('v-guia').value:'',costoGuia,
     domicilioEnvio:tieneEnvio?document.getElementById('v-domicilio-envio').value:'',
-    cantidad:cant,precio,descuento:desc,total,
+    cantidad:cantTotal,precio:total/Math.max(1,cantTotal),descuento:desc,total,anticipo,saldo,
     proveedor:document.getElementById('v-proveedor').value,
     folio:folioVal,notas:document.getElementById('v-notas').value,
     tintaBlanca,tintaColor,costoTinta,
@@ -2347,6 +2422,28 @@ window.guardarVenta=async function(){
   closeModal('modal-venta');
   toast('✅ Venta guardada — Folio: '+folioVal);
   await cargarVentas(true);
+};
+
+// 6) TICKET WHATSAPP
+window.enviarTicketWA=function(){
+  const folio=document.getElementById('v-folio').value||'—';
+  const cliente=document.getElementById('v-cliente').value||'Público en general';
+  if(_ventaItems.length===0){toast('⚠️ Agrega productos primero');return;}
+  const lineas=_ventaItems.map(it=>`  • ${it.cantidad}x ${it.tipo}${it.descripcion?' — '+it.descripcion:''} (${it.proceso}) = ${fmtMoney((+it.cantidad||0)*(+it.precio||0))}`).join('\n');
+  const desc=+document.getElementById('v-descuento').value||0;
+  const total=Math.max(0,_ventaItems.reduce((s,it)=>s+(+it.cantidad||0)*(+it.precio||0),0)-desc);
+  const anticipo=+document.getElementById('v-anticipo').value||0;
+  const saldo=Math.max(0,total-anticipo);
+  const msg=`🧾 *TICKET DE COMPRA — Playeras Beloma*\n\n`+
+    `📋 *Folio:* ${folio}\n`+
+    `👤 *Cliente:* ${cliente}\n\n`+
+    `*Detalle del pedido:*\n${lineas}\n`+
+    (desc>0?`\n🏷️ Descuento: -${fmtMoney(desc)}\n`:'')+
+    `\n💰 *Total: ${fmtMoney(total)}*\n`+
+    `✅ Liquidado: ${fmtMoney(anticipo)}\n`+
+    `⏳ Saldo pendiente: ${fmtMoney(saldo)}\n\n`+
+    `¡Gracias por tu compra! 🙌 Playeras Beloma — La moda eres tú 👕`;
+  window.open('https://wa.me/?text='+encodeURIComponent(msg),'_blank');
 };
 
 window.cargarMasVentas = async function() {
@@ -5565,6 +5662,10 @@ window.onCanalChange = function(){
   const canal = document.getElementById('v-canal').value;
   toggleEnvioFields();
   asignarFolioSegunCanal(canal);
+
+  // Mostrar checkbox sin tinta solo en canal Local
+  const sinTintaWrap = document.getElementById('v-sin-tinta-wrap');
+  if(sinTintaWrap) sinTintaWrap.style.display = canal==='Local' ? '' : 'none';
 
   // Método de pago: ocultar en marketplaces
   const secPago = document.getElementById('v-metodo-pago-section');
