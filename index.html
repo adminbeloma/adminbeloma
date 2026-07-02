@@ -4928,6 +4928,13 @@ actualizarEjemploTinta();
 // ═══════════════════════════════════════════════════════════════════
 let fondosCaja = [];
 
+// Suscripción en tiempo real para fondos y cortes
+onSnapshot(collection(db,'pl_fondos_caja'), s=>{
+  fondosCaja = s.docs.map(d=>d.data());
+  actualizarCajaConFondo();
+  renderCaja();
+});
+
 window.abrirFondoCaja = function() {
   document.getElementById('fondo-fecha').value = hoy();
   const fondoHoy = fondosCaja.find(f => f.fecha === hoy());
@@ -4946,16 +4953,8 @@ window.guardarFondoCaja = async function() {
   await setDoc(doc(db, 'pl_fondos_caja', id), data);
   closeModal('modal-fondo-caja');
   toast('✅ Fondo guardado: ' + fmtMoney(monto));
-  await cargarFondosCaja();
   actualizarCajaConFondo();
 };
-
-async function cargarFondosCaja() {
-  try {
-    const snap = await getDocs(collection(db, 'pl_fondos_caja'));
-    fondosCaja = snap.docs.map(d => d.data());
-  } catch(e) { fondosCaja = []; }
-}
 
 function actualizarCajaConFondo() {
   const fondo = fondosCaja.find(f => f.fecha === hoy());
