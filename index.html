@@ -2263,10 +2263,21 @@ window.openVentaModal=function(tipo, ventaId){
       document.getElementById('v-guia').value=v.guia||'';
       document.getElementById('v-domicilio-envio').value=v.domicilioEnvio||'';
       if(v.sinTinta && document.getElementById('v-sin-tinta')) document.getElementById('v-sin-tinta').checked=true;
-      // Cargar items guardados o construir uno legacy
-      _ventaItems=Array.isArray(v.items)&&v.items.length>0?JSON.parse(JSON.stringify(v.items)):[{
-        tipo:v.genero||'Otro',descripcion:v.producto||'',proceso:v.tipoProceso||'DTG',
-        cantidad:v.cantidad||1,precio:v.precio||0}];
+      // Cargar items guardados o construir uno desde campos legacy
+      if(Array.isArray(v.items)&&v.items.length>0){
+        _ventaItems=JSON.parse(JSON.stringify(v.items));
+      } else {
+        // Venta vieja sin campo items — construir uno desde datos legacy
+        const precioUnit=+v.precio||0;
+        const cant=+v.cantidad||1;
+        _ventaItems=[{
+          tipo:v.genero||'Otro',
+          descripcion:v.producto||'',
+          proceso:v.tipoProceso||'DTG',
+          cantidad:cant,
+          precio:precioUnit
+        }];
+      }
       renderItemsVenta();
       if(v.metodoPago) selPago(v.metodoPago, true);
       toggleEnvioFields();
@@ -2401,10 +2412,13 @@ window.guardarVenta=async function(){
   const pagoCon=+document.getElementById('v-pago-con')?.value||0;
   const anticipo=+document.getElementById('v-anticipo').value||0;
   const saldo=Math.max(0,total-anticipo);
-  const id=document.getElementById('venta-id').value||uid();
+  const idExistente=document.getElementById('venta-id').value;
+  const id=idExistente||uid();
   const folioVal=document.getElementById('v-folio').value||generarFolio(canal2);
   // Descripción resumida para registros legacy
   const productoResumen=_ventaItems.map(it=>`${it.cantidad}x ${it.tipo}${it.descripcion?' ('+it.descripcion+')':''}`).join(', ');
+  // Preservar fecha de creación si es edición
+  const ventaOriginal=idExistente?ventas.find(v=>v.id===idExistente):null;
   const data={id,fecha:document.getElementById('v-fecha').value,canal:canal2,
     cliente:document.getElementById('v-cliente').value||'Público en general',
     producto:productoResumen,items:_ventaItems,
@@ -2421,7 +2435,8 @@ window.guardarVenta=async function(){
     tintaBlanca,tintaColor,costoTinta,
     metodoPago,lugDeposito,tipoTarjeta,bancoOrigen,
     pagoCon:metodoPago==='efectivo'?pagoCon:0,
-    creado:new Date().toISOString()};
+    creado:ventaOriginal?.creado||new Date().toISOString(),
+    actualizado:new Date().toISOString()};
   await setDoc(doc(db,'pl_ventas',id),data);
   closeModal('modal-venta');
   toast('✅ Venta guardada — Folio: '+folioVal);
@@ -3171,36 +3186,47 @@ function renderClientes(){
   const desde=(document.getElementById('filter-cli-desde')||{value:''}).value;
   const hasta=(document.getElementById('filter-cli-hasta')||{value:''}).value;
 
-  let lista=clientes.filter(c=>{
-    const ms=!search||
-      (c.nombre||'').toLowerCase().includes(search)||
-      (c.tel||'').includes(search)||
-      (c.correo||'').toLowerCase().includes(search);
-    const mc=!canalFiltro||c.canal===canalFiltro;
-    // Filtro tipo: robusto — si el cliente no tiene tipo asignado, se trata como Particular
-    const tipoCliente=c.tipo||'Particular';
-    const mt=!tipoFiltro||tipoCliente===tipoFiltro;
-    const mciu=!ciudadFiltro||(c.ciudad||'').toLowerCase().includes(ciudadFiltro);
-    // Filtro por fecha de creación
-    const fechaCreado=(c.creado||'').slice(0,10);
-    const mDesde=!desde||fechaCreado>=desde;
-    const mHasta=!hasta||fechaCreado<=hasta;
-    return ms&&mc&&mt&&mciu&&mDesde&&mHasta;
-  });
-
   const tbody=document.getElementById('tabla-clientes');
   const empty=document.getElementById('clientes-empty');
   const countEl=document.getElementById('cli-count');
   const totalEl=document.getElementById('cli-total-facturado');
   const empresasEl=document.getElementById('cli-count-empresas');
 
-  // Calcular totales del filtro
+  // Si no hay ningún filtro activo, mostrar lista vacía
+  const hayFiltro=search||canalFiltro||tipoFiltro||ciudadFiltro||desde||hasta;
+  if(!hayFiltro){
+    if(tbody) tbody.innerHTML='';
+    if(empty){
+      empty.style.display='block';
+      empty.querySelector('p').textContent='Usa el buscador o los filtros para ver clientes.';
+    }
+    if(countEl) countEl.textContent=clientes.length+' total';
+    if(totalEl) totalEl.textContent='—';
+    if(empresasEl) empresasEl.textContent=clientes.filter(c=>c.tipo==='Empresa').length;
+    return;
+  }
+
+  let lista=clientes.filter(c=>{
+    const ms=!search||
+      (c.nombre||'').toLowerCase().includes(search)||
+      (c.tel||'').includes(search)||
+      (c.correo||'').toLowerCase().includes(search);
+    const mc=!canalFiltro||c.canal===canalFiltro;
+    const tipoCliente=c.tipo||'Particular';
+    const mt=!tipoFiltro||tipoCliente===tipoFiltro;
+    const mciu=!ciudadFiltro||(c.ciudad||'').toLowerCase().includes(ciudadFiltro);
+    const fechaCreado=(c.creado||'').slice(0,10);
+    const mDesde=!desde||fechaCreado>=desde;
+    const mHasta=!hasta||fechaCreado<=hasta;
+    return ms&&mc&&mt&&mciu&&mDesde&&mHasta;
+  });
+
   let totalFacturado=0;
   lista.forEach(c=>{
     const ventasCliente=ventas.filter(v=>v.cliente?.toLowerCase()===c.nombre?.toLowerCase());
     totalFacturado+=ventasCliente.reduce((s,v)=>s+(+v.total||0),0);
   });
-  if(countEl) countEl.textContent=lista.length;
+  if(countEl) countEl.textContent=lista.length+' resultado'+(lista.length===1?'':'s');
   if(totalEl) totalEl.textContent=fmtMoney(totalFacturado);
   if(empresasEl) empresasEl.textContent=lista.filter(c=>c.tipo==='Empresa').length;
 
