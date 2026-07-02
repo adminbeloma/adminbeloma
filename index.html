@@ -330,7 +330,7 @@ tbody td{padding:11px 14px;font-size:13.5px;vertical-align:middle;}
       </div>
       <div class="table-wrap">
         <table>
-          <thead><tr><th>Fecha</th><th>Cliente</th><th>Producto</th><th>Género</th><th>Talla</th><th>Color</th><th>Canal</th><th>Cant.</th><th>Total</th><th>Acciones</th></tr></thead>
+          <thead><tr><th>Fecha</th><th>Cliente</th><th>Producto / Items</th><th>Proceso</th><th>Canal</th><th>Cant.</th><th>Total</th><th>Anticipo</th><th>Saldo</th><th>Acciones</th></tr></thead>
           <tbody id="tabla-ventas"></tbody>
         </table>
       </div>
@@ -1334,7 +1334,7 @@ tbody td{padding:11px 14px;font-size:13.5px;vertical-align:middle;}
       <div class="form-grid">
         <div class="form-group full"><label>Nombre *</label><input type="text" id="ins-nombre" placeholder="Ej. Tinta Blanca DTG"></div>
         <div class="form-group"><label>Categoría</label>
-          <select id="ins-categoria">
+          <select id="ins-categoria" onchange="onInsCategoriaChange()">
             <option>Pretratamiento negras/color</option>
             <option>Pretratamiento blancas</option>
             <option>Tinta blanca</option>
@@ -1350,6 +1350,10 @@ tbody td{padding:11px 14px;font-size:13.5px;vertical-align:middle;}
             <option>Empaque</option>
             <option>Otro</option>
           </select>
+        </div>
+        <div class="form-group" id="ins-otro-wrap" style="display:none;">
+          <label>Especifica la categoría *</label>
+          <input type="text" id="ins-categoria-otro" placeholder="Ej. Cinta transfer, Papel sublimación...">
         </div>
         <div class="form-group"><label>Unidad de medida</label>
           <select id="ins-unidad"><option>ml/cc</option><option>ml</option><option>cc</option><option>L</option><option>gr</option><option>kg</option><option>piezas</option><option>kits</option></select>
@@ -2398,7 +2402,7 @@ window.renderItemsVenta=function(){
       </div>
       <div>
         <label style="font-size:11px;font-weight:600;color:var(--ink-soft);">Descripción</label>
-        <input type="text" value="${it.descripcion||''}" placeholder="Ej. Logo empresa, XL" oninput="window._ventaItems[${idx}].descripcion=this.value"
+        <input type="text" value="${it.descripcion||''}" placeholder="Color, talla, diseño..." oninput="window._ventaItems[${idx}].descripcion=this.value"
           style="width:100%;border:1.5px solid var(--border);border-radius:8px;padding:7px 8px;font-size:12px;background:var(--bg-card);color:var(--ink);">
       </div>
       <div>
@@ -2651,21 +2655,31 @@ function renderVentas(){
   if(lista.length===0){tbody.innerHTML='';empty.style.display='block';return;}
   empty.style.display='none';
   const canalColor={Local:'badge-blue','Foráneo':'badge-gold','Mercado Libre':'badge-gold',Amazon:'badge-green',Shopify:'badge-green',WhatsApp:'badge-green',Otro:'badge-gray'};
-  tbody.innerHTML=lista.map(v=>`<tr>
+  tbody.innerHTML=lista.map(v=>{
+    // Mostrar items del pedido si existen, o producto legacy
+    let productoTxt=v.producto||'—';
+    let procesoTxt=v.tipoProceso||'—';
+    if(Array.isArray(v.items)&&v.items.length>0){
+      productoTxt=v.items.map(it=>`${it.cantidad}x ${it.tipo}${it.descripcion?' ('+it.descripcion+')':''}`).join(', ');
+      procesoTxt=[...new Set(v.items.map(it=>it.proceso).filter(Boolean))].join(', ')||v.tipoProceso||'—';
+    }
+    const anticipo=+v.anticipo||0;
+    const saldo=+v.saldo||0;
+    return`<tr>
     <td>${fmtFecha(v.fecha)}</td>
     <td>${v.cliente||'—'}</td>
-    <td style="font-weight:500;">${v.producto}</td>
-    <td style="font-size:11px;">${v.genero||'—'}</td>
-    <td>${v.talla||'—'}</td>
-    <td>${v.color||'—'}</td>
+    <td style="font-weight:500;font-size:12px;">${productoTxt}</td>
+    <td style="font-size:11px;">${procesoTxt}</td>
     <td><span class="badge ${canalColor[v.canal]||'badge-gray'}">${v.canal}</span>${v.ciudad?`<div style="font-size:10px;color:var(--ink-soft);margin-top:2px;">📍${v.ciudad}</div>`:''}</td>
     <td>${v.cantidad}</td>
     <td style="font-weight:700;color:var(--green);">${fmtMoney(v.total)}</td>
+    <td style="font-weight:600;color:${anticipo>0?'var(--green)':'var(--ink-soft)'};">${anticipo>0?fmtMoney(anticipo):'—'}</td>
+    <td style="font-weight:600;color:${saldo>0?'var(--red)':'var(--ink-soft)'};">${saldo>0?fmtMoney(saldo):'—'}</td>
     <td style="display:flex;gap:4px;">
       <button class="btn btn-ghost btn-sm" onclick="openVentaModal('edit','${v.id}')">✏️</button>
       <button class="btn btn-danger btn-sm" onclick="eliminarVenta('${v.id}')">🗑</button>
     </td>
-  </tr>`).join('');
+  </tr>`;}).join('');
 }
 
 window.eliminarVenta=async function(id){
@@ -3068,16 +3082,54 @@ window.openInsumoModal=function(id){
   ['ins-id','ins-nombre','ins-stock','ins-stock-min','ins-costo','ins-uso-playera','ins-uso-dia'].forEach(f=>document.getElementById(f).value='');
   document.getElementById('ins-imagen').value='';
   document.getElementById('ins-imagen-preview').style.display='none';
-  if(id){const ins=insumos.find(x=>x.id===id);if(ins){document.getElementById('ins-id').value=ins.id;document.getElementById('ins-nombre').value=ins.nombre||'';document.getElementById('ins-categoria').value=ins.categoria||'Pretratamiento';document.getElementById('ins-unidad').value=ins.unidad||'ml';document.getElementById('ins-stock').value=ins.stock||0;document.getElementById('ins-stock-min').value=ins.stockMin||0;document.getElementById('ins-costo').value=ins.costo||0;document.getElementById('ins-uso-playera').value=ins.usoPlayera||0;document.getElementById('ins-uso-dia').value=ins.usoDia||0;
-    if(ins.imagen){const img=document.getElementById('ins-imagen-preview');img.src=ins.imagen;img.style.display='block';}
-  }}
+  document.getElementById('ins-categoria').value='Pretratamiento negras/color';
+  document.getElementById('ins-categoria-otro').value='';
+  document.getElementById('ins-otro-wrap').style.display='none';
+  if(id){
+    const ins=insumos.find(x=>x.id===id);
+    if(ins){
+      document.getElementById('ins-id').value=ins.id;
+      document.getElementById('ins-nombre').value=ins.nombre||'';
+      // Si la categoría no está en la lista predefinida, es una personalizada → poner "Otro" y mostrar el campo
+      const cats=['Pretratamiento negras/color','Pretratamiento blancas','Tinta blanca','Tinta Cyan','Tinta Magenta','Tinta Amarilla','Tinta Negra','Limpiador de wiper','Wiper','Solución mantenimiento','Kit mantenimiento','Playera','Empaque','Otro'];
+      if(cats.includes(ins.categoria)){
+        document.getElementById('ins-categoria').value=ins.categoria;
+        document.getElementById('ins-otro-wrap').style.display='none';
+      } else {
+        document.getElementById('ins-categoria').value='Otro';
+        document.getElementById('ins-categoria-otro').value=ins.categoria||'';
+        document.getElementById('ins-otro-wrap').style.display='';
+      }
+      document.getElementById('ins-unidad').value=ins.unidad||'ml';
+      document.getElementById('ins-stock').value=ins.stock||0;
+      document.getElementById('ins-stock-min').value=ins.stockMin||0;
+      document.getElementById('ins-costo').value=ins.costo||0;
+      document.getElementById('ins-uso-playera').value=ins.usoPlayera||0;
+      document.getElementById('ins-uso-dia').value=ins.usoDia||0;
+      if(ins.imagen){const img=document.getElementById('ins-imagen-preview');img.src=ins.imagen;img.style.display='block';}
+    }
+  }
   openModal('modal-insumo');
+};
+
+window.onInsCategoriaChange=function(){
+  const val=document.getElementById('ins-categoria').value;
+  const wrap=document.getElementById('ins-otro-wrap');
+  if(wrap) wrap.style.display=val==='Otro'?'':'none';
+  if(val!=='Otro'){const el=document.getElementById('ins-categoria-otro');if(el)el.value='';}
 };
 
 window.guardarInsumo=async function(){
   const nombre=document.getElementById('ins-nombre').value.trim();
   const stock=document.getElementById('ins-stock').value;
   if(!nombre||stock===''){toast('⚠️ Nombre y stock son obligatorios');return;}
+  // Categoría: si es "Otro" usar el campo de texto
+  let categoria=document.getElementById('ins-categoria').value;
+  if(categoria==='Otro'){
+    const otro=document.getElementById('ins-categoria-otro').value.trim();
+    if(!otro){toast('⚠️ Especifica la categoría');return;}
+    categoria=otro; // guardar el valor personalizado directamente
+  }
   const id=document.getElementById('ins-id').value||uid();
   let imagenUrl='';
   const fileIns=document.getElementById('ins-imagen').files[0];
@@ -3091,7 +3143,7 @@ window.guardarInsumo=async function(){
     const existing=insumos.find(x=>x.id===id);
     imagenUrl=existing?.imagen||'';
   }
-  const data={id,nombre,categoria:document.getElementById('ins-categoria').value,unidad:document.getElementById('ins-unidad').value,stock:+stock,stockMin:+document.getElementById('ins-stock-min').value||0,costo:+document.getElementById('ins-costo').value||0,usoPlayera:+document.getElementById('ins-uso-playera').value||0,usoDia:+document.getElementById('ins-uso-dia').value||0,imagen:imagenUrl,creado:new Date().toISOString()};
+  const data={id,nombre,categoria,unidad:document.getElementById('ins-unidad').value,stock:+stock,stockMin:+document.getElementById('ins-stock-min').value||0,costo:+document.getElementById('ins-costo').value||0,usoPlayera:+document.getElementById('ins-uso-playera').value||0,usoDia:+document.getElementById('ins-uso-dia').value||0,imagen:imagenUrl,creado:new Date().toISOString()};
   await setDoc(doc(db,'pl_insumos',id),data);
   closeModal('modal-insumo');
   toast('✅ Insumo guardado');
