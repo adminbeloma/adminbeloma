@@ -418,82 +418,121 @@ tbody td{padding:11px 14px;font-size:13.5px;vertical-align:middle;}
     <div class="topbar">
       <h1>Reportes</h1>
       <div class="actions">
-        <button class="btn btn-ghost btn-sm" onclick="exportarReportePDF()" id="btn-export-pdf">📄 Exportar PDF</button>
-        <button class="btn btn-ghost btn-sm" onclick="exportarReporteExcel()" id="btn-export-excel">📊 Exportar Excel</button>
+        <button class="btn btn-ghost btn-sm" onclick="exportarReportePDF()" id="btn-export-pdf">📄 PDF</button>
+        <button class="btn btn-ghost btn-sm" onclick="exportarReporteExcel()" id="btn-export-excel">📊 Excel</button>
       </div>
     </div>
     <div class="content">
-      <!-- Tabs -->
-      <div style="display:flex;gap:4px;margin-bottom:18px;border-bottom:2px solid var(--border);">
+      <!-- Tabs principales -->
+      <div style="display:flex;gap:4px;margin-bottom:18px;border-bottom:2px solid var(--border);flex-wrap:wrap;">
         <button class="reporte-tab activo" data-tab="ventas" onclick="cambiarTabReporte('ventas')">📊 Ventas</button>
+        <button class="reporte-tab" data-tab="prendas" onclick="cambiarTabReporte('prendas')">👕 Prendas</button>
         <button class="reporte-tab" data-tab="clientes" onclick="cambiarTabReporte('clientes')">👥 Clientes</button>
-        <button class="reporte-tab" data-tab="cortes" onclick="cambiarTabReporte('cortes')">🏪 Cortes de Caja</button>
+        <button class="reporte-tab" data-tab="inventario" onclick="cambiarTabReporte('inventario')">📦 Inventario</button>
+        <button class="reporte-tab" data-tab="compras" onclick="cambiarTabReporte('compras')">🛒 Compras</button>
+        <button class="reporte-tab" data-tab="gastos" onclick="cambiarTabReporte('gastos')">💸 Gastos</button>
+        <button class="reporte-tab" data-tab="pedidos" onclick="cambiarTabReporte('pedidos')">📋 Pedidos</button>
+        <button class="reporte-tab" data-tab="cortes" onclick="cambiarTabReporte('cortes')">🏪 Caja</button>
       </div>
 
-      <!-- Tab: Ventas -->
+      <!-- Filtro de fechas reutilizable (se muestra en todas las tabs) -->
+      <div id="rep-filtro-fechas" class="card" style="margin-bottom:18px;">
+        <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;">
+          <button class="btn btn-ghost btn-sm" onclick="setRangoReporte('hoy')">Hoy</button>
+          <button class="btn btn-ghost btn-sm" onclick="setRangoReporte('semana')">Semana</button>
+          <button class="btn btn-ghost btn-sm" onclick="setRangoReporte('mes')">Mes</button>
+          <button class="btn btn-ghost btn-sm" onclick="setRangoReporte('trimestre')">Trimestre</button>
+          <button class="btn btn-ghost btn-sm" onclick="setRangoReporte('semestre')">Semestre</button>
+          <button class="btn btn-ghost btn-sm" onclick="setRangoReporte('año')">Año</button>
+          <button class="btn btn-ghost btn-sm" onclick="setRangoReporte('todo')">Todo</button>
+          <input type="date" id="reporte-desde" style="border:1.5px solid var(--border);border-radius:8px;padding:7px 10px;font-size:13px;outline:none;">
+          <span style="color:var(--ink-soft);">a</span>
+          <input type="date" id="reporte-hasta" style="border:1.5px solid var(--border);border-radius:8px;padding:7px 10px;font-size:13px;outline:none;">
+          <button class="btn btn-accent btn-sm" onclick="generarReporteActivo()">🔍 Generar</button>
+        </div>
+      </div>
+
+      <!-- TAB: VENTAS -->
       <div id="reporte-tab-ventas">
-        <div class="card" style="margin-bottom:18px;">
-          <div style="font-weight:700;font-size:15px;margin-bottom:14px;">📅 Rango de fechas</div>
-          <div style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:12px;">
-            <button class="btn btn-ghost btn-sm" onclick="setRangoReporte('hoy')">Hoy</button>
-            <button class="btn btn-ghost btn-sm" onclick="setRangoReporte('semana')">Semana</button>
-            <button class="btn btn-ghost btn-sm" onclick="setRangoReporte('mes')">Mes</button>
-            <button class="btn btn-ghost btn-sm" onclick="setRangoReporte('bimestre')">Bimestre</button>
-            <button class="btn btn-ghost btn-sm" onclick="setRangoReporte('trimestre')">Trimestre</button>
-            <button class="btn btn-ghost btn-sm" onclick="setRangoReporte('semestre')">Semestre</button>
-            <button class="btn btn-ghost btn-sm" onclick="setRangoReporte('año')">Año</button>
-          </div>
-          <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;">
-            <input type="date" id="reporte-desde" style="border:1.5px solid var(--border);border-radius:8px;padding:8px 12px;font-size:13px;outline:none;">
-            <span style="color:var(--ink-soft);">a</span>
-            <input type="date" id="reporte-hasta" style="border:1.5px solid var(--border);border-radius:8px;padding:8px 12px;font-size:13px;outline:none;">
-            <!-- Filtro por canal -->
-            <select id="reporte-canal" style="border:1.5px solid var(--border);border-radius:8px;padding:8px 12px;font-size:13px;outline:none;">
-              <option value="">Todos los canales</option>
-              <option value="Local">Local</option>
-              <option value="Foráneo">Foráneo</option>
-              <option value="Mercado Libre">Mercado Libre</option>
-              <option value="Amazon">Amazon</option>
-              <option value="Shopify">Shopify</option>
-              <option value="Otro">Otro</option>
-            </select>
-            <button class="btn btn-primary btn-sm" onclick="generarReporte()">Generar Reporte</button>
-          </div>
+        <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:14px;">
+          <select id="rep-v-canal" style="border:1.5px solid var(--border);border-radius:8px;padding:7px 10px;font-size:13px;outline:none;">
+            <option value="">Todos los canales</option>
+            <option>Local</option><option>Foráneo</option><option>Mercado Libre</option><option>Amazon</option><option>Shopify</option>
+          </select>
+          <select id="rep-v-metodo" style="border:1.5px solid var(--border);border-radius:8px;padding:7px 10px;font-size:13px;outline:none;">
+            <option value="">Todos los métodos de pago</option>
+            <option value="efectivo">Efectivo</option><option value="transferencia">Transferencia</option>
+            <option value="deposito">Depósito</option><option value="tarjeta">Tarjeta</option>
+          </select>
         </div>
         <div id="reporte-contenido"></div>
       </div>
 
-      <!-- Tab: Clientes -->
+      <!-- TAB: PRENDAS -->
+      <div id="reporte-tab-prendas" style="display:none;">
+        <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:14px;">
+          <select id="rep-p-genero" style="border:1.5px solid var(--border);border-radius:8px;padding:7px 10px;font-size:13px;outline:none;">
+            <option value="">Todos los géneros</option>
+            <option>Hombre</option><option>Mujer</option><option>Niño</option><option>Bebé</option><option>Unisex</option>
+          </select>
+          <select id="rep-p-tecnica" style="border:1.5px solid var(--border);border-radius:8px;padding:7px 10px;font-size:13px;outline:none;">
+            <option value="">Todas las técnicas</option>
+            <option>DTG</option><option>DTF</option><option>Serigrafía</option><option>Vinil</option><option>Bordado</option>
+          </select>
+          <select id="rep-p-material" style="border:1.5px solid var(--border);border-radius:8px;padding:7px 10px;font-size:13px;outline:none;">
+            <option value="">Todos los materiales</option>
+            <option>Algodón</option><option>Dry Fit</option><option>Jaspeado</option>
+          </select>
+        </div>
+        <div id="reporte-prendas-contenido"></div>
+      </div>
+
+      <!-- TAB: CLIENTES -->
       <div id="reporte-tab-clientes" style="display:none;">
-        <div class="card" style="margin-bottom:18px;">
-          <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;">
-            <input type="text" id="reporte-cli-buscar" placeholder="🔍 Buscar cliente..." oninput="generarReporteClientes()"
-              style="flex:1;min-width:200px;border:1.5px solid var(--border);border-radius:8px;padding:8px 12px;font-size:13px;outline:none;">
-            <select id="reporte-cli-canal" onchange="generarReporteClientes()"
-              style="border:1.5px solid var(--border);border-radius:8px;padding:8px 12px;font-size:13px;outline:none;">
-              <option value="">Todos los canales</option>
-              <option value="Local">Local</option>
-              <option value="Foráneo">Foráneo</option>
-              <option value="Mercado Libre">Mercado Libre</option>
-              <option value="Amazon">Amazon</option>
-              <option value="Shopify">Shopify</option>
-            </select>
-          </div>
+        <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:14px;">
+          <input type="text" id="reporte-cli-buscar" placeholder="🔍 Buscar cliente..." oninput="generarReporteClientes()"
+            style="flex:1;min-width:180px;border:1.5px solid var(--border);border-radius:8px;padding:7px 10px;font-size:13px;outline:none;">
+          <select id="reporte-cli-canal" onchange="generarReporteClientes()"
+            style="border:1.5px solid var(--border);border-radius:8px;padding:7px 10px;font-size:13px;outline:none;">
+            <option value="">Todos los canales</option>
+            <option>Local</option><option>Foráneo</option><option>Mercado Libre</option><option>Amazon</option><option>Shopify</option>
+          </select>
         </div>
         <div id="reporte-clientes-contenido"></div>
       </div>
 
-      <!-- Tab: Cortes de Caja -->
-      <div id="reporte-tab-cortes" style="display:none;">
-        <div class="card" style="margin-bottom:18px;">
-          <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;">
-            <input type="date" id="reporte-corte-desde" onchange="generarReporteCortes()"
-              style="border:1.5px solid var(--border);border-radius:8px;padding:8px 12px;font-size:13px;outline:none;">
-            <span style="color:var(--ink-soft);">a</span>
-            <input type="date" id="reporte-corte-hasta" onchange="generarReporteCortes()"
-              style="border:1.5px solid var(--border);border-radius:8px;padding:8px 12px;font-size:13px;outline:none;">
-          </div>
+      <!-- TAB: INVENTARIO -->
+      <div id="reporte-tab-inventario" style="display:none;">
+        <div id="reporte-inventario-contenido"></div>
+      </div>
+
+      <!-- TAB: COMPRAS / PROVEEDORES -->
+      <div id="reporte-tab-compras" style="display:none;">
+        <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:14px;">
+          <input type="text" id="rep-compras-proveedor" placeholder="🔍 Filtrar por proveedor..."
+            style="flex:1;min-width:180px;border:1.5px solid var(--border);border-radius:8px;padding:7px 10px;font-size:13px;outline:none;">
         </div>
+        <div id="reporte-compras-contenido"></div>
+      </div>
+
+      <!-- TAB: GASTOS -->
+      <div id="reporte-tab-gastos" style="display:none;">
+        <div id="reporte-gastos-contenido"></div>
+      </div>
+
+      <!-- TAB: PEDIDOS -->
+      <div id="reporte-tab-pedidos" style="display:none;">
+        <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:14px;">
+          <select id="rep-ped-estatus" style="border:1.5px solid var(--border);border-radius:8px;padding:7px 10px;font-size:13px;outline:none;">
+            <option value="">Todos los estatus</option>
+            <option>En elaboración</option><option>Listo</option><option>Entregado</option><option>Liquidado</option>
+          </select>
+        </div>
+        <div id="reporte-pedidos-contenido"></div>
+      </div>
+
+      <!-- TAB: CAJA -->
+      <div id="reporte-tab-cortes" style="display:none;">
         <div id="reporte-cortes-contenido"></div>
       </div>
 
@@ -2976,9 +3015,15 @@ window.eliminarGasto=async function(id){
 
 // ─── REPORTES ───
 window.setRangoReporte=function(tipo){
-  const r=getRango(tipo);
-  document.getElementById('reporte-desde').value=r.desde;
-  document.getElementById('reporte-hasta').value=r.hasta;
+  if(tipo==='todo'){
+    document.getElementById('reporte-desde').value='';
+    document.getElementById('reporte-hasta').value='';
+  } else {
+    const r=getRango(tipo);
+    document.getElementById('reporte-desde').value=r.desde;
+    document.getElementById('reporte-hasta').value=r.hasta;
+  }
+  if(typeof generarReporteActivo==='function') generarReporteActivo();
 };
 
 window.generarReporte=function(){
@@ -4770,9 +4815,41 @@ function calcCostoTinta(){
 
 // ─── EXPORTAR REPORTES ───
 window.exportarReportePDF = function() {
-  const d = window._reporteData;
-  if(!d){ toast('⚠️ Genera un reporte primero'); return; }
-  const { jsPDF } = window.jspdf;
+  const tabContenidos={
+    ventas:'reporte-contenido', prendas:'reporte-prendas-contenido',
+    clientes:'reporte-clientes-contenido', inventario:'reporte-inventario-contenido',
+    compras:'reporte-compras-contenido', gastos:'reporte-gastos-contenido',
+    pedidos:'reporte-pedidos-contenido', cortes:'reporte-cortes-contenido'
+  };
+  const tabTitulos={
+    ventas:'📊 Reporte de Ventas', prendas:'👕 Reporte de Prendas',
+    clientes:'👥 Reporte de Clientes', inventario:'📦 Reporte de Inventario',
+    compras:'🛒 Reporte de Compras', gastos:'💸 Reporte de Gastos',
+    pedidos:'📋 Reporte de Pedidos', cortes:'🏪 Reporte de Cortes de Caja'
+  };
+  const contId=tabContenidos[tabReporteActual];
+  const cont=document.getElementById(contId);
+  if(!cont||!cont.innerHTML.trim()){toast('⚠️ Genera el reporte primero');return;}
+  const titulo=tabTitulos[tabReporteActual]||'Reporte Beloma';
+  const win=window.open('','_blank');
+  win.document.write(`<html><head><title>${titulo}</title><style>
+    body{font-family:Arial,sans-serif;padding:24px;font-size:12px;color:#1a1a1a;}
+    h1{font-size:18px;color:#E85D26;border-bottom:3px solid #E85D26;padding-bottom:8px;}
+    .subtitle{color:#666;font-size:11px;margin-bottom:20px;}
+    table{width:100%;border-collapse:collapse;margin-bottom:16px;}
+    th{background:#1a1a1a;color:#fff;padding:8px;text-align:left;font-size:11px;}
+    td{border:1px solid #ddd;padding:7px;font-size:11px;}
+    tr:nth-child(even){background:#f9f9f9;}
+    .badge{background:#e0e0e0;padding:2px 6px;border-radius:3px;font-size:10px;}
+    @media print{button{display:none;}}
+  </style></head><body>
+    <h1>Playeras Beloma — ${titulo}</h1>
+    <p class="subtitle">Generado: ${new Date().toLocaleString('es-MX')} | Período: ${document.getElementById('reporte-desde')?.value||'—'} al ${document.getElementById('reporte-hasta')?.value||'—'}</p>
+    ${cont.innerHTML}
+    <script>window.onload=()=>window.print();</script>
+  </body></html>`);
+  win.document.close();
+};
   const doc = new jsPDF();
   const titulo = `Reporte Playeras Beloma — ${fmtFecha(d.desde)} al ${fmtFecha(d.hasta)}`;
   
@@ -4899,76 +4976,85 @@ window.exportarReportePDF = function() {
   toast('📄 PDF generado');
 };
 
-window.exportarReporteExcel = function() {
-  const d = window._reporteData;
-  if(!d){ toast('⚠️ Genera un reporte primero'); return; }
-  
-  const wb = XLSX.utils.book_new();
-  
-  // Hoja 1: Resumen
-  const resumen = [
-    ['REPORTE PLAYERAS BELOMA'],
-    [`Período: ${fmtFecha(d.desde)} al ${fmtFecha(d.hasta)}`],
-    [],
-    ['RESUMEN FINANCIERO'],
-    ['Concepto', 'Monto'],
-    ['Total Ventas', d.totalVentas],
-    ['Total Gastos', d.totalGastos],
-    ['Utilidad Neta', d.utilidad],
-    ['Unidades Vendidas', d.totalUnidades],
-    ['Ticket Promedio', d.ventasPer.length>0 ? d.totalVentas/d.ventasPer.length : 0],
-    [],
-    ['CONSUMO DE TINTA'],
-    ['Tipo', 'cc totales', 'Costo'],
-    ['Tinta Blanca', d.ventasPer.reduce((s,v)=>s+(+v.tintaBlanca||0)*(+v.cantidad||1),0), ''],
-    ['Tinta CMYK', d.ventasPer.reduce((s,v)=>s+(+v.tintaColor||0)*(+v.cantidad||1),0), ''],
-    [],
-    ['VENTAS POR CANAL'],
-    ['Canal', 'Total'],
-    ...Object.entries(d.porCanal).sort((a,b)=>b[1]-a[1]).map(([k,v])=>[k,v]),
-    [],
-    ['VENTAS POR TALLA'],
-    ['Talla', 'Piezas'],
-    ...Object.entries(d.porTalla).sort((a,b)=>b[1]-a[1]).map(([k,v])=>[k,v]),
-    [],
-    ['VENTAS POR COLOR'],
-    ['Color', 'Piezas'],
-    ...Object.entries(d.porColor).sort((a,b)=>b[1]-a[1]).map(([k,v])=>[k,v]),
-    [],
-    ['GASTOS POR CATEGORÍA'],
-    ['Categoría', 'Total'],
-    ...Object.entries(d.porCatGasto).sort((a,b)=>b[1]-a[1]).map(([k,v])=>[k,v]),
-  ];
-  const ws1 = XLSX.utils.aoa_to_sheet(resumen);
-  ws1['!cols'] = [{wch:30},{wch:15},{wch:15}];
-  XLSX.utils.book_append_sheet(wb, ws1, 'Resumen');
-  
-  // Hoja 2: Detalle ventas
-  const ventasData = [
-    ['Fecha','Cliente','Producto','Talla','Color','Canal','Cantidad','Precio Unit.','Descuento','Total','Tinta Blanca cc','Tinta CMYK cc','Costo Tinta','Proveedor','Folio'],
-    ...d.ventasPer.sort((a,b)=>b.fecha>a.fecha?1:-1).map(v=>[
-      fmtFecha(v.fecha), v.cliente||'', v.producto||'', v.talla||'', v.color||'',
-      v.canal, v.cantidad, v.precio, v.descuento||0, v.total,
-      v.tintaBlanca||0, v.tintaColor||0, v.costoTinta||0, v.proveedor||'', v.folio||''
-    ])
-  ];
-  const ws2 = XLSX.utils.aoa_to_sheet(ventasData);
-  ws2['!cols'] = [{wch:12},{wch:20},{wch:30},{wch:8},{wch:10},{wch:15},{wch:8},{wch:12},{wch:10},{wch:12},{wch:14},{wch:12},{wch:12},{wch:15},{wch:12}];
-  XLSX.utils.book_append_sheet(wb, ws2, 'Ventas');
-  
-  // Hoja 3: Gastos
-  const gastosData = [
-    ['Fecha','Concepto','Categoría','Tipo','Monto','Notas'],
-    ...d.gastosPer.sort((a,b)=>b.fecha>a.fecha?1:-1).map(g=>[
-      fmtFecha(g.fecha), g.concepto, g.categoria, g.tipo, g.monto, g.notas||''
-    ])
-  ];
-  const ws3 = XLSX.utils.aoa_to_sheet(gastosData);
-  ws3['!cols'] = [{wch:12},{wch:30},{wch:15},{wch:10},{wch:12},{wch:30}];
-  XLSX.utils.book_append_sheet(wb, ws3, 'Gastos');
-  
-  XLSX.writeFile(wb, `reporte-playeras-${d.desde}-${d.hasta}.xlsx`);
-  toast('📊 Excel generado');
+window.exportarReporteExcel=function(){
+  if(!window.XLSX){toast('⚠️ Librería Excel no disponible');return;}
+  const wb=XLSX.utils.book_new();
+  const{desde,hasta}=_repFechas();
+  const tab=tabReporteActual;
+
+  if(tab==='ventas'||tab==='todos'){
+    const canal=document.getElementById('rep-v-canal')?.value||'';
+    const f=ventas.filter(v=>(!desde||v.fecha>=desde)&&(!hasta||v.fecha<=hasta)&&(!canal||v.canal===canal));
+    const ws=XLSX.utils.aoa_to_sheet([
+      ['Fecha','Cliente','Producto','Canal','Cantidad','Total','Anticipo','Saldo','Método','Folio','Notas'],
+      ...f.map(v=>[v.fecha,v.cliente||'—',v.producto||'—',v.canal,v.cantidad,+v.total||0,+v.anticipo||0,+v.saldo||0,v.metodoPago||'—',v.folio||'—',v.notas||''])
+    ]);
+    XLSX.utils.book_append_sheet(wb,ws,'Ventas');
+  }
+  if(tab==='clientes'||tab==='todos'){
+    const mapa={};
+    ventas.filter(v=>(!desde||v.fecha>=desde)&&(!hasta||v.fecha<=hasta)).forEach(v=>{
+      const n=v.cliente||'Público en general';
+      if(!mapa[n])mapa[n]={nombre:n,ventas:0,total:0,saldo:0};
+      mapa[n].ventas++;mapa[n].total+=+v.total||0;mapa[n].saldo+=+v.saldo||0;
+    });
+    const ws=XLSX.utils.aoa_to_sheet([
+      ['Cliente','No. Compras','Total Facturado','Saldo Pendiente'],
+      ...Object.values(mapa).sort((a,b)=>b.total-a.total).map(c=>[c.nombre,c.ventas,c.total,c.saldo])
+    ]);
+    XLSX.utils.book_append_sheet(wb,ws,'Clientes');
+  }
+  if(tab==='inventario'||tab==='todos'){
+    const ws=XLSX.utils.aoa_to_sheet([
+      ['Insumo','Categoría','Stock','Unidad','Costo/Unidad','Valor Inventario'],
+      ...insumos.map(i=>[i.nombre,i.categoria||'—',+i.stock||0,i.unidad,+i.costo||0,(+i.stock||0)*(+i.costo||0)])
+    ]);
+    XLSX.utils.book_append_sheet(wb,ws,'Inventario');
+  }
+  if(tab==='compras'||tab==='todos'){
+    const f=compras.filter(c=>(!desde||c.fecha>=desde)&&(!hasta||c.fecha<=hasta));
+    const ws=XLSX.utils.aoa_to_sheet([
+      ['Fecha','Insumo','Proveedor','Cantidad','Presentación','Contenido Total','Unidad','Costo Total','Costo/Unidad','Pago','Estado'],
+      ...f.map(c=>[c.fecha,c.insumoNombre||c.descripcion,c.proveedor||'—',c.cantidad,c.presentacion,c.totalContenido||0,c.unidadContenido||'—',+c.costoTotal||0,+c.costoPorUnidadContenido||0,c.metodoPago||c.pagoTipo,c.pagado?'Pagada':'Crédito'])
+    ]);
+    XLSX.utils.book_append_sheet(wb,ws,'Compras');
+  }
+  if(tab==='gastos'||tab==='todos'){
+    const f=gastos.filter(g=>(!desde||g.fecha>=desde)&&(!hasta||g.fecha<=hasta));
+    const ws=XLSX.utils.aoa_to_sheet([
+      ['Fecha','Concepto','Categoría','Monto'],
+      ...f.map(g=>[g.fecha,g.concepto||g.descripcion||'—',g.categoria||'—',+g.monto||0])
+    ]);
+    XLSX.utils.book_append_sheet(wb,ws,'Gastos');
+  }
+  if(tab==='pedidos'||tab==='todos'){
+    const f=(pedidos||[]).filter(p=>(!desde||p.fecha>=desde)&&(!hasta||p.fecha<=hasta));
+    const ws=XLSX.utils.aoa_to_sheet([
+      ['Fecha','Entrega','Cliente','Descripción','Total','Anticipo','Saldo','Estatus'],
+      ...f.map(p=>[p.fecha||'—',p.entrega||'—',p.cliente||'—',p.descripcion||'—',+p.total||0,+p.anticipo||0,+p.saldo||0,p.estatus||'—'])
+    ]);
+    XLSX.utils.book_append_sheet(wb,ws,'Pedidos');
+  }
+  if(tab==='prendas'){
+    const ventasPer=ventas.filter(v=>(!desde||v.fecha>=desde)&&(!hasta||v.fecha<=hasta));
+    const rows=[];
+    ventasPer.forEach(v=>{
+      if(Array.isArray(v.items)&&v.items.length>0){
+        v.items.forEach(it=>rows.push([v.fecha,v.cliente||'—',it.tipo,it.genero||'—',it.talla||'—',it.color||'—',it.material||'—',it.tipoPrenda||'—',it.proceso||'—',it.cantidad,it.precio]));
+      } else {
+        rows.push([v.fecha,v.cliente||'—',v.genero||'—',v.genero||'—',v.talla||'—',v.color||'—','—','—',v.tipoProceso||'—',v.cantidad,v.precio]);
+      }
+    });
+    const ws=XLSX.utils.aoa_to_sheet([
+      ['Fecha','Cliente','Tipo','Género','Talla','Color','Material','Tipo Prenda','Técnica','Cantidad','Precio'],
+      ...rows
+    ]);
+    XLSX.utils.book_append_sheet(wb,ws,'Prendas');
+  }
+  if(!wb.SheetNames.length){toast('⚠️ Genera el reporte primero');return;}
+  const fname=`beloma-${tab}-${desde||'inicio'}-${hasta||'fin'}.xlsx`;
+  XLSX.writeFile(wb,fname);
+  toast('📊 Excel generado: '+fname);
 };
 
 
@@ -5406,110 +5492,320 @@ window.eliminarCorte = async function(id) {
 // ═══════════════════════════════════════════════════════════════════
 //  TABS DE REPORTES
 // ═══════════════════════════════════════════════════════════════════
-let tabReporteActual = 'ventas';
+let tabReporteActual='ventas';
 
-window.cambiarTabReporte = function(tab) {
-  tabReporteActual = tab;
-  document.querySelectorAll('.reporte-tab').forEach(b => b.classList.toggle('activo', b.dataset.tab===tab));
-  ['ventas','clientes','cortes'].forEach(t => {
-    document.getElementById('reporte-tab-'+t).style.display = t===tab ? 'block' : 'none';
+window.cambiarTabReporte=function(tab){
+  tabReporteActual=tab;
+  document.querySelectorAll('.reporte-tab').forEach(b=>b.classList.toggle('activo',b.dataset.tab===tab));
+  ['ventas','prendas','clientes','inventario','compras','gastos','pedidos','cortes'].forEach(t=>{
+    const el=document.getElementById('reporte-tab-'+t);
+    if(el) el.style.display=t===tab?'block':'none';
   });
-  if(tab==='clientes') generarReporteClientes();
-  if(tab==='cortes') generarReporteCortes();
+  generarReporteActivo();
 };
 
-window.generarReporteClientes = function() {
+window.generarReporteActivo=function(){
+  const t=tabReporteActual;
+  if(t==='ventas') window.generarReporte();
+  else if(t==='prendas') generarReportePrendas();
+  else if(t==='clientes') generarReporteClientes();
+  else if(t==='inventario') generarReporteInventario();
+  else if(t==='compras') generarReporteCompras();
+  else if(t==='gastos') generarReporteGastosRep();
+  else if(t==='pedidos') generarReportePedidos();
+  else if(t==='cortes') generarReporteCortes();
+};
+
+function _repFechas(){
+  return{desde:document.getElementById('reporte-desde')?.value||'',hasta:document.getElementById('reporte-hasta')?.value||''};
+}
+function _filtrarFechas(lista,campo='fecha'){
+  const{desde,hasta}=_repFechas();
+  return lista.filter(x=>(!desde||(x[campo]||'')>=desde)&&(!hasta||(x[campo]||'')<=hasta));
+}
+function _cards(items){
+  return`<div style="display:flex;gap:12px;margin-bottom:18px;flex-wrap:wrap;">${items.map(c=>`<div style="background:var(--bg-card);border:1px solid var(--border);border-radius:8px;padding:10px 16px;min-width:120px;"><div style="font-size:11px;color:var(--ink-soft);font-weight:600;text-transform:uppercase;">${c.label}</div><div style="font-size:20px;font-weight:700;color:${c.color||'inherit'};">${c.val}</div></div>`).join('')}</div>`;
+}
+function _tabla(cols,rows){
+  return`<div class="table-wrap"><table><thead><tr>${cols.map(c=>`<th>${c}</th>`).join('')}</tr></thead><tbody>${rows.join('')}</tbody></table></div>`;
+}
+function _agrupar(lista,key){const m={};lista.forEach(x=>{const k=x[key]||'—';m[k]=(m[k]||0)+1;});return Object.entries(m).sort((a,b)=>b[1]-a[1]);}
+function _agruparMonto(lista,key){const m={};lista.forEach(x=>{const k=x[key]||'—';if(!m[k])m[k]={cnt:0,total:0};m[k].cnt++;m[k].total+=+x.total||0;});return Object.entries(m).map(([k,v])=>({key:k,...v})).sort((a,b)=>b.total-a.total);}
+
+// VENTAS
+window.generarReporte=function(){
+  const{desde,hasta}=_repFechas();
+  const canal=document.getElementById('rep-v-canal')?.value||'';
+  const metodo=document.getElementById('rep-v-metodo')?.value||'';
+  const cont=document.getElementById('reporte-contenido');if(!cont)return;
+  let f=ventas.filter(v=>{
+    const md=!desde||v.fecha>=desde,mh=!hasta||v.fecha<=hasta;
+    return md&&mh&&(!canal||v.canal===canal)&&(!metodo||v.metodoPago===metodo);
+  });
+  if(!f.length){cont.innerHTML='<div class="empty-state"><div class="icon">📊</div><p>Sin ventas en el período.</p></div>';return;}
+  const total=f.reduce((s,v)=>s+(+v.total||0),0);
+  const unidades=f.reduce((s,v)=>s+(+v.cantidad||0),0);
+  const ticket=f.length>0?total/f.length:0;
+  const porCanal=_agruparMonto(f,'canal');
+  const porMetodo=_agrupar(f,'metodoPago');
+  const porFecha={};
+  f.forEach(v=>{const k=v.fecha;if(!porFecha[k])porFecha[k]={cnt:0,total:0};porFecha[k].cnt++;porFecha[k].total+=+v.total||0;});
+  cont.innerHTML=
+    _cards([
+      {label:'Ventas',val:f.length},{label:'Unidades',val:unidades},
+      {label:'Total período',val:fmtMoney(total),color:'var(--green)'},
+      {label:'Ticket promedio',val:fmtMoney(ticket)},
+      {label:'Saldo pendiente',val:fmtMoney(f.reduce((s,v)=>s+(+v.saldo||0),0)),color:'var(--red)'},
+    ])+
+    `<div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:18px;">
+      <div><div style="font-weight:700;margin-bottom:8px;">📊 Por canal</div>
+      ${_tabla(['Canal','Ventas','Total'],porCanal.map(c=>`<tr><td>${c.key}</td><td>${c.cnt}</td><td style="color:var(--green);font-weight:700;">${fmtMoney(c.total)}</td></tr>`))}
+      </div>
+      <div><div style="font-weight:700;margin-bottom:8px;">💳 Por método de pago</div>
+      ${_tabla(['Método','Ventas'],porMetodo.map(([k,v])=>`<tr><td>${k||'—'}</td><td>${v}</td></tr>`))}
+      </div>
+    </div>`+
+    `<div style="font-weight:700;margin-bottom:8px;">📅 Por fecha</div>`+
+    _tabla(['Fecha','Ventas','Total'],Object.entries(porFecha).sort((a,b)=>b[0].localeCompare(a[0])).map(([fd,d])=>`<tr><td>${fd}</td><td>${d.cnt}</td><td style="color:var(--green);font-weight:700;">${fmtMoney(d.total)}</td></tr>`))+
+    `<div style="font-weight:700;margin:18px 0 8px;">📋 Listado</div>`+
+    _tabla(['Fecha','Cliente','Producto','Canal','Cant.','Total','Anticipo','Saldo','Método'],
+      f.sort((a,b)=>b.fecha.localeCompare(a.fecha)).map(v=>`<tr>
+        <td>${v.fecha}</td><td>${v.cliente||'—'}</td>
+        <td style="font-size:11px;">${v.producto||'—'}</td>
+        <td>${v.canal}</td><td>${v.cantidad}</td>
+        <td style="color:var(--green);font-weight:700;">${fmtMoney(v.total)}</td>
+        <td>${+v.anticipo>0?fmtMoney(v.anticipo):'—'}</td>
+        <td style="color:${+v.saldo>0?'var(--red)':'inherit'};">${+v.saldo>0?fmtMoney(v.saldo):'—'}</td>
+        <td style="font-size:11px;">${v.metodoPago||'—'}</td>
+      </tr>`));
+};
+
+// PRENDAS
+function generarReportePrendas(){
+  const cont=document.getElementById('reporte-prendas-contenido');if(!cont)return;
+  const fg=document.getElementById('rep-p-genero')?.value||'';
+  const ft=document.getElementById('rep-p-tecnica')?.value||'';
+  const fm=document.getElementById('rep-p-material')?.value||'';
+  const ventasPer=_filtrarFechas(ventas);
+  const items=[];
+  ventasPer.forEach(v=>{
+    if(Array.isArray(v.items)&&v.items.length>0){
+      v.items.forEach(it=>items.push({...it,fecha:v.fecha}));
+    } else {
+      items.push({tipo:v.genero||'Otro',genero:v.genero||'',talla:v.talla||'',color:v.color||'',proceso:v.tipoProceso||'',material:'',tipoPrenda:'',cantidad:v.cantidad||1,fecha:v.fecha});
+    }
+  });
+  let f=items.filter(it=>(!fg||it.genero===fg)&&(!ft||it.proceso===ft)&&(!fm||it.material===fm));
+  if(!f.length){cont.innerHTML='<div class="empty-state"><div class="icon">👕</div><p>Sin datos de prendas.</p></div>';return;}
+  const totalPzas=f.reduce((s,it)=>s+(+it.cantidad||0),0);
+  const sec=(titulo,datos)=>{
+    const d=datos.filter(([k])=>k&&k!=='—');
+    if(!d.length)return'';
+    return`<div><div style="font-weight:700;margin-bottom:8px;">${titulo}</div>${_tabla(['Categoría','Pzas','%'],d.map(([k,v])=>`<tr><td>${k}</td><td>${v}</td><td style="color:var(--ink-soft);">${totalPzas>0?(v/totalPzas*100).toFixed(1)+'%':''}</td></tr>`))}</div>`;
+  };
+  cont.innerHTML=_cards([{label:'Prendas totales',val:totalPzas}])+
+    `<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:16px;">
+      ${sec('👫 Por género',_agrupar(f,'genero'))}
+      ${sec('📏 Por talla',_agrupar(f,'talla'))}
+      ${sec('🎨 Por color',_agrupar(f,'color'))}
+      ${sec('🖨️ Por técnica',_agrupar(f,'proceso'))}
+      ${sec('🧵 Por material',_agrupar(f,'material'))}
+      ${sec('👕 Por tipo de prenda',_agrupar(f,'tipoPrenda'))}
+    </div>`;
+}
+
+// CLIENTES
+window.generarReporteClientes=function(){
   const q=(document.getElementById('reporte-cli-buscar')?.value||'').toLowerCase();
   const canal=document.getElementById('reporte-cli-canal')?.value||'';
-  const cont=document.getElementById('reporte-clientes-contenido');
-  if(!cont) return;
+  const cont=document.getElementById('reporte-clientes-contenido');if(!cont)return;
+  const{desde,hasta}=_repFechas();
   const mapa={};
-  ventas.forEach(v=>{const n=(v.cliente||'Público en general').trim();if(canal&&v.canal!==canal)return;if(q&&!n.toLowerCase().includes(q))return;if(!mapa[n])mapa[n]={nombre:n,ventas:0,total:0,canales:new Set(),ultima:''};mapa[n].ventas++;mapa[n].total+=+v.total||0;mapa[n].canales.add(v.canal||'Local');if(v.fecha>mapa[n].ultima)mapa[n].ultima=v.fecha;});
+  ventas.filter(v=>{
+    const md=!desde||v.fecha>=desde,mh=!hasta||v.fecha<=hasta;
+    return md&&mh&&(!canal||v.canal===canal);
+  }).forEach(v=>{
+    const n=(v.cliente||'Público en general').trim();
+    if(q&&!n.toLowerCase().includes(q))return;
+    if(!mapa[n])mapa[n]={nombre:n,ventas:0,total:0,anticipo:0,saldo:0,canales:new Set(),ultima:'',items:0};
+    mapa[n].ventas++;mapa[n].total+=+v.total||0;mapa[n].anticipo+=+v.anticipo||0;
+    mapa[n].saldo+=+v.saldo||0;mapa[n].items+=+v.cantidad||0;
+    mapa[n].canales.add(v.canal||'Local');
+    if(v.fecha>mapa[n].ultima)mapa[n].ultima=v.fecha;
+  });
   const lista=Object.values(mapa).sort((a,b)=>b.total-a.total);
   if(!lista.length){cont.innerHTML='<div class="empty-state"><div class="icon">👥</div><p>No hay clientes.</p></div>';return;}
   const tot=lista.reduce((s,c)=>s+c.total,0);
-  cont.innerHTML=`<div style="display:flex;gap:14px;margin-bottom:18px;flex-wrap:wrap;">
-    <div style="background:var(--bg-card);border:1px solid var(--border);border-radius:8px;padding:10px 16px;"><div style="font-size:11px;color:var(--ink-soft);font-weight:600;text-transform:uppercase;">Clientes únicos</div><div style="font-size:22px;font-weight:700;">${lista.length}</div></div>
-    <div style="background:var(--bg-card);border:1px solid var(--border);border-radius:8px;padding:10px 16px;"><div style="font-size:11px;color:var(--ink-soft);font-weight:600;text-transform:uppercase;">Total facturado</div><div style="font-size:22px;font-weight:700;color:var(--green);">${fmtMoney(tot)}</div></div>
-  </div>
-  <div class="table-wrap"><table><thead><tr><th>#</th><th>Cliente</th><th>Ventas</th><th>Total</th><th>Canales</th><th>Última compra</th></tr></thead>
-  <tbody>${lista.map((c,i)=>`<tr><td style="color:var(--ink-soft);">${i+1}</td><td><strong>${c.nombre}</strong></td><td>${c.ventas}</td><td style="color:var(--green);font-weight:700;">${fmtMoney(c.total)}</td><td style="font-size:12px;">${[...c.canales].join(', ')}</td><td style="font-size:12px;color:var(--ink-soft);">${c.ultima}</td></tr>`).join('')}</tbody></table></div>`;
+  cont.innerHTML=_cards([
+    {label:'Clientes únicos',val:lista.length},
+    {label:'Total facturado',val:fmtMoney(tot),color:'var(--green)'},
+    {label:'Saldo pendiente',val:fmtMoney(lista.reduce((s,c)=>s+c.saldo,0)),color:'var(--red)'},
+  ])+_tabla(['#','Cliente','Compras','Prendas','Total','Pagado','Saldo','Canales','Última compra'],
+    lista.map((c,i)=>`<tr>
+      <td style="color:var(--ink-soft);">${i+1}</td><td><strong>${c.nombre}</strong></td>
+      <td>${c.ventas}</td><td>${c.items}</td>
+      <td style="color:var(--green);font-weight:700;">${fmtMoney(c.total)}</td>
+      <td>${fmtMoney(c.anticipo)}</td>
+      <td style="color:${c.saldo>0?'var(--red)':'inherit'};font-weight:${c.saldo>0?'700':'400'};">${c.saldo>0?fmtMoney(c.saldo):'—'}</td>
+      <td style="font-size:11px;">${[...c.canales].join(', ')}</td>
+      <td style="font-size:12px;color:var(--ink-soft);">${c.ultima}</td>
+    </tr>`));
 };
 
-window.generarReporteCortes = function() {
-  const desde=document.getElementById('reporte-corte-desde')?.value||'';
-  const hasta=document.getElementById('reporte-corte-hasta')?.value||'';
-  const cont=document.getElementById('reporte-cortes-contenido');
-  if(!cont) return;
-  let f=cortesCaja.slice();
-  if(desde) f=f.filter(c=>c.fecha>=desde);
-  if(hasta) f=f.filter(c=>c.fecha<=hasta);
+// INVENTARIO
+function generarReporteInventario(){
+  const cont=document.getElementById('reporte-inventario-contenido');if(!cont)return;
+  if(!insumos.length){cont.innerHTML='<div class="empty-state"><div class="icon">📦</div><p>Sin insumos.</p></div>';return;}
+  const ventasPer=_filtrarFechas(ventas);
+  const totalTintaB=ventasPer.reduce((s,v)=>s+(+v.tintaBlanca||0),0);
+  const totalTintaC=ventasPer.reduce((s,v)=>s+(+v.tintaColor||0),0);
+  const totalCostoTinta=ventasPer.reduce((s,v)=>s+(+v.costoTinta||0),0);
+  cont.innerHTML=
+    `<div style="font-weight:700;font-size:15px;margin-bottom:12px;">📦 Stock actual</div>`+
+    _tabla(['Insumo','Categoría','Stock','Unidad','Costo/und.','Valor inventario'],
+      insumos.map(i=>`<tr><td style="font-weight:600;">${i.nombre}</td><td style="font-size:12px;">${i.categoria||'—'}</td>
+        <td><span class="badge ${+i.stock>0?'badge-green':'badge-red'}">${i.stock}</span></td>
+        <td>${i.unidad}</td><td>${fmtMoney(i.costo||0)}</td>
+        <td style="font-weight:700;">${fmtMoney((+i.stock||0)*(+i.costo||0))}</td></tr>`))+
+    _cards([
+      {label:'Valor total inventario',val:fmtMoney(insumos.reduce((s,i)=>s+(+i.stock||0)*(+i.costo||0),0)),color:'var(--green)'},
+    ])+
+    `<div style="font-weight:700;font-size:15px;margin:18px 0 12px;">🖨️ Consumo de tinta (período)</div>`+
+    _cards([
+      {label:'Tinta blanca',val:totalTintaB.toFixed(2)+' cc'},
+      {label:'Tinta CMYK',val:totalTintaC.toFixed(2)+' cc'},
+      {label:'Costo tinta',val:fmtMoney(totalCostoTinta),color:'var(--red)'},
+    ])+
+    `<div style="font-weight:700;font-size:15px;margin:18px 0 12px;">🛒 Compras del período</div>`+
+    _tabla(['Fecha','Insumo','Qty','Contenido','Proveedor','Costo','Pago'],
+      _filtrarFechas(compras).sort((a,b)=>b.fecha.localeCompare(a.fecha)).map(c=>`<tr>
+        <td>${c.fecha}</td><td style="font-weight:600;">${c.insumoNombre||c.descripcion||'—'}</td>
+        <td>${c.cantidad} ${c.presentacion}</td><td>${c.totalContenido||0} ${c.unidadContenido||''}</td>
+        <td>${c.proveedor||'—'}</td><td style="color:var(--red);font-weight:700;">${fmtMoney(c.costoTotal)}</td>
+        <td><span class="badge ${c.pagado?'badge-green':'badge-gold'}">${c.pagado?'✅ Pagada':'📋 Crédito'}</span></td>
+      </tr>`));
+}
 
-  // Para el reporte incluimos TODOS los canales (ML, Amazon, Shopify + locales)
-  // Calcular ventas de plataformas por fecha para cada corte
-  const ventasPorFecha = {};
-  ventas.forEach(v => {
-    if(!ventasPorFecha[v.fecha]) ventasPorFecha[v.fecha] = { local:0, plataforma:0 };
-    const esLocal = ['Local','Foráneo'].includes(v.canal);
-    if(esLocal) ventasPorFecha[v.fecha].local += +v.total||0;
-    else ventasPorFecha[v.fecha].plataforma += +v.total||0;
+// COMPRAS / PROVEEDORES
+function generarReporteCompras(){
+  const cont=document.getElementById('reporte-compras-contenido');if(!cont)return;
+  const q=(document.getElementById('rep-compras-proveedor')?.value||'').toLowerCase();
+  let f=_filtrarFechas(compras).filter(c=>!q||(c.proveedor||'').toLowerCase().includes(q));
+  if(!f.length){cont.innerHTML='<div class="empty-state"><div class="icon">🛒</div><p>Sin compras en el período.</p></div>';return;}
+  const porProv={};
+  f.forEach(c=>{const k=c.proveedor||'Sin proveedor';if(!porProv[k])porProv[k]={nombre:k,compras:0,total:0,deuda:0,insumos:new Set()};
+    porProv[k].compras++;porProv[k].total+=+c.costoTotal||0;
+    if(!c.pagado&&c.pagoTipo==='credito')porProv[k].deuda+=+c.costoTotal||0;
+    porProv[k].insumos.add(c.insumoNombre||c.descripcion||'—');
   });
+  const listaProv=Object.values(porProv).sort((a,b)=>b.total-a.total);
+  cont.innerHTML=_cards([
+    {label:'Compras',val:f.length},
+    {label:'Total invertido',val:fmtMoney(f.reduce((s,c)=>s+(+c.costoTotal||0),0)),color:'var(--red)'},
+    {label:'Deuda pendiente',val:fmtMoney(f.filter(c=>!c.pagado&&c.pagoTipo==='credito').reduce((s,c)=>s+(+c.costoTotal||0),0)),color:'var(--gold)'},
+  ])+
+  `<div style="font-weight:700;margin-bottom:8px;">🏪 Por proveedor</div>`+
+  _tabla(['Proveedor','Compras','Total','Deuda','Insumos'],
+    listaProv.map(p=>`<tr><td style="font-weight:600;">${p.nombre}</td><td>${p.compras}</td>
+      <td style="color:var(--red);font-weight:700;">${fmtMoney(p.total)}</td>
+      <td style="color:${p.deuda>0?'var(--gold)':'inherit'};font-weight:${p.deuda>0?'700':'400'};">${p.deuda>0?fmtMoney(p.deuda):'—'}</td>
+      <td style="font-size:11px;">${[...p.insumos].slice(0,3).join(', ')}</td></tr>`))+
+  `<div style="font-weight:700;margin:18px 0 8px;">📋 Detalle</div>`+
+  _tabla(['Fecha','Insumo','Prov.','Cant.','Contenido','Costo','Método','Estado'],
+    f.sort((a,b)=>b.fecha.localeCompare(a.fecha)).map(c=>`<tr>
+      <td>${c.fecha}</td><td style="font-weight:600;font-size:12px;">${c.insumoNombre||c.descripcion||'—'}</td>
+      <td style="font-size:12px;">${c.proveedor||'—'}</td><td>${c.cantidad} ${c.presentacion}</td>
+      <td style="font-size:12px;">${c.totalContenido||0} ${c.unidadContenido||''}</td>
+      <td style="color:var(--red);font-weight:700;">${fmtMoney(c.costoTotal)}</td>
+      <td style="font-size:11px;">${c.metodoPago||'—'}</td>
+      <td><span class="badge ${c.pagado?'badge-green':'badge-gold'}">${c.pagado?'✅ Pagada':'📋 Crédito'}</span></td>
+    </tr>`));
+}
 
+// GASTOS
+function generarReporteGastosRep(){
+  const cont=document.getElementById('reporte-gastos-contenido');if(!cont)return;
+  const f=_filtrarFechas(gastos);
+  if(!f.length){cont.innerHTML='<div class="empty-state"><div class="icon">💸</div><p>Sin gastos.</p></div>';return;}
+  const total=f.reduce((s,g)=>s+(+g.monto||0),0);
+  const porCat=_agruparMonto(f,'categoria');
+  cont.innerHTML=_cards([
+    {label:'Total gastos',val:fmtMoney(total),color:'var(--red)'},{label:'No. gastos',val:f.length},
+  ])+`<div style="font-weight:700;margin-bottom:8px;">📊 Por categoría</div>`+
+  _tabla(['Categoría','Gastos','Total'],porCat.map(c=>`<tr><td>${c.key}</td><td>${c.cnt}</td><td style="color:var(--red);font-weight:700;">${fmtMoney(c.total)}</td></tr>`))+
+  `<div style="font-weight:700;margin:18px 0 8px;">📋 Detalle</div>`+
+  _tabla(['Fecha','Concepto','Categoría','Monto'],
+    f.sort((a,b)=>b.fecha.localeCompare(a.fecha)).map(g=>`<tr>
+      <td>${g.fecha}</td><td>${g.concepto||g.descripcion||'—'}</td>
+      <td style="font-size:12px;">${g.categoria||'—'}</td>
+      <td style="color:var(--red);font-weight:700;">${fmtMoney(g.monto||0)}</td>
+    </tr>`));
+}
+
+// PEDIDOS
+function generarReportePedidos(){
+  const cont=document.getElementById('reporte-pedidos-contenido');if(!cont)return;
+  const estatus=document.getElementById('rep-ped-estatus')?.value||'';
+  let f=_filtrarFechas(pedidos||[]).filter(p=>!estatus||p.estatus===estatus);
+  if(!f.length){cont.innerHTML='<div class="empty-state"><div class="icon">📋</div><p>Sin pedidos.</p></div>';return;}
+  cont.innerHTML=_cards([
+    {label:'Pedidos',val:f.length},
+    {label:'Total',val:fmtMoney(f.reduce((s,p)=>s+(+p.total||0),0)),color:'var(--green)'},
+    {label:'Saldo por cobrar',val:fmtMoney(f.reduce((s,p)=>s+(+p.saldo||0),0)),color:'var(--red)'},
+  ])+_tabla(['Fecha','Entrega','Cliente','Descripción','Total','Anticipo','Saldo','Estatus'],
+    f.sort((a,b)=>(b.fecha||'').localeCompare(a.fecha||'')).map(p=>`<tr>
+      <td>${p.fecha||'—'}</td><td>${p.entrega||'—'}</td>
+      <td style="font-weight:600;">${p.cliente||'—'}</td>
+      <td style="font-size:12px;">${p.descripcion||'—'}</td>
+      <td style="color:var(--green);font-weight:700;">${fmtMoney(p.total||0)}</td>
+      <td>${fmtMoney(p.anticipo||0)}</td>
+      <td style="color:${+p.saldo>0?'var(--red)':'inherit'};">${+p.saldo>0?fmtMoney(p.saldo):'—'}</td>
+      <td><span class="badge badge-gold" style="font-size:10px;">${p.estatus||'—'}</span></td>
+    </tr>`));
+}
+
+// CORTES DE CAJA
+window.generarReporteCortes=function(){
+  const cont=document.getElementById('reporte-cortes-contenido');if(!cont)return;
+  let f=_filtrarFechas(cortesCaja);
+  const ventasPorFecha={};
+  ventas.forEach(v=>{
+    if(!ventasPorFecha[v.fecha])ventasPorFecha[v.fecha]={local:0,plataforma:0};
+    const esLocal=['Local','Foráneo'].includes(v.canal);
+    if(esLocal)ventasPorFecha[v.fecha].local+=+v.total||0;
+    else ventasPorFecha[v.fecha].plataforma+=+v.total||0;
+  });
   if(!f.length){cont.innerHTML='<div class="empty-state"><div class="icon">🏪</div><p>No hay cortes.</p></div>';return;}
   const tI=f.reduce((s,c)=>s+(+c.ingresos||0),0);
   const tG=f.reduce((s,c)=>s+(+c.gastos||0),0);
   const tD=f.reduce((s,c)=>s+(+c.diferencia||0),0);
   const tP=f.reduce((s,c)=>s+(ventasPorFecha[c.fecha]?.plataforma||0),0);
-
-  cont.innerHTML=`
-    <div style="display:flex;gap:14px;margin-bottom:18px;flex-wrap:wrap;">
-      <div style="background:var(--bg-card);border:1px solid var(--border);border-radius:8px;padding:10px 16px;"><div style="font-size:11px;color:var(--ink-soft);font-weight:600;text-transform:uppercase;">Cortes</div><div style="font-size:22px;font-weight:700;">${f.length}</div></div>
-      <div style="background:var(--bg-card);border:1px solid var(--border);border-radius:8px;padding:10px 16px;"><div style="font-size:11px;color:var(--ink-soft);font-weight:600;text-transform:uppercase;">Ingresos Local+Foráneo</div><div style="font-size:22px;font-weight:700;color:var(--green);">${fmtMoney(tI)}</div></div>
-      <div style="background:var(--bg-card);border:1px solid var(--border);border-radius:8px;padding:10px 16px;"><div style="font-size:11px;color:var(--ink-soft);font-weight:600;text-transform:uppercase;">Ventas Plataformas</div><div style="font-size:22px;font-weight:700;color:var(--green);">${fmtMoney(tP)}</div></div>
-      <div style="background:var(--bg-card);border:1px solid var(--border);border-radius:8px;padding:10px 16px;"><div style="font-size:11px;color:var(--ink-soft);font-weight:600;text-transform:uppercase;">Total gastos</div><div style="font-size:22px;font-weight:700;color:var(--red);">${fmtMoney(tG)}</div></div>
-      <div style="background:var(--bg-card);border:1px solid var(--border);border-radius:8px;padding:10px 16px;"><div style="font-size:11px;color:var(--ink-soft);font-weight:600;text-transform:uppercase;">Diferencia acum.</div><div style="font-size:22px;font-weight:700;color:${tD>=0?'var(--green)':'var(--red)'};">${tD>=0?'+':''}${fmtMoney(tD)}</div></div>
-    </div>
-    <div class="table-wrap"><table>
-      <thead><tr><th>Fecha</th><th>Fondo</th><th>Local+For.</th><th>ML/Amz/Shop</th><th>💵 Efec.</th><th>📲 Transf.</th><th>🏦 Dep.</th><th>💳 Tarjeta</th><th>Gastos</th><th>Sistema</th><th>Real</th><th>Diferencia</th></tr></thead>
-      <tbody>${f.map(c=>{
-        const plat = ventasPorFecha[c.fecha]?.plataforma||0;
-        const dif = c.diferencia||0;
-        return `<tr>
-          <td>${c.fecha}</td>
-          <td>${fmtMoney(c.fondo||0)}</td>
-          <td style="color:var(--green);">${fmtMoney(c.ingresos||0)}</td>
-          <td style="color:var(--green);font-size:12px;">${fmtMoney(plat)}</td>
-          <td style="font-size:12px;">${fmtMoney(c.enEfectivo||0)}</td>
-          <td style="font-size:12px;">${fmtMoney(c.enTransf||0)}</td>
-          <td style="font-size:12px;">${fmtMoney(c.enDeposito||0)}</td>
-          <td style="font-size:12px;">${fmtMoney(c.enTarjeta||0)}</td>
-          <td style="color:var(--red);">${fmtMoney(c.gastos||0)}</td>
-          <td><strong>${fmtMoney(c.efectivoSistema||0)}</strong></td>
-          <td>${fmtMoney(c.efectivoReal||0)}</td>
-          <td style="font-weight:700;color:${dif>=0?'var(--green)':'var(--red)'};">${dif>=0?'+':''}${fmtMoney(dif)}</td>
-        </tr>`;
-      }).join('')}</tbody>
-    </table></div>`;
+  cont.innerHTML=_cards([
+    {label:'Cortes',val:f.length},
+    {label:'Ingresos Local+For.',val:fmtMoney(tI),color:'var(--green)'},
+    {label:'Ventas Plataformas',val:fmtMoney(tP),color:'var(--green)'},
+    {label:'Total gastos',val:fmtMoney(tG),color:'var(--red)'},
+    {label:'Diferencia acum.',val:(tD>=0?'+':'')+fmtMoney(tD),color:tD>=0?'var(--green)':'var(--red)'},
+  ])+_tabla(['Fecha','Fondo','Local+For.','Plataformas','💵 Efec.','📲 Transf.','🏦 Dep.','💳 Tarjeta','Gastos','Sistema','Real','Diferencia'],
+    f.map(c=>{
+      const plat=ventasPorFecha[c.fecha]?.plataforma||0;
+      const dif=c.diferencia||0;
+      return`<tr>
+        <td>${c.fecha}</td><td>${fmtMoney(c.fondo||0)}</td>
+        <td style="color:var(--green);">${fmtMoney(c.ingresos||0)}</td>
+        <td style="color:var(--green);font-size:12px;">${fmtMoney(plat)}</td>
+        <td style="font-size:12px;">${fmtMoney(c.enEfectivo||0)}</td>
+        <td style="font-size:12px;">${fmtMoney(c.enTransf||0)}</td>
+        <td style="font-size:12px;">${fmtMoney(c.enDeposito||0)}</td>
+        <td style="font-size:12px;">${fmtMoney(c.enTarjeta||0)}</td>
+        <td style="color:var(--red);">${fmtMoney(c.gastos||0)}</td>
+        <td><strong>${fmtMoney(c.efectivoSistema||0)}</strong></td>
+        <td>${fmtMoney(c.efectivoReal||0)}</td>
+        <td style="font-weight:700;color:${dif>=0?'var(--green)':'var(--red)'};">${dif>=0?'+':''}${fmtMoney(dif)}</td>
+      </tr>`;
+    }).join(''));
 };
 
-window.exportarReportePDF = function() {
-  const ids={ventas:'reporte-contenido',clientes:'reporte-clientes-contenido',cortes:'reporte-cortes-contenido'};
-  const titulos={ventas:'📊 Reporte de Ventas',clientes:'👥 Registro de Clientes',cortes:'🏪 Cortes de Caja'};
-  const cont=document.getElementById(ids[tabReporteActual])?.innerHTML;
-  if(!cont){toast('⚠️ Genera el reporte primero');return;}
-  const win=window.open('','_blank');
-  win.document.write(`<html><head><title>${titulos[tabReporteActual]}</title><style>body{font-family:Arial,sans-serif;padding:24px;font-size:13px;}table{width:100%;border-collapse:collapse;}th,td{border:1px solid #ddd;padding:8px;text-align:left;}th{background:#f5f5f5;}</style></head><body><h1>${titulos[tabReporteActual]}</h1><p style="color:#666;">Playeras Beloma · ${new Date().toLocaleString('es-MX')}</p>${cont}</body></html>`);
-  win.document.close();win.print();
-};
-
-window.exportarReporteExcel = function() {
-  if(tabReporteActual==='ventas'){
-    const desde=document.getElementById('reporte-desde')?.value||'';const hasta=document.getElementById('reporte-hasta')?.value||'';const cF=document.getElementById('reporte-canal')?.value||'';
-    let vF=ventas.slice();if(desde)vF=vF.filter(v=>v.fecha>=desde);if(hasta)vF=vF.filter(v=>v.fecha<=hasta);if(cF)vF=vF.filter(v=>v.canal===cF);
-    if(!vF.length){toast('⚠️ No hay ventas');return;}
-    _csv('Ventas_Beloma',['Folio','Fecha','Canal','Cliente','Producto','Cantidad','Precio','Descuento','Total','Método Pago','Notas'],vF.map(v=>[v.folio||'',v.fecha||'',v.canal||'',v.cliente||'',v.producto||'',v.cantidad||1,v.precio||0,v.descuento||0,v.total||0,v.metodoPago||'',v.notas||'']));
-  } else if(tabReporteActual==='clientes'){
-    const mapa={};ventas.forEach(v=>{const n=(v.cliente||'Público en general').trim();if(!mapa[n])mapa[n]={nombre:n,ventas:0,total:0,ultima:''};mapa[n].ventas++;mapa[n].total+=+v.total||0;if(v.fecha>mapa[n].ultima)mapa[n].ultima=v.fecha;});
     const lista=Object.values(mapa).sort((a,b)=>b.total-a.total);if(!lista.length){toast('⚠️ No hay datos');return;}
     _csv('Clientes_Beloma',['Cliente','Ventas','Total','Última compra'],lista.map(c=>[c.nombre,c.ventas,c.total,c.ultima]));
   } else {
