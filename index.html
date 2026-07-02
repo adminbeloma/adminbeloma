@@ -603,8 +603,8 @@ tbody td{padding:11px 14px;font-size:13.5px;vertical-align:middle;}
       </div>
     </div>
     <div class="content">
-      <div class="filter-bar">
-        <input type="text" id="search-clientes" placeholder="🔍 Buscar por nombre, ciudad..." oninput="renderClientes()">
+      <div class="filter-bar" style="flex-wrap:wrap;gap:8px;">
+        <input type="text" id="search-clientes" placeholder="🔍 Nombre, teléfono, correo..." style="flex:1;min-width:180px;" onkeydown="if(event.key==='Enter')renderClientes()">
         <select id="filter-cli-canal" onchange="renderClientes()">
           <option value="">Todos los canales</option>
           <option>Local</option>
@@ -617,10 +617,14 @@ tbody td{padding:11px 14px;font-size:13.5px;vertical-align:middle;}
         </select>
         <select id="filter-cli-tipo" onchange="renderClientes()">
           <option value="">Particular y Empresa</option>
-          <option>Particular</option>
-          <option>Empresa</option>
+          <option value="Particular">Particular</option>
+          <option value="Empresa">Empresa</option>
         </select>
-        <input type="text" id="filter-cli-ciudad" placeholder="🏙️ Filtrar por ciudad..." oninput="renderClientes()" style="min-width:160px;">
+        <input type="text" id="filter-cli-ciudad" placeholder="🏙️ Ciudad..." oninput="renderClientes()" style="min-width:130px;">
+        <label style="font-size:12px;color:var(--ink-soft);display:flex;align-items:center;gap:4px;">Desde <input type="date" id="filter-cli-desde" onchange="renderClientes()" style="font-size:12px;padding:6px 8px;border:1.5px solid var(--border);border-radius:8px;background:var(--bg-card);"></label>
+        <label style="font-size:12px;color:var(--ink-soft);display:flex;align-items:center;gap:4px;">Hasta <input type="date" id="filter-cli-hasta" onchange="renderClientes()" style="font-size:12px;padding:6px 8px;border:1.5px solid var(--border);border-radius:8px;background:var(--bg-card);"></label>
+        <button class="btn btn-accent btn-sm" onclick="renderClientes()">🔍 Buscar</button>
+        <button class="btn btn-ghost btn-sm" onclick="limpiarFiltrosClientes()">✕ Limpiar</button>
       </div>
       <div style="display:flex;gap:14px;margin-bottom:14px;flex-wrap:wrap;">
         <div style="background:var(--bg-card);border:1px solid var(--border);border-radius:8px;padding:10px 14px;"><div style="font-size:11px;color:var(--ink-soft);font-weight:600;text-transform:uppercase;">Total clientes</div><div style="font-size:18px;font-weight:700;" id="cli-count">0</div></div>
@@ -629,7 +633,7 @@ tbody td{padding:11px 14px;font-size:13.5px;vertical-align:middle;}
       </div>
       <div class="table-wrap">
         <table>
-          <thead><tr><th>Nombre</th><th>Teléfono</th><th>Canal</th><th>Ciudad</th><th>Tipo</th><th>Compras</th><th>Total gastado</th><th>Acciones</th></tr></thead>
+          <thead><tr><th>Nombre</th><th>Teléfono</th><th>Canal</th><th>Ciudad</th><th>Tipo</th><th>Registrado</th><th>Compras</th><th>Total gastado</th><th>Acciones</th></tr></thead>
           <tbody id="tabla-clientes"></tbody>
         </table>
       </div>
@@ -973,7 +977,7 @@ tbody td{padding:11px 14px;font-size:13.5px;vertical-align:middle;}
 <!-- MODAL VENTA -->
 <div class="modal-overlay" id="modal-venta">
   <div class="modal">
-    <div class="modal-header"><h2 id="modal-venta-title">Nueva Venta</h2><button class="modal-close" onclick="closeModal('modal-venta')">×</button></div>
+    <div class="modal-header"><h2 id="modal-venta-title">Nueva Venta</h2><button class="modal-close" onclick="confirmarCerrarModal('modal-venta')">×</button></div>
     <div class="modal-body">
       <input type="hidden" id="venta-id">
       <div class="form-grid">
@@ -1159,7 +1163,7 @@ tbody td{padding:11px 14px;font-size:13.5px;vertical-align:middle;}
 <!-- MODAL GASTO -->
 <div class="modal-overlay" id="modal-gasto">
   <div class="modal">
-    <div class="modal-header"><h2>Nuevo Gasto</h2><button class="modal-close" onclick="closeModal('modal-gasto')">×</button></div>
+    <div class="modal-header"><h2>Nuevo Gasto</h2><button class="modal-close" onclick="confirmarCerrarModal('modal-gasto')">×</button></div>
     <div class="modal-body">
       <input type="hidden" id="gasto-id">
       <div class="form-grid">
@@ -1232,7 +1236,7 @@ tbody td{padding:11px 14px;font-size:13.5px;vertical-align:middle;}
 <!-- MODAL PLAYERA -->
 <div class="modal-overlay" id="modal-playera">
   <div class="modal">
-    <div class="modal-header"><h2>Agregar Playera</h2><button class="modal-close" onclick="closeModal('modal-playera')">×</button></div>
+    <div class="modal-header"><h2>Agregar Playera</h2><button class="modal-close" onclick="confirmarCerrarModal('modal-playera')">×</button></div>
     <div class="modal-body">
       <input type="hidden" id="p-id">
       <div class="form-grid">
@@ -1296,7 +1300,7 @@ tbody td{padding:11px 14px;font-size:13.5px;vertical-align:middle;}
 <!-- MODAL INSUMO -->
 <div class="modal-overlay" id="modal-insumo">
   <div class="modal">
-    <div class="modal-header"><h2>Nuevo Insumo</h2><button class="modal-close" onclick="closeModal('modal-insumo')">×</button></div>
+    <div class="modal-header"><h2>Nuevo Insumo</h2><button class="modal-close" onclick="confirmarCerrarModal('modal-insumo')">×</button></div>
     <div class="modal-body">
       <input type="hidden" id="ins-id">
       <div class="form-grid">
@@ -1346,7 +1350,7 @@ tbody td{padding:11px 14px;font-size:13.5px;vertical-align:middle;}
 <!-- MODAL CONSUMO -->
 <div class="modal-overlay" id="modal-consumo">
   <div class="modal">
-    <div class="modal-header"><h2>📝 Registrar Uso de Insumo</h2><button class="modal-close" onclick="closeModal('modal-consumo')">×</button></div>
+    <div class="modal-header"><h2>📝 Registrar Uso de Insumo</h2><button class="modal-close" onclick="confirmarCerrarModal('modal-consumo')">×</button></div>
     <div class="modal-body">
       <div class="form-grid">
         <div class="form-group full"><label>Insumo *</label>
@@ -1369,7 +1373,7 @@ tbody td{padding:11px 14px;font-size:13.5px;vertical-align:middle;}
 <!-- MODAL CLIENTE -->
 <div class="modal-overlay" id="modal-cliente">
   <div class="modal">
-    <div class="modal-header"><h2>Nuevo Cliente</h2><button class="modal-close" onclick="closeModal('modal-cliente')">×</button></div>
+    <div class="modal-header"><h2>Nuevo Cliente</h2><button class="modal-close" onclick="confirmarCerrarModal('modal-cliente')">×</button></div>
     <div class="modal-body">
       <input type="hidden" id="cli-id">
       <div class="form-grid">
@@ -1429,7 +1433,7 @@ tbody td{padding:11px 14px;font-size:13.5px;vertical-align:middle;}
 <!-- MODAL COMPRA INSUMO -->
 <div class="modal-overlay" id="modal-compra">
   <div class="modal">
-    <div class="modal-header"><h2>🛒 Registrar Compra de Insumo</h2><button class="modal-close" onclick="closeModal('modal-compra')">×</button></div>
+    <div class="modal-header"><h2>🛒 Registrar Compra de Insumo</h2><button class="modal-close" onclick="confirmarCerrarModal('modal-compra')">×</button></div>
     <div class="modal-body">
       <input type="hidden" id="compra-id">
       <div class="form-grid">
@@ -1493,7 +1497,7 @@ tbody td{padding:11px 14px;font-size:13.5px;vertical-align:middle;}
 <!-- MODAL PEDIDO -->
 <div class="modal-overlay" id="modal-pedido">
   <div class="modal">
-    <div class="modal-header"><h2 id="modal-pedido-title">Nuevo Pedido</h2><button class="modal-close" onclick="closeModal('modal-pedido')">×</button></div>
+    <div class="modal-header"><h2 id="modal-pedido-title">Nuevo Pedido</h2><button class="modal-close" onclick="confirmarCerrarModal('modal-pedido')">×</button></div>
     <div class="modal-body">
       <input type="hidden" id="ped-id">
       <div class="form-grid">
@@ -1557,7 +1561,7 @@ tbody td{padding:11px 14px;font-size:13.5px;vertical-align:middle;}
 <!-- MODAL GASTO LOCAL -->
 <div class="modal-overlay" id="modal-gasto-local">
   <div class="modal">
-    <div class="modal-header"><h2>💸 Gasto Local</h2><button class="modal-close" onclick="closeModal('modal-gasto-local')">×</button></div>
+    <div class="modal-header"><h2>💸 Gasto Local</h2><button class="modal-close" onclick="confirmarCerrarModal('modal-gasto-local')">×</button></div>
     <div class="modal-body">
       <div class="form-grid">
         <div class="form-group"><label>Fecha *</label><input type="date" id="gl-fecha"></div>
@@ -1585,7 +1589,7 @@ tbody td{padding:11px 14px;font-size:13.5px;vertical-align:middle;}
 <!-- MODAL PROVEEDOR -->
 <div class="modal-overlay" id="modal-proveedor">
   <div class="modal">
-    <div class="modal-header"><h2 id="modal-prov-title">Nuevo Proveedor</h2><button class="modal-close" onclick="closeModal('modal-proveedor')">×</button></div>
+    <div class="modal-header"><h2 id="modal-prov-title">Nuevo Proveedor</h2><button class="modal-close" onclick="confirmarCerrarModal('modal-proveedor')">×</button></div>
     <div class="modal-body">
       <input type="hidden" id="prov-id">
       <div class="form-grid">
@@ -1884,7 +1888,7 @@ tbody td{padding:11px 14px;font-size:13.5px;vertical-align:middle;}
   <div class="modal" style="max-width:400px;">
     <div class="modal-header">
       <h2>💰 Fondo del día</h2>
-      <button class="modal-close" onclick="closeModal('modal-fondo-caja')">×</button>
+      <button class="modal-close" onclick="confirmarCerrarModal('modal-fondo-caja')">×</button>
     </div>
     <div class="modal-body">
       <div class="form-group">
@@ -1913,7 +1917,7 @@ tbody td{padding:11px 14px;font-size:13.5px;vertical-align:middle;}
   <div class="modal" style="max-width:520px;">
     <div class="modal-header">
       <h2>🏪 Corte de caja</h2>
-      <button class="modal-close" onclick="closeModal('modal-corte-caja')">×</button>
+      <button class="modal-close" onclick="confirmarCerrarModal('modal-corte-caja')">×</button>
     </div>
     <div class="modal-body">
       <div id="corte-resumen" style="background:var(--bg);border-radius:10px;padding:16px;margin-bottom:16px;font-size:13px;line-height:2;"></div>
@@ -3160,20 +3164,28 @@ window.guardarCliente=async function(){
 };
 
 function renderClientes(){
-  const search=(document.getElementById('search-clientes')||{value:''}).value.toLowerCase();
+  const search=(document.getElementById('search-clientes')||{value:''}).value.toLowerCase().trim();
   const canalFiltro=(document.getElementById('filter-cli-canal')||{value:''}).value;
   const tipoFiltro=(document.getElementById('filter-cli-tipo')||{value:''}).value;
-  const ciudadFiltro=(document.getElementById('filter-cli-ciudad')||{value:''}).value.toLowerCase();
+  const ciudadFiltro=(document.getElementById('filter-cli-ciudad')||{value:''}).value.toLowerCase().trim();
+  const desde=(document.getElementById('filter-cli-desde')||{value:''}).value;
+  const hasta=(document.getElementById('filter-cli-hasta')||{value:''}).value;
 
   let lista=clientes.filter(c=>{
-    const ms=!search||c.nombre?.toLowerCase().includes(search)||(c.tel||'').includes(search)||(c.correo||'').toLowerCase().includes(search);
+    const ms=!search||
+      (c.nombre||'').toLowerCase().includes(search)||
+      (c.tel||'').includes(search)||
+      (c.correo||'').toLowerCase().includes(search);
     const mc=!canalFiltro||c.canal===canalFiltro;
-    const mt=!tipoFiltro||c.tipo===tipoFiltro;
-    // Buscar ciudad en ventas del cliente
-    const ventasCli=ventas.filter(v=>v.cliente?.toLowerCase()===c.nombre?.toLowerCase());
-    const ciudadesCliente=ventasCli.map(v=>(v.ciudad||'').toLowerCase()).filter(Boolean);
-    const mciu=!ciudadFiltro||ciudadesCliente.some(ci=>ci.includes(ciudadFiltro));
-    return ms&&mc&&mt&&mciu;
+    // Filtro tipo: robusto — si el cliente no tiene tipo asignado, se trata como Particular
+    const tipoCliente=c.tipo||'Particular';
+    const mt=!tipoFiltro||tipoCliente===tipoFiltro;
+    const mciu=!ciudadFiltro||(c.ciudad||'').toLowerCase().includes(ciudadFiltro);
+    // Filtro por fecha de creación
+    const fechaCreado=(c.creado||'').slice(0,10);
+    const mDesde=!desde||fechaCreado>=desde;
+    const mHasta=!hasta||fechaCreado<=hasta;
+    return ms&&mc&&mt&&mciu&&mDesde&&mHasta;
   });
 
   const tbody=document.getElementById('tabla-clientes');
@@ -3202,14 +3214,15 @@ function renderClientes(){
   tbody.innerHTML=lista.map(c=>{
     const ventasCliente=ventas.filter(v=>v.cliente?.toLowerCase()===c.nombre?.toLowerCase());
     const totalGastado=ventasCliente.reduce((s,v)=>s+(+v.total||0),0);
-    // Obtener ciudades únicas del cliente
     const ciudades=[...new Set(ventasCliente.map(v=>v.ciudad).filter(Boolean))].join(', ');
+    const fechaReg=c.creado?c.creado.slice(0,10):'—';
     return`<tr>
       <td style="font-weight:600;">${c.nombre}</td>
       <td>${c.tel||'—'}</td>
-      <td><span class="badge ${canalColorCli[c.canal]||'badge-gray'}">${c.canal}</span></td>
-      <td style="font-size:12px;">${ciudades||'—'}</td>
-      <td><span class="badge ${c.tipo==='Empresa'?'badge-gold':'badge-gray'}" style="font-size:10px;">${c.tipo||'Particular'}</span></td>
+      <td><span class="badge ${canalColorCli[c.canal]||'badge-gray'}">${c.canal||'—'}</span></td>
+      <td style="font-size:12px;">${ciudades||c.ciudad||'—'}</td>
+      <td><span class="badge ${(c.tipo||'Particular')==='Empresa'?'badge-gold':'badge-gray'}" style="font-size:10px;">${c.tipo||'Particular'}</span></td>
+      <td style="font-size:12px;">${fechaReg}</td>
       <td>${ventasCliente.length}</td>
       <td style="font-weight:700;color:var(--green);">${fmtMoney(totalGastado)}</td>
       <td style="display:flex;gap:4px;flex-wrap:wrap;">
@@ -3220,6 +3233,16 @@ function renderClientes(){
     </tr>`;
   }).join('');
 }
+
+window.limpiarFiltrosClientes=function(){
+  ['search-clientes','filter-cli-ciudad','filter-cli-desde','filter-cli-hasta'].forEach(id=>{
+    const el=document.getElementById(id); if(el) el.value='';
+  });
+  ['filter-cli-canal','filter-cli-tipo'].forEach(id=>{
+    const el=document.getElementById(id); if(el) el.value='';
+  });
+  renderClientes();
+};
 
 // WhatsApp directo desde clientes
 window.wsCliente=function(id){
@@ -4892,7 +4915,29 @@ window.showSection = function(sec) {
 
 // INIT
 document.getElementById('fecha-hoy').textContent=new Date().toLocaleDateString('es-MX',{weekday:'long',year:'numeric',month:'long',day:'numeric'});
-document.querySelectorAll(".modal-overlay").forEach(o=>{o.addEventListener("click",e=>{if(e.target!==o)return;if(o.id==="modal-diseno"){cerrarDisenoConAdvertencia();return;}if(o.id==="modal-carga-masiva"){cerrarCargaMasivaConAdvertencia();return;}if(o.id==="modal-venta")return;o.classList.remove("open");});});
+// Confirmación al cerrar cualquier modal con la X
+window.confirmarCerrarModal=function(id){
+  // Revisar si hay campos con datos en el modal
+  const modal=document.getElementById(id);
+  if(!modal) return;
+  const inputs=[...modal.querySelectorAll('input:not([type=hidden]):not([readonly]),textarea,select')];
+  const hayDatos=inputs.some(el=>{
+    if(el.type==='checkbox'||el.type==='radio') return el.checked;
+    return (el.value||'').trim()!==''&&(el.value||'').trim()!=='0';
+  });
+  if(hayDatos){
+    if(!confirm('¿Cerrar sin guardar? Los cambios se perderán.')) return;
+  }
+  closeModal(id);
+};
+
+// Ningún modal se cierra al hacer clic fuera — solo con la X
+document.querySelectorAll(".modal-overlay").forEach(o=>{
+  o.addEventListener("click",e=>{
+    // Solo bloquear — no cerrar nada al hacer clic en el overlay
+    if(e.target===o) e.stopPropagation();
+  });
+});
 const cfgP=localStorage.getItem('pl_precio');const cfgC=localStorage.getItem('pl_costo_var');
 if(cfgP)document.getElementById('cfg-precio').value=cfgP;
 if(cfgC)document.getElementById('cfg-costo-var').value=cfgC;
