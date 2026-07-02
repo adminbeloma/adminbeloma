@@ -1304,7 +1304,7 @@ tbody td{padding:11px 14px;font-size:13.5px;vertical-align:middle;}
     <div class="modal-body">
       <input type="hidden" id="ins-id">
       <div class="form-grid">
-        <div class="form-group full"><label>Nombre *</label><input type="text" id="ins-nombre" placeholder="Ej. Líquido pretratamiento playeras negras"></div>
+        <div class="form-group full"><label>Nombre *</label><input type="text" id="ins-nombre" placeholder="Ej. Tinta Blanca DTG"></div>
         <div class="form-group"><label>Categoría</label>
           <select id="ins-categoria">
             <option>Pretratamiento negras/color</option>
@@ -1326,11 +1326,16 @@ tbody td{padding:11px 14px;font-size:13.5px;vertical-align:middle;}
         <div class="form-group"><label>Unidad de medida</label>
           <select id="ins-unidad"><option>ml/cc</option><option>ml</option><option>cc</option><option>L</option><option>gr</option><option>kg</option><option>piezas</option><option>kits</option></select>
         </div>
-        <div class="form-group"><label>Stock actual *</label><input type="number" id="ins-stock" placeholder="1000" step="0.01"></div>
-        <div class="form-group"><label>Stock mínimo (alerta)</label><input type="number" id="ins-stock-min" placeholder="200" step="0.01"></div>
-        <div class="form-group"><label>Costo por unidad ($)</label><input type="number" id="ins-costo" placeholder="0.50" step="0.0001"></div>
-        <div class="form-group"><label>Uso por playera (unidad)</label><input type="number" id="ins-uso-playera" placeholder="15" step="0.01"></div>
-        <div class="form-group"><label>Playeras tratadas/día (promedio)</label><input type="number" id="ins-uso-dia" placeholder="10" step="0.1"></div>
+        <div class="form-group"><label>Stock actual *</label><input type="number" id="ins-stock" placeholder="1500" step="0.01"></div>
+        <!-- Campos ocultos para compatibilidad con código existente -->
+        <input type="hidden" id="ins-stock-min" value="0">
+        <input type="hidden" id="ins-costo" value="0">
+        <input type="hidden" id="ins-uso-playera" value="0">
+        <input type="hidden" id="ins-uso-dia" value="0">
+        <div class="form-group full" style="background:var(--bg);border-radius:8px;padding:10px 14px;font-size:13px;color:var(--ink-soft);">
+          💡 El <strong>costo por unidad</strong> se calculará automáticamente cuando registres una compra.<br>
+          El <strong>uso promedio por playera</strong> se calculará desde los cc que capturas en cada venta.
+        </div>
         <div class="form-group full"><label>Imagen del insumo</label>
           <label class="btn btn-ghost btn-sm" style="cursor:pointer;width:fit-content;">
             📷 Seleccionar imagen
@@ -3036,29 +3041,48 @@ function renderInsumos(){
   const empty=document.getElementById('insumos-empty');
   const alertasEl=document.getElementById('insumos-alertas');
   if(!tbody)return;
-  const criticos=insumos.filter(i=>+i.stock<=(+i.stockMin||0));
-  const bajos=insumos.filter(i=>+i.stock>(+i.stockMin||0)&&+i.stock<=(+i.stockMin||0)*1.5);
+  const criticos=insumos.filter(i=>+i.stock<=(+i.stockMin||0)&&+i.stockMin>0);
+  const bajos=insumos.filter(i=>+i.stockMin>0&&+i.stock>(+i.stockMin||0)&&+i.stock<=(+i.stockMin||0)*1.5);
   alertasEl.innerHTML=[
-    ...criticos.map(i=>`<div class="alerta-item alerta-critica">🚨 <div><strong>${i.nombre}</strong> — Stock crítico: ${i.stock} ${i.unidad}. Mínimo: ${i.stockMin}</div></div>`),
-    ...bajos.map(i=>`<div class="alerta-item alerta-baja">⚠️ <div><strong>${i.nombre}</strong> — Stock bajo: ${i.stock} ${i.unidad}. Mínimo: ${i.stockMin}</div></div>`)
+    ...criticos.map(i=>`<div class="alerta-item alerta-critica">🚨 <div><strong>${i.nombre}</strong> — Stock crítico: ${i.stock} ${i.unidad}</div></div>`),
+    ...bajos.map(i=>`<div class="alerta-item alerta-baja">⚠️ <div><strong>${i.nombre}</strong> — Stock bajo: ${i.stock} ${i.unidad}</div></div>`)
   ].join('');
   if(insumos.length===0){tbody.innerHTML='';empty.style.display='block';return;}
   empty.style.display='none';
+
+  // Calcular uso promedio por playera desde ventas reales
+  const ventasConTintaB=ventas.filter(v=>(+v.tintaBlanca||0)>0&&(+v.cantidad||0)>0);
+  const ventasConTintaC=ventas.filter(v=>(+v.tintaColor||0)>0&&(+v.cantidad||0)>0);
+  const promedioTintaB=ventasConTintaB.length>0
+    ?ventasConTintaB.reduce((s,v)=>s+(+v.tintaBlanca||0)/(+v.cantidad||1),0)/ventasConTintaB.length:0;
+  const promedioTintaC=ventasConTintaC.length>0
+    ?ventasConTintaC.reduce((s,v)=>s+(+v.tintaColor||0)/(+v.cantidad||1),0)/ventasConTintaC.length:0;
+  // Promedio de playeras por día (últimos 30 días con ventas)
+  const hace30=new Date(Date.now()-30*86400000).toISOString().slice(0,10);
+  const ventasRecientes=ventas.filter(v=>v.fecha>=hace30);
+  const diasConVentas=[...new Set(ventasRecientes.map(v=>v.fecha))].length||1;
+  const playeirasPorDia=ventasRecientes.reduce((s,v)=>s+(+v.cantidad||0),0)/diasConVentas;
+
   tbody.innerHTML=insumos.map(i=>{
-    const diasRestantes=i.usoDia>0?Math.floor(+i.stock/+i.usoDia):null;
+    const esBlanca=i.categoria==='Tinta blanca';
+    const esCmyk=['Tinta Cyan','Tinta Magenta','Tinta Amarilla','Tinta Negra'].includes(i.categoria);
+    // Uso promedio calculado desde ventas reales
+    const usoPromedio=esBlanca?promedioTintaB:esCmyk?promedioTintaC:(i.usoPlayera||0);
+    const usoDiaCalc=usoPromedio>0&&playeirasPorDia>0?usoPromedio*playeirasPorDia:(i.usoDia||0);
+    const diasRestantes=usoDiaCalc>0?Math.floor(+i.stock/usoDiaCalc):null;
     const diasColor=diasRestantes===null?'var(--ink-soft)':diasRestantes<=3?'var(--red)':diasRestantes<=7?'var(--gold)':'var(--green)';
-    const stockOk=+i.stock>(+i.stockMin||0);
+    const stockOk=!i.stockMin||+i.stock>(+i.stockMin||0);
+    const usoLabel=usoPromedio>0?`${usoPromedio.toFixed(2)} ${i.unidad}/pza (${ventasConTintaB.length||ventasConTintaC.length} ventas)`:'—';
     return`<tr>
       <td>
-        ${i.imagen ? `<img src="${i.imagen}" style="width:36px;height:36px;object-fit:cover;border-radius:6px;border:1px solid var(--border);vertical-align:middle;margin-right:8px;">` : '<span style="font-size:20px;margin-right:8px;">🧴</span>'}
+        ${i.imagen?`<img src="${i.imagen}" style="width:36px;height:36px;object-fit:cover;border-radius:6px;border:1px solid var(--border);vertical-align:middle;margin-right:8px;">`:'<span style="font-size:20px;margin-right:8px;">🧴</span>'}
         <span style="font-weight:600;">${i.nombre}</span>
       </td>
       <td>${i.categoria}</td>
       <td><span class="badge ${stockOk?'badge-green':'badge-red'}">${i.stock} ${i.unidad}</span></td>
-      <td>${i.stockMin} ${i.unidad}</td>
       <td>${i.unidad}</td>
-      <td>${fmtMoney(i.costo)}</td>
-      <td>${i.usoDia||'—'} ${i.usoDia?i.unidad+'/día':''}</td>
+      <td>${fmtMoney(i.costo||0)}</td>
+      <td style="font-size:12px;">${(esBlanca||esCmyk)?usoLabel:(i.usoPlayera?i.usoPlayera+' '+i.unidad+'/pza':'—')}</td>
       <td style="font-weight:700;color:${diasColor};">${diasRestantes!==null?diasRestantes+' días':'—'}</td>
       <td style="display:flex;gap:6px;">
         <button class="btn btn-ghost btn-sm" onclick="openInsumoModal('${i.id}')">✏️ Editar</button>
@@ -4387,12 +4411,17 @@ window.guardarCompra=async function(){
   if(document.getElementById('compra-actualizar-stock').checked && insId && totalContenido>0){
     const ins=insumos.find(x=>x.id===insId);
     if(ins){
-      await setDoc(doc(db,'pl_insumos',insId),{...ins,stock:+(+ins.stock+totalContenido).toFixed(4)});
+      const nuevoCosto=totalContenido>0?costoTotal/totalContenido:ins.costo||0;
+      await setDoc(doc(db,'pl_insumos',insId),{
+        ...ins,
+        stock:+(+ins.stock+totalContenido).toFixed(4),
+        costo:+nuevoCosto.toFixed(6) // costo por cc/ml actualizado automáticamente
+      });
+      toast('✅ Compra registrada — Stock y costo/unidad actualizados');
     }
+  } else {
+    toast('✅ Compra registrada');
   }
-  
-  closeModal('modal-compra');
-  toast('✅ Compra registrada'+(document.getElementById('compra-actualizar-stock')?.checked&&insId?' — Stock actualizado':''));
 };
 
 function renderCompras(){
