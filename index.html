@@ -2577,14 +2577,6 @@ function renderVentas(){
   document.getElementById('ventas-unidades-periodo').textContent=unidadesPer;
   document.getElementById('ventas-ticket-periodo').textContent=lista.length>0?fmtMoney(totalPer/lista.length):'$0';
   if(!tbody)return;
-  
-  // Mostrar botón cargar más si hay más ventas disponibles
-  const btnMas = document.getElementById('ventas-cargar-mas');
-  const countLabel = document.getElementById('ventas-count-label');
-  const filtrosActivos = search || canal || desde || hasta;
-  if(btnMas) btnMas.style.display = hayMasVentas && !filtrosActivos ? 'block' : 'none';
-  if(countLabel) countLabel.textContent = `Mostrando ${ventas.length} ventas${hayMasVentas?' (hay más por cargar)':''}`;
-  
   if(lista.length===0){tbody.innerHTML='';empty.style.display='block';return;}
   empty.style.display='none';
   const canalColor={Local:'badge-blue','Foráneo':'badge-gold','Mercado Libre':'badge-gold',Amazon:'badge-green',Shopify:'badge-green',WhatsApp:'badge-green',Otro:'badge-gray'};
@@ -2707,14 +2699,6 @@ function renderGastos(){
   const tbody=document.getElementById('tabla-gastos');
   const empty=document.getElementById('gastos-empty');
   if(!tbody)return;
-  
-  // Mostrar botón cargar más si hay más ventas disponibles
-  const btnMas = document.getElementById('ventas-cargar-mas');
-  const countLabel = document.getElementById('ventas-count-label');
-  const filtrosActivos = search || canal || desde || hasta;
-  if(btnMas) btnMas.style.display = hayMasVentas && !filtrosActivos ? 'block' : 'none';
-  if(countLabel) countLabel.textContent = `Mostrando ${ventas.length} ventas${hayMasVentas?' (hay más por cargar)':''}`;
-  
   if(lista.length===0){tbody.innerHTML='';empty.style.display='block';return;}
   empty.style.display='none';
   tbody.innerHTML=lista.map(g=>`<tr>
@@ -3956,14 +3940,6 @@ function renderProveedores(){
   const tbody=document.getElementById('tabla-proveedores');
   const empty=document.getElementById('proveedores-empty');
   if(!tbody)return;
-  
-  // Mostrar botón cargar más si hay más ventas disponibles
-  const btnMas = document.getElementById('ventas-cargar-mas');
-  const countLabel = document.getElementById('ventas-count-label');
-  const filtrosActivos = search || canal || desde || hasta;
-  if(btnMas) btnMas.style.display = hayMasVentas && !filtrosActivos ? 'block' : 'none';
-  if(countLabel) countLabel.textContent = `Mostrando ${ventas.length} ventas${hayMasVentas?' (hay más por cargar)':''}`;
-  
   if(lista.length===0){tbody.innerHTML='';empty.style.display='block';return;}
   empty.style.display='none';
 
@@ -4079,14 +4055,6 @@ function renderPedidos(){
   const tbody=document.getElementById('tabla-pedidos');
   const empty=document.getElementById('pedidos-empty');
   if(!tbody)return;
-  
-  // Mostrar botón cargar más si hay más ventas disponibles
-  const btnMas = document.getElementById('ventas-cargar-mas');
-  const countLabel = document.getElementById('ventas-count-label');
-  const filtrosActivos = search || canal || desde || hasta;
-  if(btnMas) btnMas.style.display = hayMasVentas && !filtrosActivos ? 'block' : 'none';
-  if(countLabel) countLabel.textContent = `Mostrando ${ventas.length} ventas${hayMasVentas?' (hay más por cargar)':''}`;
-  
   if(lista.length===0){tbody.innerHTML='';empty.style.display='block';return;}
   empty.style.display='none';
   const estatusColor={'En elaboración':'badge-gold','Listo':'badge-blue','Entregado':'badge-green','Liquidado':'badge-gray'};
@@ -4439,14 +4407,6 @@ function renderCompras(){
   const tbody=document.getElementById('tabla-compras');
   const empty=document.getElementById('compras-empty');
   if(!tbody)return;
-  
-  // Mostrar botón cargar más si hay más ventas disponibles
-  const btnMas = document.getElementById('ventas-cargar-mas');
-  const countLabel = document.getElementById('ventas-count-label');
-  const filtrosActivos = search || canal || desde || hasta;
-  if(btnMas) btnMas.style.display = hayMasVentas && !filtrosActivos ? 'block' : 'none';
-  if(countLabel) countLabel.textContent = `Mostrando ${ventas.length} ventas${hayMasVentas?' (hay más por cargar)':''}`;
-  
   if(lista.length===0){tbody.innerHTML='';empty.style.display='block';return;}
   empty.style.display='none';
   tbody.innerHTML=lista.map(c=>`<tr>
@@ -4887,14 +4847,6 @@ function renderMovimientos(){
   const tbody=document.getElementById('tabla-movimientos');
   const empty=document.getElementById('movimientos-empty');
   if(!tbody)return;
-  
-  // Mostrar botón cargar más si hay más ventas disponibles
-  const btnMas = document.getElementById('ventas-cargar-mas');
-  const countLabel = document.getElementById('ventas-count-label');
-  const filtrosActivos = search || canal || desde || hasta;
-  if(btnMas) btnMas.style.display = hayMasVentas && !filtrosActivos ? 'block' : 'none';
-  if(countLabel) countLabel.textContent = `Mostrando ${ventas.length} ventas${hayMasVentas?' (hay más por cargar)':''}`;
-  
   if(lista.length===0){tbody.innerHTML='';empty.style.display='block';return;}
   empty.style.display='none';
 
@@ -5267,7 +5219,7 @@ function _csv(nombre,enc,filas){
 }
 
 // Carga inicial
-(async function(){await cargarFondosCaja();await cargarCortesCaja();actualizarCajaConFondo();renderCortesCaja();})();
+(async function(){await cargarCortesCaja();renderCortesCaja();})();
 </script>
 </body>
 </html>
