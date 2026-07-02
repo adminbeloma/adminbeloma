@@ -3193,14 +3193,7 @@ function renderClientes(){
   if(empresasEl) empresasEl.textContent=lista.filter(c=>c.tipo==='Empresa').length;
 
   if(!tbody)return;
-  
-  // Mostrar botón cargar más si hay más ventas disponibles
-  const btnMas = document.getElementById('ventas-cargar-mas');
-  const countLabel = document.getElementById('ventas-count-label');
-  const filtrosActivos = search || canal || desde || hasta;
-  if(btnMas) btnMas.style.display = hayMasVentas && !filtrosActivos ? 'block' : 'none';
-  if(countLabel) countLabel.textContent = `Mostrando ${ventas.length} ventas${hayMasVentas?' (hay más por cargar)':''}`;
-  
+
   if(lista.length===0){tbody.innerHTML='';empty.style.display='block';return;}
   empty.style.display='none';
 
