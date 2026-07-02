@@ -1672,6 +1672,7 @@ tbody td{padding:11px 14px;font-size:13.5px;vertical-align:middle;}
   <div class="modal">
     <div class="modal-header"><h2>💸 Gasto Local</h2><button class="modal-close" onclick="confirmarCerrarModal('modal-gasto-local')">×</button></div>
     <div class="modal-body">
+      <input type="hidden" id="gl-id">
       <div class="form-grid">
         <div class="form-group"><label>Fecha *</label><input type="date" id="gl-fecha"></div>
         <div class="form-group"><label>Monto ($) *</label><input type="number" id="gl-monto" placeholder="0.00" step="0.01"></div>
@@ -4395,7 +4396,20 @@ window.eliminarPedido=async function(id){
 };
 
 // ─── CAJA ───
+window.editarGastoLocal=function(id){
+  const g=gastosLocales.find(x=>x.id===id);
+  if(!g)return;
+  document.getElementById('gl-id').value=g.id;
+  document.getElementById('gl-fecha').value=g.fecha;
+  document.getElementById('gl-monto').value=g.monto;
+  document.getElementById('gl-concepto').value=g.concepto||'';
+  document.getElementById('gl-categoria').value=g.categoria||'Limpieza';
+  document.getElementById('gl-forma').value=g.forma||'Efectivo caja';
+  openModal('modal-gasto-local');
+};
+
 window.openGastoLocalModal=function(){
+  document.getElementById('gl-id').value='';
   document.getElementById('gl-fecha').value=hoy();
   document.getElementById('gl-monto').value='';
   document.getElementById('gl-concepto').value='';
@@ -4419,11 +4433,11 @@ window.guardarGastoLocal=async function(){
   const concepto=document.getElementById('gl-concepto').value.trim();
   const monto=+document.getElementById('gl-monto').value;
   if(!concepto||!monto){toast('⚠️ Concepto y monto son obligatorios');return;}
-  const id=uid();
+  const id=document.getElementById('gl-id').value||uid();
   const data={id,fecha:document.getElementById('gl-fecha').value,concepto,monto,categoria:document.getElementById('gl-categoria').value,forma:document.getElementById('gl-forma').value,creado:new Date().toISOString()};
   await setDoc(doc(db,'pl_gastos_locales',id),data);
   closeModal('modal-gasto-local');
-  toast('✅ Gasto registrado');
+  toast('✅ Gasto guardado');
 };
 
 function renderCaja(){
@@ -4432,7 +4446,10 @@ function renderCaja(){
   const CANALES_LOCAL = ['Local','Foráneo'];
   const ventasHoyArr=ventas.filter(v=>v.fecha===h && CANALES_LOCAL.includes(v.canal));
   const ingresosHoy=ventasHoyArr.reduce((s,v)=>s+(+v.total||0),0);
-  const anticiposHoy=pedidos.filter(p=>p.fecha===h).reduce((s,p)=>s+(+p.anticipo||0),0);
+  // Anticipos: de pedidos + de ventas con anticipo parcial (saldo pendiente)
+  const anticiposPedidos=pedidos.filter(p=>p.fecha===h).reduce((s,p)=>s+(+p.anticipo||0),0);
+  const anticiposVentas=ventasHoyArr.filter(v=>(+v.anticipo||0)>0&&(+v.saldo||0)>0).reduce((s,v)=>s+(+v.anticipo||0),0);
+  const anticiposHoy=anticiposPedidos+anticiposVentas;
   const gastosHoy=gastosLocales.filter(g=>g.fecha===h).reduce((s,g)=>s+(+g.monto||0),0);
 
   // Desglose por método de pago (solo ventas locales)
@@ -4479,9 +4496,10 @@ function renderCaja(){
   empty.style.display='none';
   lista.innerHTML=gastosHoyArr.map(g=>`
     <div style="display:flex;justify-content:space-between;align-items:center;padding:8px 0;border-bottom:1px solid var(--border);">
-      <div><div style="font-size:13px;font-weight:500;">${g.concepto}</div><div style="font-size:11px;color:var(--ink-soft);">${g.categoria} · ${g.forma}</div></div>
-      <div style="display:flex;align-items:center;gap:8px;">
+      <div><div style="font-size:13px;font-weight:500;">${g.concepto}</div><div style="font-size:11px;color:var(--ink-soft);">${g.categoria} · ${g.forma} · ${g.fecha}</div></div>
+      <div style="display:flex;align-items:center;gap:6px;">
         <span style="font-weight:700;color:var(--red);">${fmtMoney(g.monto)}</span>
+        <button class="btn btn-ghost btn-sm" onclick="editarGastoLocal('${g.id}')">✏️</button>
         <button class="btn btn-danger btn-sm" onclick="eliminarGastoLocal('${g.id}')">🗑</button>
       </div>
     </div>
