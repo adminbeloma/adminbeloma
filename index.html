@@ -2425,25 +2425,51 @@ window.guardarVenta=async function(){
 };
 
 // 6) TICKET WHATSAPP
+const PROCESOS_SIN_TINTA=['Bordado','Serigrafía','Vinil','DTF'];
 window.enviarTicketWA=function(){
   const folio=document.getElementById('v-folio').value||'—';
   const cliente=document.getElementById('v-cliente').value||'Público en general';
   if(_ventaItems.length===0){toast('⚠️ Agrega productos primero');return;}
-  const lineas=_ventaItems.map(it=>`  • ${it.cantidad}x ${it.tipo}${it.descripcion?' — '+it.descripcion:''} (${it.proceso}) = ${fmtMoney((+it.cantidad||0)*(+it.precio||0))}`).join('\n');
+
+  // Teléfono del cliente (guardado al seleccionar del dropdown)
+  const telRaw=(document.getElementById('v-cliente-tel')?.value||'').replace(/[^0-9]/g,'');
+  const tel=telRaw.length>=10?'521'+telRaw.slice(-10):'';
+
+  // Líneas por producto — sin mencionar tinta en procesos no-DTG
+  const lineas=_ventaItems.map(it=>{
+    const subtotal=(+it.cantidad||0)*(+it.precio||0);
+    const esSinTinta=PROCESOS_SIN_TINTA.includes(it.proceso);
+    return `▪️ *${it.tipo}* — ${it.proceso}\n` +
+      (it.descripcion?`   ${it.descripcion}\n`:'')+
+      `   Cant: ${it.cantidad}  |  Precio: ${fmtMoney(subtotal)}`;
+  }).join('\n\n');
+
   const desc=+document.getElementById('v-descuento').value||0;
   const total=Math.max(0,_ventaItems.reduce((s,it)=>s+(+it.cantidad||0)*(+it.precio||0),0)-desc);
   const anticipo=+document.getElementById('v-anticipo').value||0;
   const saldo=Math.max(0,total-anticipo);
-  const msg=`🧾 *TICKET DE COMPRA — Playeras Beloma*\n\n`+
+
+  const msg=
+    `🧾 *TICKET DE COMPRA*\n`+
+    `📍 *Playeras Beloma — La moda eres tú* 👕\n`+
+    `━━━━━━━━━━━━━━━━━━━━\n\n`+
     `📋 *Folio:* ${folio}\n`+
     `👤 *Cliente:* ${cliente}\n\n`+
-    `*Detalle del pedido:*\n${lineas}\n`+
-    (desc>0?`\n🏷️ Descuento: -${fmtMoney(desc)}\n`:'')+
-    `\n💰 *Total: ${fmtMoney(total)}*\n`+
-    `✅ Liquidado: ${fmtMoney(anticipo)}\n`+
-    `⏳ Saldo pendiente: ${fmtMoney(saldo)}\n\n`+
-    `¡Gracias por tu compra! 🙌 Playeras Beloma — La moda eres tú 👕`;
-  window.open('https://wa.me/?text='+encodeURIComponent(msg),'_blank');
+    `🛒 *Detalle del pedido:*\n`+
+    `━━━━━━━━━━━━━━━━━━━━\n`+
+    `${lineas}\n`+
+    `━━━━━━━━━━━━━━━━━━━━\n`+
+    (desc>0?`🏷️ Descuento: -${fmtMoney(desc)}\n`:'')+
+    `💰 *Total: ${fmtMoney(total)}*\n`+
+    `✅ *Pagado: ${fmtMoney(anticipo)}*\n`+
+    `⏳ *Saldo pendiente: ${fmtMoney(saldo)}*\n\n`+
+    `¡Gracias por tu compra! 🙌\n`+
+    `Cualquier duda estamos a tus órdenes. 😊`;
+
+  const url=tel
+    ?`https://wa.me/${tel}?text=${encodeURIComponent(msg)}`
+    :`https://wa.me/?text=${encodeURIComponent(msg)}`;
+  window.open(url,'_blank');
 };
 
 window.cargarMasVentas = async function() {
@@ -5704,17 +5730,26 @@ window.buscarClienteVenta=function(q){
   const res=(window.clientes||[]).filter(c=>c.nombre&&c.nombre.toLowerCase().includes(q.toLowerCase())).slice(0,6);
   if(res.length===0){dd.style.display='none';return;}
   dd.innerHTML=res.map(c=>`
-    <div onclick="seleccionarClienteVenta('${(c.nombre||'').replace(/'/g,"\\'")}')"
+    <div onclick="seleccionarClienteVenta('${(c.nombre||'').replace(/'/g,"\\'")}','${(c.tel||c.telefono||'').replace(/'/g,"\\'")}')"
       style="padding:10px 14px;cursor:pointer;font-size:13px;border-bottom:1px solid var(--border);"
       onmouseover="this.style.background='var(--bg)'" onmouseout="this.style.background=''">
       <div style="font-weight:600;">${c.nombre}</div>
-      ${c.tel?`<div style="font-size:11px;color:var(--ink-soft);">${c.tel}</div>`:''}
+      ${(c.tel||c.telefono)?`<div style="font-size:11px;color:var(--ink-soft);">${c.tel||c.telefono}</div>`:''}
     </div>`).join('');
   dd.style.display='block';
 };
-window.seleccionarClienteVenta=function(nombre){
+window.seleccionarClienteVenta=function(nombre, tel){
   document.getElementById('v-cliente').value=nombre;
   document.getElementById('v-cliente-dropdown').style.display='none';
+  // Guardar teléfono en campo oculto para el ticket de WA
+  let telInput=document.getElementById('v-cliente-tel');
+  if(!telInput){
+    telInput=document.createElement('input');
+    telInput.type='hidden';
+    telInput.id='v-cliente-tel';
+    document.getElementById('v-cliente').parentNode.appendChild(telInput);
+  }
+  telInput.value=tel||'';
 };
 document.addEventListener('click',function(e){
   const dd=document.getElementById('v-cliente-dropdown');
