@@ -2450,8 +2450,13 @@ window.enviarTicketWA=function(){
   const cliente=document.getElementById('v-cliente').value||'Público en general';
   if(window._ventaItems.length===0){toast('⚠️ Agrega productos primero');return;}
 
-  // Teléfono del cliente (guardado al seleccionar del dropdown)
-  const telRaw=(document.getElementById('v-cliente-tel')?.value||'').replace(/[^0-9]/g,'');
+  // Teléfono: primero del campo oculto (si se seleccionó del dropdown),
+  // si no, buscar en clientes registrados por nombre
+  let telRaw=(document.getElementById('v-cliente-tel')?.value||'').replace(/[^0-9]/g,'');
+  if(telRaw.length<10){
+    const clienteReg=(window.clientes||[]).find(c=>(c.nombre||'').toLowerCase()===cliente.toLowerCase());
+    if(clienteReg) telRaw=((clienteReg.tel||clienteReg.telefono||'')).replace(/[^0-9]/g,'');
+  }
   const tel=telRaw.length>=10?'521'+telRaw.slice(-10):'';
 
   // Líneas por producto — sin mencionar tinta en procesos no-DTG
