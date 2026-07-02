@@ -585,11 +585,39 @@ tbody td{padding:11px 14px;font-size:13.5px;vertical-align:middle;}
         </div>
         <div class="table-wrap">
           <table>
-            <thead><tr><th>Fecha</th><th>Insumo</th><th>Cantidad</th><th>Presentación</th><th>Contenido por unidad</th><th>Proveedor</th><th>Costo total</th><th>Costo/unidad</th><th>Acciones</th></tr></thead>
+            <thead><tr><th>Fecha</th><th>Insumo</th><th>Cantidad</th><th>Presentación</th><th>Contenido por unidad</th><th>Proveedor</th><th>Costo total</th><th>Costo/unidad</th><th>Pago</th><th>Acciones</th></tr></thead>
             <tbody id="tabla-compras"></tbody>
           </table>
         </div>
         <div id="compras-empty" class="empty-state" style="display:none;"><div class="icon">🛒</div><p>No hay compras registradas.</p></div>
+      </div>
+
+      <!-- CUENTAS POR PAGAR -->
+      <div style="margin-top:28px;">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px;">
+          <div style="font-weight:700;font-size:15px;">📋 Cuentas por Pagar a Proveedores</div>
+        </div>
+        <div style="display:flex;gap:14px;margin-bottom:14px;flex-wrap:wrap;">
+          <div style="background:#FFF3CD;border:1px solid #FFC107;border-radius:8px;padding:10px 14px;">
+            <div style="font-size:11px;color:#856404;font-weight:600;text-transform:uppercase;">Total adeudado</div>
+            <div style="font-size:18px;font-weight:700;color:#856404;" id="cxp-total">$0</div>
+          </div>
+          <div style="background:#F8D7DA;border:1px solid #F5C2C7;border-radius:8px;padding:10px 14px;">
+            <div style="font-size:11px;color:#842029;font-weight:600;text-transform:uppercase;">Vencido</div>
+            <div style="font-size:18px;font-weight:700;color:#842029;" id="cxp-vencido">$0</div>
+          </div>
+          <div style="background:#D1E7DD;border:1px solid #A3CFBB;border-radius:8px;padding:10px 14px;">
+            <div style="font-size:11px;color:#0A3622;font-weight:600;text-transform:uppercase;">Por vencer</div>
+            <div style="font-size:18px;font-weight:700;color:#0A3622;" id="cxp-porvencer">$0</div>
+          </div>
+        </div>
+        <div class="table-wrap">
+          <table>
+            <thead><tr><th>Proveedor</th><th>Insumo</th><th>Fecha compra</th><th>Vence</th><th>Monto</th><th>Estado</th><th>Acciones</th></tr></thead>
+            <tbody id="tabla-cxp"></tbody>
+          </table>
+        </div>
+        <div id="cxp-empty" class="empty-state" style="display:none;"><div class="icon">✅</div><p>Sin deudas pendientes con proveedores.</p></div>
       </div>
     </div>
   </div>
@@ -1482,6 +1510,39 @@ tbody td{padding:11px 14px;font-size:13.5px;vertical-align:middle;}
           <datalist id="lista-proveedores"></datalist>
         </div>
         <div class="form-group"><label>No. de factura / referencia</label><input type="text" id="compra-referencia" placeholder="FAC-001"></div>
+        <!-- FORMA DE PAGO -->
+        <div class="form-group full">
+          <label>Forma de pago *</label>
+          <div style="display:flex;gap:10px;margin-top:6px;flex-wrap:wrap;">
+            <label style="display:flex;align-items:center;gap:6px;cursor:pointer;font-size:14px;font-weight:500;padding:8px 16px;border:1.5px solid var(--border);border-radius:8px;" id="lbl-pagado">
+              <input type="radio" name="compra-pago-tipo" id="compra-pagado" value="pagado" onchange="onCompraPagoTipo()" checked>
+              ✅ Pagado
+            </label>
+            <label style="display:flex;align-items:center;gap:6px;cursor:pointer;font-size:14px;font-weight:500;padding:8px 16px;border:1.5px solid var(--border);border-radius:8px;" id="lbl-credito">
+              <input type="radio" name="compra-pago-tipo" id="compra-credito" value="credito" onchange="onCompraPagoTipo()">
+              📋 Crédito (me fiaron)
+            </label>
+          </div>
+        </div>
+        <!-- Método de pago (solo si pagado) -->
+        <div class="form-group" id="compra-metodo-wrap">
+          <label>Método de pago</label>
+          <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:4px;">
+            <label style="display:flex;align-items:center;gap:5px;cursor:pointer;font-size:13px;padding:6px 12px;border:1.5px solid var(--border);border-radius:8px;">
+              <input type="radio" name="compra-metodo" value="efectivo" checked> 💵 Efectivo
+            </label>
+            <label style="display:flex;align-items:center;gap:5px;cursor:pointer;font-size:13px;padding:6px 12px;border:1.5px solid var(--border);border-radius:8px;">
+              <input type="radio" name="compra-metodo" value="transferencia"> 📲 Transferencia
+            </label>
+            <label style="display:flex;align-items:center;gap:5px;cursor:pointer;font-size:13px;padding:6px 12px;border:1.5px solid var(--border);border-radius:8px;">
+              <input type="radio" name="compra-metodo" value="tarjeta"> 💳 Tarjeta
+            </label>
+          </div>
+        </div>
+        <div class="form-group" id="compra-vencimiento-wrap" style="display:none;">
+          <label>Fecha límite de pago</label>
+          <input type="date" id="compra-vencimiento">
+        </div>
         <div class="form-group full"><label>¿Actualizar stock del insumo?</label>
           <label style="display:flex;align-items:center;gap:8px;cursor:pointer;font-size:13px;font-weight:500;margin-top:4px;">
             <input type="checkbox" id="compra-actualizar-stock" checked style="accent-color:var(--accent);width:16px;height:16px;">
@@ -4386,6 +4447,9 @@ window.guardarCompra=async function(){
   const totalContenido=contenido*cant;
   const id=document.getElementById('compra-id').value||uid();
   const insId=document.getElementById('compra-insumo-sel').value;
+  const pagoTipo=document.querySelector('input[name="compra-pago-tipo"]:checked')?.value||'pagado';
+  const metodoPago=pagoTipo==='pagado'?(document.querySelector('input[name="compra-metodo"]:checked')?.value||'efectivo'):'';
+  const vencimiento=document.getElementById('compra-vencimiento')?.value||'';
   const data={
     id,
     fecha:document.getElementById('compra-fecha').value,
@@ -4403,10 +4467,14 @@ window.guardarCompra=async function(){
     proveedor:document.getElementById('compra-proveedor').value,
     referencia:document.getElementById('compra-referencia').value,
     notas:document.getElementById('compra-notas').value,
+    pagoTipo, // 'pagado' o 'credito'
+    metodoPago, // 'efectivo', 'transferencia', 'tarjeta' (solo si pagado)
+    vencimiento:pagoTipo==='credito'?vencimiento:'',
+    pagado:pagoTipo==='pagado',
     creado:new Date().toISOString()
   };
   await setDoc(doc(db,'pl_compras',id),data);
-  
+
   // Actualizar stock del insumo si está marcado
   if(document.getElementById('compra-actualizar-stock').checked && insId && totalContenido>0){
     const ins=insumos.find(x=>x.id===insId);
@@ -4415,13 +4483,87 @@ window.guardarCompra=async function(){
       await setDoc(doc(db,'pl_insumos',insId),{
         ...ins,
         stock:+(+ins.stock+totalContenido).toFixed(4),
-        costo:+nuevoCosto.toFixed(6) // costo por cc/ml actualizado automáticamente
+        costo:+nuevoCosto.toFixed(6)
       });
-      toast('✅ Compra registrada — Stock y costo/unidad actualizados');
     }
-  } else {
-    toast('✅ Compra registrada');
   }
+  closeModal('modal-compra');
+  toast(pagoTipo==='credito'?'✅ Compra registrada — Crédito pendiente de pago':'✅ Compra registrada — Pagada');
+  renderCXP();
+};
+
+// Toggle fecha vencimiento y método de pago según tipo
+window.onCompraPagoTipo=function(){
+  const esCredito=document.getElementById('compra-credito')?.checked;
+  const wrap=document.getElementById('compra-vencimiento-wrap');
+  const metodoWrap=document.getElementById('compra-metodo-wrap');
+  if(wrap) wrap.style.display=esCredito?'':'none';
+  if(metodoWrap) metodoWrap.style.display=esCredito?'none':'';
+};
+
+// Reset pago tipo al abrir modal
+const _origOpenCompraModal=window.openCompraModal;
+window.openCompraModal=function(){
+  _origOpenCompraModal && _origOpenCompraModal();
+  const pagado=document.getElementById('compra-pagado');
+  if(pagado){pagado.checked=true;}
+  const wrap=document.getElementById('compra-vencimiento-wrap');
+  if(wrap) wrap.style.display='none';
+  const metodoWrap=document.getElementById('compra-metodo-wrap');
+  if(metodoWrap) metodoWrap.style.display='';
+  const efectivo=document.querySelector('input[name="compra-metodo"][value="efectivo"]');
+  if(efectivo) efectivo.checked=true;
+  const venc=document.getElementById('compra-vencimiento');
+  if(venc) venc.value='';
+};
+
+// CUENTAS POR PAGAR
+window.renderCXP=function(){
+  const pendientes=compras.filter(c=>c.pagoTipo==='credito'&&!c.pagado);
+  const hoy2=hoy();
+  const vencidos=pendientes.filter(c=>c.vencimiento&&c.vencimiento<hoy2);
+  const porVencer=pendientes.filter(c=>!c.vencimiento||c.vencimiento>=hoy2);
+  const totalDeuda=pendientes.reduce((s,c)=>s+(+c.costoTotal||0),0);
+  const totalVencido=vencidos.reduce((s,c)=>s+(+c.costoTotal||0),0);
+  const totalPorVencer=porVencer.reduce((s,c)=>s+(+c.costoTotal||0),0);
+  const elTotal=document.getElementById('cxp-total');
+  const elVenc=document.getElementById('cxp-vencido');
+  const elPV=document.getElementById('cxp-porvencer');
+  if(elTotal) elTotal.textContent=fmtMoney(totalDeuda);
+  if(elVenc) elVenc.textContent=fmtMoney(totalVencido);
+  if(elPV) elPV.textContent=fmtMoney(totalPorVencer);
+  const tbody=document.getElementById('tabla-cxp');
+  const empty=document.getElementById('cxp-empty');
+  if(!tbody) return;
+  if(pendientes.length===0){tbody.innerHTML='';if(empty)empty.style.display='block';return;}
+  if(empty) empty.style.display='none';
+  tbody.innerHTML=pendientes.map(c=>{
+    const venc=c.vencimiento||'—';
+    const esVencida=c.vencimiento&&c.vencimiento<hoy2;
+    const estado=esVencida
+      ?'<span class="badge badge-red">⚠️ Vencida</span>'
+      :c.vencimiento
+        ?'<span class="badge badge-gold">⏳ Por vencer</span>'
+        :'<span class="badge badge-gray">Sin fecha</span>';
+    return`<tr>
+      <td style="font-weight:600;">${c.proveedor||'—'}</td>
+      <td style="font-size:12px;">${c.insumoNombre||c.descripcion||'—'}</td>
+      <td>${c.fecha||'—'}</td>
+      <td style="color:${esVencida?'var(--red)':'inherit'};font-weight:${esVencida?'700':'400'};">${venc}</td>
+      <td style="font-weight:700;color:var(--red);">${fmtMoney(c.costoTotal)}</td>
+      <td>${estado}</td>
+      <td><button class="btn btn-sm" style="background:var(--green);color:#fff;" onclick="marcarCompraPagada('${c.id}')">✅ Marcar pagada</button></td>
+    </tr>`;
+  }).join('');
+};
+
+window.marcarCompraPagada=async function(id){
+  if(!confirm('¿Marcar esta compra como pagada?')) return;
+  const compra=compras.find(c=>c.id===id);
+  if(!compra) return;
+  await setDoc(doc(db,'pl_compras',id),{...compra,pagado:true,fechaPago:hoy()});
+  toast('✅ Compra marcada como pagada');
+  renderCXP();
 };
 
 function renderCompras(){
@@ -4443,7 +4585,14 @@ function renderCompras(){
   if(!tbody)return;
   if(lista.length===0){tbody.innerHTML='';empty.style.display='block';return;}
   empty.style.display='none';
-  tbody.innerHTML=lista.map(c=>`<tr>
+  tbody.innerHTML=lista.map(c=>{
+    const metodoIcon=c.metodoPago==='transferencia'?'📲':c.metodoPago==='tarjeta'?'💳':'💵';
+    const pagoLabel=c.pagado
+      ?`<span class="badge badge-green">✅ ${metodoIcon} ${c.metodoPago||'Efectivo'}</span>`
+      :c.pagoTipo==='credito'
+        ?'<span class="badge badge-gold">📋 Crédito</span>'
+        :`<span class="badge badge-green">✅ ${metodoIcon} ${c.metodoPago||'Efectivo'}</span>`;
+    return`<tr>
     <td>${fmtFecha(c.fecha)}</td>
     <td style="font-weight:600;">${c.insumoNombre||c.descripcion}</td>
     <td>${c.cantidad} ${c.presentacion}</td>
@@ -4452,8 +4601,11 @@ function renderCompras(){
     <td>${c.proveedor||'—'}</td>
     <td style="font-weight:700;color:var(--red);">${fmtMoney(c.costoTotal)}</td>
     <td>${fmtMoney(c.costoUnidad)}</td>
+    <td>${pagoLabel}</td>
     <td><button class="btn btn-danger btn-sm" onclick="eliminarCompra('${c.id}')">🗑</button></td>
-  </tr>`).join('');
+  </tr>`}).join('');
+  // Actualizar cuentas por pagar
+  renderCXP();
 }
 
 window.eliminarCompra=async function(id){
