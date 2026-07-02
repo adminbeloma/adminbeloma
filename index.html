@@ -2029,6 +2029,11 @@ tbody td{padding:11px 14px;font-size:13.5px;vertical-align:middle;}
       <button class="modal-close" onclick="confirmarCerrarModal('modal-corte-caja')">×</button>
     </div>
     <div class="modal-body">
+      <div class="form-group" style="margin-bottom:12px;">
+        <label style="font-size:12px;font-weight:600;color:var(--ink-soft);">📅 Fecha del corte</label>
+        <input type="date" id="corte-fecha" style="width:100%;border:1.5px solid var(--border);border-radius:8px;padding:8px 12px;font-size:14px;outline:none;" onchange="recalcCorte()">
+        <div style="font-size:11px;color:var(--ink-soft);margin-top:4px;">Puedes cambiar la fecha si el corte es de otro día.</div>
+      </div>
       <div id="corte-resumen" style="background:var(--bg);border-radius:10px;padding:16px;margin-bottom:16px;font-size:13px;line-height:2;"></div>
       <div class="form-group">
         <label>💵 Efectivo real en caja ($)</label>
@@ -5249,13 +5254,16 @@ let cortesCaja = [];
 let _corteActualData = {};
 
 window.abrirCorteCaja = function() {
-  const h = hoy();
+  document.getElementById('corte-fecha').value = hoy();
+  recalcCorte();
+  openModal('modal-corte-caja');
+};
+
+function calcCorteParaFecha(h){
   const CANALES_LOCAL = ['Local','Foráneo'];
   const fondo = fondosCaja.find(f => f.fecha === h);
-  // Operación diaria: solo Local y Foráneo
   const ventasLocales = ventas.filter(v => v.fecha === h && CANALES_LOCAL.includes(v.canal));
   const ingresosHoy = ventasLocales.reduce((s,v) => s + (+v.total||0), 0);
-  // Desglose por método
   const enEfectivo = ventasLocales.filter(v=>v.metodoPago==='efectivo').reduce((s,v)=>s+(+v.total||0),0);
   const enTransf   = ventasLocales.filter(v=>v.metodoPago==='transferencia').reduce((s,v)=>s+(+v.total||0),0);
   const enDeposito = ventasLocales.filter(v=>v.metodoPago==='deposito').reduce((s,v)=>s+(+v.total||0),0);
@@ -5264,28 +5272,30 @@ window.abrirCorteCaja = function() {
   const gastosHoy = (gastosLocales||[]).filter(g => g.fecha === h).reduce((s,g) => s + (+g.monto||0), 0);
   const fondoMonto = fondo ? +fondo.monto : 0;
   const efectivoSistema = fondoMonto + enEfectivo + anticiposHoy - gastosHoy;
+  return{fecha:h,fondo:fondoMonto,ingresos:ingresosHoy,enEfectivo,enTransf,enDeposito,enTarjeta,anticipos:anticiposHoy,gastos:gastosHoy,efectivoSistema};
+}
 
-  _corteActualData = { fecha: h, fondo: fondoMonto, ingresos: ingresosHoy, enEfectivo, enTransf, enDeposito, enTarjeta, anticipos: anticiposHoy, gastos: gastosHoy, efectivoSistema };
-
-  document.getElementById('corte-resumen').innerHTML = `
+window.recalcCorte=function(){
+  const h=document.getElementById('corte-fecha').value||hoy();
+  const d=calcCorteParaFecha(h);
+  _corteActualData=d;
+  document.getElementById('corte-resumen').innerHTML=`
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;font-size:13px;">
       <span style="color:var(--ink-soft);">📅 Fecha:</span><strong>${h}</strong>
-      <span style="color:var(--ink-soft);">💰 Fondo inicial:</span><strong>${fmtMoney(fondoMonto)}</strong>
-      <span style="color:var(--ink-soft);">💚 Ingresos Local+Foráneo:</span><strong style="color:var(--green);">${fmtMoney(ingresosHoy)}</strong>
+      <span style="color:var(--ink-soft);">💰 Fondo inicial:</span><strong>${fmtMoney(d.fondo)}</strong>
+      <span style="color:var(--ink-soft);">💚 Ingresos Local+Foráneo:</span><strong style="color:var(--green);">${fmtMoney(d.ingresos)}</strong>
       <span></span>
-      ${enEfectivo>0?`<span style="color:var(--ink-soft);padding-left:12px;">└ 💵 Efectivo:</span><span>${fmtMoney(enEfectivo)}</span>`:''}
-      ${enTransf>0?`<span style="color:var(--ink-soft);padding-left:12px;">└ 📲 Transferencia:</span><span>${fmtMoney(enTransf)}</span>`:''}
-      ${enDeposito>0?`<span style="color:var(--ink-soft);padding-left:12px;">└ 🏦 Depósito:</span><span>${fmtMoney(enDeposito)}</span>`:''}
-      ${enTarjeta>0?`<span style="color:var(--ink-soft);padding-left:12px;">└ 💳 Tarjeta:</span><span>${fmtMoney(enTarjeta)}</span>`:''}
-      <span style="color:var(--ink-soft);">📦 Anticipos:</span><strong style="color:var(--green);">${fmtMoney(anticiposHoy)}</strong>
-      <span style="color:var(--ink-soft);">💸 Gastos locales:</span><strong style="color:var(--red);">${fmtMoney(gastosHoy)}</strong>
+      ${d.enEfectivo>0?`<span style="color:var(--ink-soft);padding-left:12px;">└ 💵 Efectivo:</span><span>${fmtMoney(d.enEfectivo)}</span>`:''}
+      ${d.enTransf>0?`<span style="color:var(--ink-soft);padding-left:12px;">└ 📲 Transferencia:</span><span>${fmtMoney(d.enTransf)}</span>`:''}
+      ${d.enDeposito>0?`<span style="color:var(--ink-soft);padding-left:12px;">└ 🏦 Depósito:</span><span>${fmtMoney(d.enDeposito)}</span>`:''}
+      ${d.enTarjeta>0?`<span style="color:var(--ink-soft);padding-left:12px;">└ 💳 Tarjeta:</span><span>${fmtMoney(d.enTarjeta)}</span>`:''}
+      <span style="color:var(--ink-soft);">📦 Anticipos:</span><strong style="color:var(--green);">${fmtMoney(d.anticipos)}</strong>
+      <span style="color:var(--ink-soft);">💸 Gastos locales:</span><strong style="color:var(--red);">${fmtMoney(d.gastos)}</strong>
       <span style="color:var(--ink-soft);border-top:1px solid var(--border);padding-top:6px;margin-top:4px;">✅ Efectivo en caja (sistema):</span>
-      <strong style="font-size:16px;border-top:1px solid var(--border);padding-top:6px;margin-top:4px;">${fmtMoney(efectivoSistema)}</strong>
+      <strong style="font-size:16px;border-top:1px solid var(--border);padding-top:6px;margin-top:4px;">${fmtMoney(d.efectivoSistema)}</strong>
     </div>`;
-  document.getElementById('corte-real').value = '';
-  document.getElementById('corte-notas').value = '';
-  document.getElementById('corte-diferencia-wrap').style.display = 'none';
-  openModal('modal-corte-caja');
+  document.getElementById('corte-real').value='';
+  document.getElementById('corte-diferencia-wrap').style.display='none';
 };
 
 window.calcDiferenciaCorte = function() {
