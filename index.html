@@ -3178,7 +3178,7 @@ window.guardarCliente=async function(){
   toast('✅ Cliente guardado');
 };
 
-function renderClientes(){
+function renderClientes(soloConFiltro){
   const search=(document.getElementById('search-clientes')||{value:''}).value.toLowerCase().trim();
   const canalFiltro=(document.getElementById('filter-cli-canal')||{value:''}).value;
   const tipoFiltro=(document.getElementById('filter-cli-tipo')||{value:''}).value;
@@ -3192,14 +3192,11 @@ function renderClientes(){
   const totalEl=document.getElementById('cli-total-facturado');
   const empresasEl=document.getElementById('cli-count-empresas');
 
-  // Si no hay ningún filtro activo, mostrar lista vacía
+  // Si se llamó desde Limpiar (soloConFiltro=true) y no hay filtros, mostrar vacío
   const hayFiltro=search||canalFiltro||tipoFiltro||ciudadFiltro||desde||hasta;
-  if(!hayFiltro){
+  if(soloConFiltro && !hayFiltro){
     if(tbody) tbody.innerHTML='';
-    if(empty){
-      empty.style.display='block';
-      empty.querySelector('p').textContent='Usa el buscador o los filtros para ver clientes.';
-    }
+    if(empty){empty.style.display='block';empty.querySelector('p').textContent='Usa el buscador o los filtros para ver clientes.';}
     if(countEl) countEl.textContent=clientes.length+' total';
     if(totalEl) totalEl.textContent='—';
     if(empresasEl) empresasEl.textContent=clientes.filter(c=>c.tipo==='Empresa').length;
@@ -3226,7 +3223,7 @@ function renderClientes(){
     const ventasCliente=ventas.filter(v=>v.cliente?.toLowerCase()===c.nombre?.toLowerCase());
     totalFacturado+=ventasCliente.reduce((s,v)=>s+(+v.total||0),0);
   });
-  if(countEl) countEl.textContent=lista.length+' resultado'+(lista.length===1?'':'s');
+  if(countEl) countEl.textContent=lista.length+' resultado'+(lista.length===1?'':'s')+' de '+clientes.length+' total';
   if(totalEl) totalEl.textContent=fmtMoney(totalFacturado);
   if(empresasEl) empresasEl.textContent=lista.filter(c=>c.tipo==='Empresa').length;
 
@@ -3267,7 +3264,7 @@ window.limpiarFiltrosClientes=function(){
   ['filter-cli-canal','filter-cli-tipo'].forEach(id=>{
     const el=document.getElementById(id); if(el) el.value='';
   });
-  renderClientes();
+  renderClientes(true); // true = dejar vacío al limpiar
 };
 
 // WhatsApp directo desde clientes
