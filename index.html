@@ -2319,7 +2319,7 @@ window.eliminarItemVenta=function(idx){
   renderItemsVenta();
 };
 
-function renderItemsVenta(){
+window.renderItemsVenta=function(){
   const cont=document.getElementById('v-items-container');
   if(!cont) return;
   cont.innerHTML=window._ventaItems.map((it,idx)=>`
@@ -3162,7 +3162,7 @@ window.guardarCliente=async function(){
   toast('✅ Cliente guardado');
 };
 
-function renderClientes(soloConFiltro){
+window.renderClientes=function(soloConFiltro){
   const search=(document.getElementById('search-clientes')||{value:''}).value.toLowerCase().trim();
   const canalFiltro=(document.getElementById('filter-cli-canal')||{value:''}).value;
   const tipoFiltro=(document.getElementById('filter-cli-tipo')||{value:''}).value;
