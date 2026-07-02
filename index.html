@@ -2095,7 +2095,7 @@ onSnapshot(collection(db,'pl_gastos'),s=>{gastos=s.docs.map(d=>d.data());checkLo
 onSnapshot(collection(db,'pl_playeras'),s=>{playeras=s.docs.map(d=>d.data());checkLoaded();renderPlayeras();});
 onSnapshot(collection(db,'pl_insumos'),s=>{insumos=s.docs.map(d=>d.data());checkLoaded();renderInsumos();renderDashboard();});
 onSnapshot(collection(db,'pl_consumos'),s=>{consumos=s.docs.map(d=>d.data());checkLoaded();});
-onSnapshot(collection(db,'pl_clientes'),s=>{clientes=s.docs.map(d=>d.data());checkLoaded();renderClientes();});
+onSnapshot(collection(db,'pl_clientes'),s=>{clientes=s.docs.map(d=>d.data());window.clientes=clientes;checkLoaded();renderClientes();});
 
 setTimeout(()=>{document.getElementById('loading-overlay').style.display='none';},8000);
 
