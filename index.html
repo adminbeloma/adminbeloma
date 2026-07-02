@@ -5680,13 +5680,6 @@ window.generarReporteCortes=function(){
     }).join(''));
 };
 
-    const lista=Object.values(mapa).sort((a,b)=>b.total-a.total);if(!lista.length){toast('⚠️ No hay datos');return;}
-    _csv('Clientes_Beloma',['Cliente','Ventas','Total','Última compra'],lista.map(c=>[c.nombre,c.ventas,c.total,c.ultima]));
-  } else {
-    if(!cortesCaja.length){toast('⚠️ No hay cortes');return;}
-    _csv('Cortes_Caja_Beloma',['Fecha','Fondo','Ventas','Gastos','Sistema','Real','Diferencia','Notas'],cortesCaja.map(c=>[c.fecha,c.fondo||0,c.ingresos||0,c.gastos||0,c.efectivoSistema||0,c.efectivoReal||0,c.diferencia||0,c.notas||'']));
-  }
-};
 
 function _csv(nombre,enc,filas){
   const bom='\uFEFF';
