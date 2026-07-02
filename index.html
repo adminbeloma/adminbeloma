@@ -2234,7 +2234,7 @@ window.openVentaModal=function(tipo, ventaId){
   document.getElementById('v-cliente-dropdown').style.display='none';
 
   // Inicializar items vacíos
-  _ventaItems=[];
+  window._ventaItems=[];
   renderItemsVenta();
 
   const canal=document.getElementById('v-canal').value;
@@ -2265,12 +2265,12 @@ window.openVentaModal=function(tipo, ventaId){
       if(v.sinTinta && document.getElementById('v-sin-tinta')) document.getElementById('v-sin-tinta').checked=true;
       // Cargar items guardados o construir uno desde campos legacy
       if(Array.isArray(v.items)&&v.items.length>0){
-        _ventaItems=JSON.parse(JSON.stringify(v.items));
+        window._ventaItems=JSON.parse(JSON.stringify(v.items));
       } else {
         // Venta vieja sin campo items — construir uno desde datos legacy
         const precioUnit=+v.precio||0;
         const cant=+v.cantidad||1;
-        _ventaItems=[{
+        window._ventaItems=[{
           tipo:v.genero||'Otro',
           descripcion:v.producto||'',
           proceso:v.tipoProceso||'DTG',
@@ -2305,50 +2305,50 @@ const ITEM_TIPOS=[
 ];
 const ITEM_PROCESOS=['DTG','DTF','Serigrafía','Vinil','Bordado','Otro'];
 
-let _ventaItems=[];
+window._ventaItems=[];
 
 window.agregarItemVenta=function(item){
-  const idx=_ventaItems.length;
+  const idx=window._ventaItems.length;
   const it=item||{tipo:'',descripcion:'',proceso:'DTG',cantidad:1,precio:0};
-  _ventaItems.push(it);
+  window._ventaItems.push(it);
   renderItemsVenta();
 };
 
 window.eliminarItemVenta=function(idx){
-  _ventaItems.splice(idx,1);
+  window._ventaItems.splice(idx,1);
   renderItemsVenta();
 };
 
 function renderItemsVenta(){
   const cont=document.getElementById('v-items-container');
   if(!cont) return;
-  cont.innerHTML=_ventaItems.map((it,idx)=>`
+  cont.innerHTML=window._ventaItems.map((it,idx)=>`
     <div style="background:var(--bg);border:1px solid var(--border);border-radius:10px;padding:10px 12px;display:grid;grid-template-columns:1fr 1fr 1fr 80px 100px 32px;gap:6px;align-items:end;">
       <div>
         <label style="font-size:11px;font-weight:600;color:var(--ink-soft);">Tipo</label>
-        <select onchange="_ventaItems[${idx}].tipo=this.value;renderItemsVenta()" style="width:100%;border:1.5px solid var(--border);border-radius:8px;padding:7px 8px;font-size:12px;background:var(--bg-card);color:var(--ink);">
+        <select onchange="window._ventaItems[${idx}].tipo=this.value;renderItemsVenta()" style="width:100%;border:1.5px solid var(--border);border-radius:8px;padding:7px 8px;font-size:12px;background:var(--bg-card);color:var(--ink);">
           ${ITEM_TIPOS.map(t=>`<option value="${t.value}"${it.tipo===t.value?' selected':''}>${t.label}</option>`).join('')}
         </select>
       </div>
       <div>
         <label style="font-size:11px;font-weight:600;color:var(--ink-soft);">Descripción</label>
-        <input type="text" value="${it.descripcion||''}" placeholder="Ej. Logo empresa, XL" oninput="_ventaItems[${idx}].descripcion=this.value"
+        <input type="text" value="${it.descripcion||''}" placeholder="Ej. Logo empresa, XL" oninput="window._ventaItems[${idx}].descripcion=this.value"
           style="width:100%;border:1.5px solid var(--border);border-radius:8px;padding:7px 8px;font-size:12px;background:var(--bg-card);color:var(--ink);">
       </div>
       <div>
         <label style="font-size:11px;font-weight:600;color:var(--ink-soft);">Proceso</label>
-        <select onchange="_ventaItems[${idx}].proceso=this.value" style="width:100%;border:1.5px solid var(--border);border-radius:8px;padding:7px 8px;font-size:12px;background:var(--bg-card);color:var(--ink);">
+        <select onchange="window._ventaItems[${idx}].proceso=this.value" style="width:100%;border:1.5px solid var(--border);border-radius:8px;padding:7px 8px;font-size:12px;background:var(--bg-card);color:var(--ink);">
           ${ITEM_PROCESOS.map(p=>`<option value="${p}"${it.proceso===p?' selected':''}>${p}</option>`).join('')}
         </select>
       </div>
       <div>
         <label style="font-size:11px;font-weight:600;color:var(--ink-soft);">Cant.</label>
-        <input type="number" value="${it.cantidad||1}" min="1" oninput="_ventaItems[${idx}].cantidad=+this.value||1;recalcTotalVenta()"
+        <input type="number" value="${it.cantidad||1}" min="1" oninput="window._ventaItems[${idx}].cantidad=+this.value||1;recalcTotalVenta()"
           style="width:100%;border:1.5px solid var(--border);border-radius:8px;padding:7px 8px;font-size:12px;background:var(--bg-card);color:var(--ink);">
       </div>
       <div>
         <label style="font-size:11px;font-weight:600;color:var(--ink-soft);">Precio $</label>
-        <input type="number" value="${it.precio||''}" placeholder="0" step="0.01" oninput="_ventaItems[${idx}].precio=+this.value||0;recalcTotalVenta()"
+        <input type="number" value="${it.precio||''}" placeholder="0" step="0.01" oninput="window._ventaItems[${idx}].precio=+this.value||0;recalcTotalVenta()"
           style="width:100%;border:1.5px solid var(--border);border-radius:8px;padding:7px 8px;font-size:12px;background:var(--bg-card);color:var(--ink);">
       </div>
       <div style="text-align:center;">
@@ -2359,7 +2359,7 @@ function renderItemsVenta(){
 }
 
 window.recalcTotalVenta=function(){
-  const subtotal=_ventaItems.reduce((s,it)=>s+(+it.cantidad||0)*(+it.precio||0),0);
+  const subtotal=window._ventaItems.reduce((s,it)=>s+(+it.cantidad||0)*(+it.precio||0),0);
   const desc=+document.getElementById('v-descuento')?.value||0;
   const total=Math.max(0,subtotal-desc);
   const anticipo=+document.getElementById('v-anticipo')?.value||0;
@@ -2390,7 +2390,7 @@ window.onSinTintaChange=function(){
 };
 
 window.guardarVenta=async function(){
-  if(_ventaItems.length===0){toast('⚠️ Agrega al menos un producto');return;}
+  if(window._ventaItems.length===0){toast('⚠️ Agrega al menos un producto');return;}
   const canal2=document.getElementById('v-canal').value;
   const canalesEnvio=['Foráneo','Mercado Libre','Amazon','Shopify'];
   const tieneEnvio=canalesEnvio.includes(canal2);
@@ -2400,10 +2400,10 @@ window.guardarVenta=async function(){
   const tintaColor=sinTinta?0:+document.getElementById('v-tinta-color').value||0;
   const precioTintaB=+localStorage.getItem('pl_tinta_blanca_precio')||0;
   const precioTintaC=+localStorage.getItem('pl_tinta_color_precio')||0;
-  const subtotal=_ventaItems.reduce((s,it)=>s+(+it.cantidad||0)*(+it.precio||0),0);
+  const subtotal=window._ventaItems.reduce((s,it)=>s+(+it.cantidad||0)*(+it.precio||0),0);
   const desc=+document.getElementById('v-descuento').value||0;
   const total=Math.max(0,subtotal-desc);
-  const cantTotal=_ventaItems.reduce((s,it)=>s+(+it.cantidad||1),0);
+  const cantTotal=window._ventaItems.reduce((s,it)=>s+(+it.cantidad||1),0);
   const costoTinta=(tintaBlanca*precioTintaB+tintaColor*precioTintaC)*cantTotal;
   const metodoPago=document.getElementById('v-metodo-pago').value||'';
   const lugDeposito=document.getElementById('v-deposito-lugar').value||'';
@@ -2416,14 +2416,14 @@ window.guardarVenta=async function(){
   const id=idExistente||uid();
   const folioVal=document.getElementById('v-folio').value||generarFolio(canal2);
   // Descripción resumida para registros legacy
-  const productoResumen=_ventaItems.map(it=>`${it.cantidad}x ${it.tipo}${it.descripcion?' ('+it.descripcion+')':''}`).join(', ');
+  const productoResumen=window._ventaItems.map(it=>`${it.cantidad}x ${it.tipo}${it.descripcion?' ('+it.descripcion+')':''}`).join(', ');
   // Preservar fecha de creación si es edición
   const ventaOriginal=idExistente?ventas.find(v=>v.id===idExistente):null;
   const data={id,fecha:document.getElementById('v-fecha').value,canal:canal2,
     cliente:document.getElementById('v-cliente').value||'Público en general',
-    producto:productoResumen,items:_ventaItems,
+    producto:productoResumen,items:window._ventaItems,
     genero:'',talla:'',color:'',
-    tipoProceso:_ventaItems.map(it=>it.proceso).filter((v,i,a)=>a.indexOf(v)===i).join(', '),
+    tipoProceso:window._ventaItems.map(it=>it.proceso).filter((v,i,a)=>a.indexOf(v)===i).join(', '),
     sinTinta,
     ciudad:tieneEnvio?document.getElementById('v-ciudad').value:'',
     paqueteria:tieneEnvio?document.getElementById('v-paqueteria').value:'',
@@ -2448,14 +2448,14 @@ const PROCESOS_SIN_TINTA=['Bordado','Serigrafía','Vinil','DTF'];
 window.enviarTicketWA=function(){
   const folio=document.getElementById('v-folio').value||'—';
   const cliente=document.getElementById('v-cliente').value||'Público en general';
-  if(_ventaItems.length===0){toast('⚠️ Agrega productos primero');return;}
+  if(window._ventaItems.length===0){toast('⚠️ Agrega productos primero');return;}
 
   // Teléfono del cliente (guardado al seleccionar del dropdown)
   const telRaw=(document.getElementById('v-cliente-tel')?.value||'').replace(/[^0-9]/g,'');
   const tel=telRaw.length>=10?'521'+telRaw.slice(-10):'';
 
   // Líneas por producto — sin mencionar tinta en procesos no-DTG
-  const lineas=_ventaItems.map(it=>{
+  const lineas=window._ventaItems.map(it=>{
     const subtotal=(+it.cantidad||0)*(+it.precio||0);
     const esSinTinta=PROCESOS_SIN_TINTA.includes(it.proceso);
     return `▪️ *${it.tipo}* — ${it.proceso}\n` +
@@ -2464,7 +2464,7 @@ window.enviarTicketWA=function(){
   }).join('\n\n');
 
   const desc=+document.getElementById('v-descuento').value||0;
-  const total=Math.max(0,_ventaItems.reduce((s,it)=>s+(+it.cantidad||0)*(+it.precio||0),0)-desc);
+  const total=Math.max(0,window._ventaItems.reduce((s,it)=>s+(+it.cantidad||0)*(+it.precio||0),0)-desc);
   const anticipo=+document.getElementById('v-anticipo').value||0;
   const saldo=Math.max(0,total-anticipo);
 
