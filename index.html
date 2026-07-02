@@ -330,7 +330,7 @@ tbody td{padding:11px 14px;font-size:13.5px;vertical-align:middle;}
       </div>
       <div class="table-wrap">
         <table>
-          <thead><tr><th>Fecha</th><th>Cliente</th><th>Producto / Items</th><th>Proceso</th><th>Canal</th><th>Cant.</th><th>Total</th><th>Anticipo</th><th>Saldo</th><th>Acciones</th></tr></thead>
+          <thead><tr><th>Fecha</th><th>Cliente</th><th>Producto / Items</th><th>Género</th><th>Talla</th><th>Color</th><th>Proceso</th><th>Canal</th><th>Cant.</th><th>Total</th><th>Anticipo</th><th>Saldo</th><th>Acciones</th></tr></thead>
           <tbody id="tabla-ventas"></tbody>
         </table>
       </div>
@@ -2336,12 +2336,23 @@ window.openVentaModal=function(tipo, ventaId){
       // Cargar items guardados o construir uno desde campos legacy
       if(Array.isArray(v.items)&&v.items.length>0){
         window._ventaItems=JSON.parse(JSON.stringify(v.items));
+        // Asegurar que items viejos tengan los nuevos campos
+        window._ventaItems=window._ventaItems.map(it=>({
+          genero:'',talla:'',color:'',material:'',tipoPrenda:'',tipoPrendaOtro:'',
+          ...it
+        }));
       } else {
         // Venta vieja sin campo items — construir uno desde datos legacy
         const precioUnit=+v.precio||0;
         const cant=+v.cantidad||1;
         window._ventaItems=[{
           tipo:v.genero||'Otro',
+          genero:v.genero||'',
+          talla:v.talla||'',
+          color:v.color||'',
+          material:'',
+          tipoPrenda:'',
+          tipoPrendaOtro:'',
           descripcion:v.producto||'',
           proceso:v.tipoProceso||'DTG',
           cantidad:cant,
@@ -2370,16 +2381,25 @@ const ITEM_TIPOS=[
   {label:'👕 Playera Hombre',value:'Hombre'},
   {label:'👗 Playera Mujer',value:'Mujer'},
   {label:'🧒 Playera Niño',value:'Niño'},
+  {label:'👶 Playera Bebé',value:'Bebé'},
   {label:'☕ Taza',value:'Taza'},
   {label:'Otro',value:'Otro'},
 ];
 const ITEM_PROCESOS=['DTG','DTF','Serigrafía','Vinil','Bordado','Otro'];
+const ITEM_TALLAS=['XS','S','M','L','XL','2XL','3XL','4XL','2','4','6','8','10','12','14','Única'];
+const ITEM_MATERIALES=['Algodón','Dry Fit','Jaspeado','Otro'];
+const ITEM_TIPOS_PRENDA=[
+  'Playera básica','Polo','Oversize','Tank Top','Sin mangas',
+  'Sudadera cuello redondo','Sudadera con gorro y canguro','Sudadera con cierre',
+  'Otro'
+];
+const _ESTILO=`width:100%;border:1.5px solid var(--border);border-radius:8px;padding:7px 8px;font-size:12px;background:var(--bg-card);color:var(--ink);`;
+const _LABEL=(txt,req)=>`<label style="font-size:11px;font-weight:600;color:var(--ink-soft);">${txt}${req?' <span style="color:var(--red)">*</span>':''}</label>`;
 
 window._ventaItems=[];
 
 window.agregarItemVenta=function(item){
-  const idx=window._ventaItems.length;
-  const it=item||{tipo:'',descripcion:'',proceso:'DTG',cantidad:1,precio:0};
+  const it=item||{tipo:'Hombre',genero:'',talla:'',color:'',material:'',tipoPrenda:'',tipoPrendaOtro:'',descripcion:'',proceso:'DTG',cantidad:1,precio:0};
   window._ventaItems.push(it);
   renderItemsVenta();
 };
@@ -2393,36 +2413,74 @@ window.renderItemsVenta=function(){
   const cont=document.getElementById('v-items-container');
   if(!cont) return;
   cont.innerHTML=window._ventaItems.map((it,idx)=>`
-    <div style="background:var(--bg);border:1px solid var(--border);border-radius:10px;padding:10px 12px;display:grid;grid-template-columns:1fr 1fr 1fr 80px 100px 32px;gap:6px;align-items:end;">
-      <div>
-        <label style="font-size:11px;font-weight:600;color:var(--ink-soft);">Tipo</label>
-        <select onchange="window._ventaItems[${idx}].tipo=this.value;renderItemsVenta()" style="width:100%;border:1.5px solid var(--border);border-radius:8px;padding:7px 8px;font-size:12px;background:var(--bg-card);color:var(--ink);">
-          ${ITEM_TIPOS.map(t=>`<option value="${t.value}"${it.tipo===t.value?' selected':''}>${t.label}</option>`).join('')}
-        </select>
+    <div style="background:var(--bg);border:1px solid var(--border);border-radius:10px;padding:12px;margin-bottom:4px;">
+      <div style="display:grid;grid-template-columns:1fr 1fr 1fr 1fr 80px 100px 32px;gap:8px;align-items:end;">
+        <div>
+          ${_LABEL('Tipo')}
+          <select onchange="window._ventaItems[${idx}].tipo=this.value" style="${_ESTILO}">
+            ${ITEM_TIPOS.map(t=>`<option value="${t.value}"${it.tipo===t.value?' selected':''}>${t.label}</option>`).join('')}
+          </select>
+        </div>
+        <div>
+          ${_LABEL('Género *')}
+          <select onchange="window._ventaItems[${idx}].genero=this.value" style="${_ESTILO}">
+            <option value="">— Género —</option>
+            ${['Hombre','Mujer','Niño','Bebé','Unisex'].map(g=>`<option value="${g}"${it.genero===g?' selected':''}>${g}</option>`).join('')}
+          </select>
+        </div>
+        <div>
+          ${_LABEL('Talla *')}
+          <select onchange="window._ventaItems[${idx}].talla=this.value" style="${_ESTILO}">
+            <option value="">— Talla —</option>
+            ${ITEM_TALLAS.map(t=>`<option value="${t}"${it.talla===t?' selected':''}>${t}</option>`).join('')}
+          </select>
+        </div>
+        <div>
+          ${_LABEL('Color')}
+          <input type="text" value="${it.color||''}" placeholder="Ej. Negro, Blanco..." oninput="window._ventaItems[${idx}].color=this.value" style="${_ESTILO}">
+        </div>
+        <div>
+          ${_LABEL('Cant.')}
+          <input type="number" value="${it.cantidad||1}" min="1" oninput="window._ventaItems[${idx}].cantidad=+this.value||1;recalcTotalVenta()" style="${_ESTILO}">
+        </div>
+        <div>
+          ${_LABEL('Precio $')}
+          <input type="number" value="${it.precio||''}" placeholder="0" step="0.01" oninput="window._ventaItems[${idx}].precio=+this.value||0;recalcTotalVenta()" style="${_ESTILO}">
+        </div>
+        <div style="text-align:center;padding-top:16px;">
+          <button type="button" onclick="eliminarItemVenta(${idx})" title="Quitar" style="background:none;border:none;font-size:18px;cursor:pointer;color:var(--red);">🗑</button>
+        </div>
       </div>
-      <div>
-        <label style="font-size:11px;font-weight:600;color:var(--ink-soft);">Descripción</label>
-        <input type="text" value="${it.descripcion||''}" placeholder="Color, talla, diseño..." oninput="window._ventaItems[${idx}].descripcion=this.value"
-          style="width:100%;border:1.5px solid var(--border);border-radius:8px;padding:7px 8px;font-size:12px;background:var(--bg-card);color:var(--ink);">
-      </div>
-      <div>
-        <label style="font-size:11px;font-weight:600;color:var(--ink-soft);">Proceso</label>
-        <select onchange="window._ventaItems[${idx}].proceso=this.value" style="width:100%;border:1.5px solid var(--border);border-radius:8px;padding:7px 8px;font-size:12px;background:var(--bg-card);color:var(--ink);">
-          ${ITEM_PROCESOS.map(p=>`<option value="${p}"${it.proceso===p?' selected':''}>${p}</option>`).join('')}
-        </select>
-      </div>
-      <div>
-        <label style="font-size:11px;font-weight:600;color:var(--ink-soft);">Cant.</label>
-        <input type="number" value="${it.cantidad||1}" min="1" oninput="window._ventaItems[${idx}].cantidad=+this.value||1;recalcTotalVenta()"
-          style="width:100%;border:1.5px solid var(--border);border-radius:8px;padding:7px 8px;font-size:12px;background:var(--bg-card);color:var(--ink);">
-      </div>
-      <div>
-        <label style="font-size:11px;font-weight:600;color:var(--ink-soft);">Precio $</label>
-        <input type="number" value="${it.precio||''}" placeholder="0" step="0.01" oninput="window._ventaItems[${idx}].precio=+this.value||0;recalcTotalVenta()"
-          style="width:100%;border:1.5px solid var(--border);border-radius:8px;padding:7px 8px;font-size:12px;background:var(--bg-card);color:var(--ink);">
-      </div>
-      <div style="text-align:center;">
-        <button type="button" onclick="eliminarItemVenta(${idx})" title="Quitar" style="background:none;border:none;font-size:18px;cursor:pointer;color:var(--red);">🗑</button>
+      <div style="display:grid;grid-template-columns:1fr 1fr 1fr 1fr;gap:8px;margin-top:8px;align-items:end;">
+        <div>
+          ${_LABEL('Proceso')}
+          <select onchange="window._ventaItems[${idx}].proceso=this.value" style="${_ESTILO}">
+            ${ITEM_PROCESOS.map(p=>`<option value="${p}"${it.proceso===p?' selected':''}>${p}</option>`).join('')}
+          </select>
+        </div>
+        <div>
+          ${_LABEL('Material')}
+          <select onchange="window._ventaItems[${idx}].material=this.value" style="${_ESTILO}">
+            <option value="">— Material —</option>
+            ${ITEM_MATERIALES.map(m=>`<option value="${m}"${it.material===m?' selected':''}>${m}</option>`).join('')}
+          </select>
+        </div>
+        <div>
+          ${_LABEL('Tipo de prenda')}
+          <select onchange="window._ventaItems[${idx}].tipoPrenda=this.value;renderItemsVenta()" style="${_ESTILO}">
+            <option value="">— Tipo —</option>
+            ${ITEM_TIPOS_PRENDA.map(p=>`<option value="${p}"${it.tipoPrenda===p?' selected':''}>${p}</option>`).join('')}
+          </select>
+        </div>
+        ${it.tipoPrenda==='Otro'?`
+        <div>
+          ${_LABEL('Especifica el tipo')}
+          <input type="text" value="${it.tipoPrendaOtro||''}" placeholder="Ej. Manga larga, Crop top..." oninput="window._ventaItems[${idx}].tipoPrendaOtro=this.value" style="${_ESTILO}">
+        </div>`:`
+        <div>
+          ${_LABEL('Descripción / Diseño')}
+          <input type="text" value="${it.descripcion||''}" placeholder="Diseño, notas..." oninput="window._ventaItems[${idx}].descripcion=this.value" style="${_ESTILO}">
+        </div>`}
       </div>
     </div>`).join('');
   recalcTotalVenta();
@@ -2481,7 +2539,10 @@ window.guardarVenta=async function(){
   const bancoOrigen=document.getElementById('v-banco-origen')?.value||'';
   const pagoCon=+document.getElementById('v-pago-con')?.value||0;
   const anticipo=+document.getElementById('v-anticipo').value||0;
-  const saldo=Math.max(0,total-anticipo);
+  // Si tiene método de pago de contado y anticipo=0, es pago completo → saldo 0
+  const METODOS_CONTADO=['efectivo','transferencia','deposito','tarjeta'];
+  const esContado=METODOS_CONTADO.includes(metodoPago)&&anticipo===0;
+  const saldo=esContado?0:Math.max(0,total-anticipo);
   const idExistente=document.getElementById('venta-id').value;
   const id=idExistente||uid();
   const folioVal=document.getElementById('v-folio').value||generarFolio(canal2);
@@ -2656,12 +2717,19 @@ function renderVentas(){
   empty.style.display='none';
   const canalColor={Local:'badge-blue','Foráneo':'badge-gold','Mercado Libre':'badge-gold',Amazon:'badge-green',Shopify:'badge-green',WhatsApp:'badge-green',Otro:'badge-gray'};
   tbody.innerHTML=lista.map(v=>{
-    // Mostrar items del pedido si existen, o producto legacy
     let productoTxt=v.producto||'—';
     let procesoTxt=v.tipoProceso||'—';
+    let generoTxt='—', tallaTxt='—', colorTxt='—';
     if(Array.isArray(v.items)&&v.items.length>0){
       productoTxt=v.items.map(it=>`${it.cantidad}x ${it.tipo}${it.descripcion?' ('+it.descripcion+')':''}`).join(', ');
       procesoTxt=[...new Set(v.items.map(it=>it.proceso).filter(Boolean))].join(', ')||v.tipoProceso||'—';
+      generoTxt=[...new Set(v.items.map(it=>it.genero).filter(Boolean))].join(', ')||v.genero||'—';
+      tallaTxt=[...new Set(v.items.map(it=>it.talla).filter(Boolean))].join(', ')||v.talla||'—';
+      colorTxt=[...new Set(v.items.map(it=>it.color).filter(Boolean))].join(', ')||v.color||'—';
+    } else {
+      generoTxt=v.genero||'—';
+      tallaTxt=v.talla||'—';
+      colorTxt=v.color||'—';
     }
     const anticipo=+v.anticipo||0;
     const saldo=+v.saldo||0;
@@ -2669,6 +2737,9 @@ function renderVentas(){
     <td>${fmtFecha(v.fecha)}</td>
     <td>${v.cliente||'—'}</td>
     <td style="font-weight:500;font-size:12px;">${productoTxt}</td>
+    <td style="font-size:12px;">${generoTxt}</td>
+    <td style="font-size:12px;">${tallaTxt}</td>
+    <td style="font-size:12px;">${colorTxt}</td>
     <td style="font-size:11px;">${procesoTxt}</td>
     <td><span class="badge ${canalColor[v.canal]||'badge-gray'}">${v.canal}</span>${v.ciudad?`<div style="font-size:10px;color:var(--ink-soft);margin-top:2px;">📍${v.ciudad}</div>`:''}</td>
     <td>${v.cantidad}</td>
