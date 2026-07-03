@@ -4332,6 +4332,7 @@ function renderPedidos(){
     <td style="display:flex;gap:4px;flex-wrap:wrap;">
       ${isAdmin?`<button class="btn btn-ghost btn-sm" onclick="openPedidoModal('${p.id}')">✏️</button>`:''}
       <button class="btn btn-sm" style="background:#25D366;color:#fff;" onclick="wsComprobante('${p.id}','anticipo')">💬 Anticipo</button>
+      <button class="btn btn-sm" style="background:#128C7E;color:#fff;" onclick="wsComprobante('${p.id}','estatus')">💬 Estatus</button>
       ${p.saldo===0?`<button class="btn btn-sm" style="background:#25D366;color:#fff;" onclick="wsComprobante('${p.id}','liquidado')">💬 Liquidado</button>`:''}
       ${isAdmin?`<button class="btn btn-danger btn-sm" onclick="eliminarPedido('${p.id}')">🗑</button>`:''}
     </td>
@@ -4369,8 +4370,30 @@ ${p.notas?`📝 Notas: ${p.notas}`:''}
 
 ¡Gracias por tu preferencia! 🙌
 _Playeras Beloma · La moda eres tú_`;
+  } else if(tipo==='estatus'){
+    const estatusEmoji={'En elaboración':'🔧','Listo':'✅','Entregado':'📦','Liquidado':'💰'}[p.estatus]||'📋';
+    msg=`${estatusEmoji} *ACTUALIZACIÓN DE PEDIDO*
+🏪 *Playeras Beloma — La moda eres tú*
+
+👤 Cliente: *${p.cliente}*
+📋 Folio: ${p.folio||p.id?.slice(-6)||'—'}
+📅 Fecha del pedido: ${fmtFecha(p.fecha)}
+${p.entrega?`📦 Fecha de entrega: *${fmtFecha(p.entrega)}*`:''}
+
+🛍️ *Pedido:*
+${p.descripcion}
+
+━━━━━━━━━━━━━━━
+📌 *Estatus actual: ${p.estatus}*
+━━━━━━━━━━━━━━━
+
+💰 Total: ${fmtMoney(p.total)}
+✅ Pagado: ${fmtMoney(p.anticipo)}
+${+p.saldo>0?`⏳ Saldo pendiente: *${fmtMoney(p.saldo)}*`:'✅ *Pedido liquidado*'}
+
+${p.notas?`📝 ${p.notas}\n`:''}¡Gracias por tu preferencia! 🙌
+_Cualquier duda estamos a tus órdenes._`;
   } else {
-    msg=`✅ *COMPROBANTE DE PAGO FINAL*
 🏪 *Playeras Beloma*
 
 👤 Cliente: ${p.cliente}
