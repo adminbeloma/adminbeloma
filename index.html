@@ -5257,6 +5257,7 @@ let fondosCaja = [];
 // Suscripción en tiempo real para fondos y cortes
 onSnapshot(collection(db,'pl_fondos_caja'), s=>{
   fondosCaja = s.docs.map(d=>d.data());
+  window.fondosCaja = fondosCaja;
   actualizarCajaConFondo();
   renderCaja();
 });
