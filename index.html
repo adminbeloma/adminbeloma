@@ -223,6 +223,7 @@ tbody td{padding:11px 14px;font-size:13.5px;vertical-align:middle;}
     <a class="active" onclick="showSection('dashboard')" id="nav-dashboard"><span class="icon">🏠</span><span>Inicio</span></a>
     <a onclick="showSection('ventas')" id="nav-ventas"><span class="icon">💰</span><span>Ventas</span></a>
     <a onclick="showSection('gastos')" id="nav-gastos" class="admin-only" style="display:none;"><span class="icon">💸</span><span>Gastos</span></a>
+    <a onclick="showSection('gastos-fijos')" id="nav-gastos-fijos" class="admin-only" style="display:none;"><span class="icon">📌</span><span>Gastos Fijos</span></a>
     <a onclick="showSection('reportes')" id="nav-reportes" class="admin-only" style="display:none;"><span class="icon">📊</span><span>Reportes</span></a>
     <div class="nav-group">Inventario</div>
     <a onclick="showSection('playeras')" id="nav-playeras"><span class="icon">👕</span><span>Playeras</span></a>
@@ -413,7 +414,182 @@ tbody td{padding:11px 14px;font-size:13.5px;vertical-align:middle;}
     </div>
   </div>
 
+  <!-- GASTOS FIJOS -->
+  <div id="section-gastos-fijos" class="section">
+    <div class="topbar">
+      <h1>📌 Gastos Fijos</h1>
+      <div class="actions">
+        <button class="btn btn-ghost btn-sm" onclick="openGastoFijoModal()">+ Agregar concepto</button>
+        <button class="btn btn-accent" onclick="openPagoFijoModal()">+ Registrar pago</button>
+      </div>
+    </div>
+    <div class="content">
+      <!-- Resumen -->
+      <div style="display:flex;gap:14px;flex-wrap:wrap;margin-bottom:20px;">
+        <div class="stat-card"><div class="label">Conceptos activos</div><div class="value" id="gf-total-conceptos">0</div></div>
+        <div class="stat-card"><div class="label">Pagado este mes</div><div class="value" id="gf-pagado-mes" style="color:var(--red);">$0</div></div>
+        <div class="stat-card"><div class="label">Estimado mensual</div><div class="value" id="gf-estimado-mes">$0</div></div>
+      </div>
+
+      <!-- Catálogo de conceptos -->
+      <div style="font-weight:700;font-size:15px;margin-bottom:12px;">📋 Catálogo de gastos fijos</div>
+      <div class="table-wrap" style="margin-bottom:28px;">
+        <table>
+          <thead><tr><th>Concepto</th><th>Categoría</th><th>Periodicidad</th><th>Monto estimado</th><th>Método de pago</th><th>Acciones</th></tr></thead>
+          <tbody id="tabla-gastos-fijos"></tbody>
+        </table>
+      </div>
+      <div id="gf-conceptos-empty" class="empty-state" style="display:none;"><div class="icon">📌</div><p>No hay gastos fijos registrados. Agrega uno con el botón de arriba.</p></div>
+
+      <!-- Historial de pagos -->
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;flex-wrap:wrap;gap:8px;">
+        <div style="font-weight:700;font-size:15px;">💳 Historial de pagos</div>
+        <div style="display:flex;gap:8px;align-items:center;">
+          <select id="gf-filtro-concepto" onchange="renderPagosFijos()" style="border:1.5px solid var(--border);border-radius:8px;padding:7px 10px;font-size:13px;outline:none;">
+            <option value="">Todos los conceptos</option>
+          </select>
+          <input type="date" id="gf-filtro-desde" onchange="renderPagosFijos()" style="border:1.5px solid var(--border);border-radius:8px;padding:7px 10px;font-size:13px;outline:none;">
+          <input type="date" id="gf-filtro-hasta" onchange="renderPagosFijos()" style="border:1.5px solid var(--border);border-radius:8px;padding:7px 10px;font-size:13px;outline:none;">
+        </div>
+      </div>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>Fecha</th><th>Concepto</th><th>Categoría</th><th>Período</th><th>Monto real</th><th>Método</th><th>Notas</th><th>Acciones</th></tr></thead>
+          <tbody id="tabla-pagos-fijos"></tbody>
+        </table>
+      </div>
+      <div id="gf-pagos-empty" class="empty-state" style="display:none;"><div class="icon">💳</div><p>Sin pagos registrados.</p></div>
+    </div>
+  </div>
+
+  <!-- MODAL: PAGO DE SALDO PEDIDO -->
+  <div class="modal-overlay" id="modal-pago-saldo">
+    <div class="modal" style="max-width:420px;">
+      <div class="modal-header"><h2>💰 Registrar Pago</h2><button class="modal-close" onclick="confirmarCerrarModal('modal-pago-saldo')">×</button></div>
+      <div class="modal-body">
+        <input type="hidden" id="ps-pedido-id">
+        <div id="ps-info" style="background:var(--bg);border-radius:8px;padding:12px;margin-bottom:16px;font-size:13px;"></div>
+        <div class="form-grid">
+          <div class="form-group"><label>Fecha del pago</label><input type="date" id="ps-fecha"></div>
+          <div class="form-group"><label>Monto recibido ($) *</label><input type="number" id="ps-monto" placeholder="0.00" step="0.01" oninput="recalcPagoSaldo()"></div>
+          <div class="form-group full"><label>Método de pago</label>
+            <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:4px;">
+              <label style="display:flex;align-items:center;gap:5px;cursor:pointer;font-size:13px;padding:6px 12px;border:1.5px solid var(--border);border-radius:8px;">
+                <input type="radio" name="ps-metodo" value="efectivo" checked> 💵 Efectivo
+              </label>
+              <label style="display:flex;align-items:center;gap:5px;cursor:pointer;font-size:13px;padding:6px 12px;border:1.5px solid var(--border);border-radius:8px;">
+                <input type="radio" name="ps-metodo" value="transferencia"> 📲 Transferencia
+              </label>
+              <label style="display:flex;align-items:center;gap:5px;cursor:pointer;font-size:13px;padding:6px 12px;border:1.5px solid var(--border);border-radius:8px;">
+                <input type="radio" name="ps-metodo" value="tarjeta"> 💳 Tarjeta
+              </label>
+            </div>
+          </div>
+          <div id="ps-saldo-nuevo-wrap" style="grid-column:1/-1;background:var(--bg);border-radius:8px;padding:10px 14px;font-size:13px;display:none;">
+            <div style="display:flex;justify-content:space-between;">
+              <span>Anticipo anterior:</span><strong id="ps-anticipo-anterior">$0</strong>
+            </div>
+            <div style="display:flex;justify-content:space-between;">
+              <span>+ Pago nuevo:</span><strong id="ps-pago-nuevo" style="color:var(--green);">$0</strong>
+            </div>
+            <div style="display:flex;justify-content:space-between;border-top:1px solid var(--border);margin-top:6px;padding-top:6px;">
+              <span>Saldo pendiente:</span><strong id="ps-saldo-nuevo" style="color:var(--red);">$0</strong>
+            </div>
+          </div>
+          <div class="form-group full"><label>Notas</label><input type="text" id="ps-notas" placeholder="Referencia, observaciones..."></div>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-ghost" onclick="closeModal('modal-pago-saldo')">Cancelar</button>
+        <button class="btn btn-accent" onclick="guardarPagoSaldo()">Guardar pago</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- MODAL: NUEVO CONCEPTO FIJO -->
+  <div class="modal-overlay" id="modal-gasto-fijo">
+    <div class="modal" style="max-width:480px;">
+      <div class="modal-header"><h2>📌 Concepto de Gasto Fijo</h2><button class="modal-close" onclick="confirmarCerrarModal('modal-gasto-fijo')">×</button></div>
+      <div class="modal-body">
+        <input type="hidden" id="gf-id">
+        <div class="form-grid">
+          <div class="form-group full"><label>Concepto *</label><input type="text" id="gf-nombre" placeholder="Ej. CFE, Internet, Sueldo Ana Luz..."></div>
+          <div class="form-group"><label>Categoría</label>
+            <select id="gf-categoria">
+              <option>Servicios básicos</option>
+              <option>Sueldos</option>
+              <option>Renta</option>
+              <option>Comunicaciones</option>
+              <option>Contabilidad</option>
+              <option>Seguros</option>
+              <option>Suscripciones</option>
+              <option>Otro</option>
+            </select>
+          </div>
+          <div class="form-group"><label>Periodicidad</label>
+            <select id="gf-periodicidad">
+              <option value="mensual">Mensual</option>
+              <option value="quincenal">Quincenal</option>
+              <option value="semanal">Semanal</option>
+              <option value="bimestral">Bimestral</option>
+              <option value="trimestral">Trimestral</option>
+              <option value="anual">Anual</option>
+            </select>
+          </div>
+          <div class="form-group"><label>Monto estimado ($)</label><input type="number" id="gf-monto-est" placeholder="0.00" step="0.01"></div>
+          <div class="form-group"><label>Método de pago habitual</label>
+            <select id="gf-metodo">
+              <option>Transferencia</option>
+              <option>Tarjeta</option>
+              <option>Efectivo</option>
+              <option>Débito automático</option>
+            </select>
+          </div>
+          <div class="form-group full"><label>Notas</label><input type="text" id="gf-notas-cat" placeholder="Proveedor, número de cuenta, etc."></div>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-ghost" onclick="closeModal('modal-gasto-fijo')">Cancelar</button>
+        <button class="btn btn-accent" onclick="guardarGastoFijo()">Guardar</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- MODAL: REGISTRAR PAGO -->
+  <div class="modal-overlay" id="modal-pago-fijo">
+    <div class="modal" style="max-width:480px;">
+      <div class="modal-header"><h2>💳 Registrar Pago</h2><button class="modal-close" onclick="confirmarCerrarModal('modal-pago-fijo')">×</button></div>
+      <div class="modal-body">
+        <input type="hidden" id="pf-id">
+        <div class="form-grid">
+          <div class="form-group full"><label>Concepto *</label>
+            <select id="pf-concepto-id" onchange="autoFillPago()">
+              <option value="">— Seleccionar concepto —</option>
+            </select>
+          </div>
+          <div class="form-group"><label>Fecha de pago *</label><input type="date" id="pf-fecha"></div>
+          <div class="form-group"><label>Período que cubre</label><input type="text" id="pf-periodo" placeholder="Ej. Julio 2026, Sem 1 julio..."></div>
+          <div class="form-group"><label>Monto real pagado ($) *</label><input type="number" id="pf-monto" placeholder="0.00" step="0.01"></div>
+          <div class="form-group"><label>Método de pago</label>
+            <select id="pf-metodo">
+              <option>Transferencia</option>
+              <option>Tarjeta</option>
+              <option>Efectivo</option>
+              <option>Débito automático</option>
+            </select>
+          </div>
+          <div class="form-group full"><label>Notas</label><input type="text" id="pf-notas" placeholder="Referencia, número de recibo..."></div>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-ghost" onclick="closeModal('modal-pago-fijo')">Cancelar</button>
+        <button class="btn btn-accent" onclick="guardarPagoFijo()">Guardar pago</button>
+      </div>
+    </div>
+  </div>
+
   <!-- REPORTES -->
+
   <div id="section-reportes" class="section">
     <div class="topbar">
       <h1>Reportes</h1>
@@ -823,11 +999,6 @@ tbody td{padding:11px 14px;font-size:13.5px;vertical-align:middle;}
           <div style="font-weight:700;font-size:14px;margin-bottom:12px;">💸 Gastos locales de hoy</div>
           <div id="gastos-locales-lista"></div>
           <div id="gastos-locales-empty" style="font-size:13px;color:var(--ink-soft);text-align:center;padding:20px;">Sin gastos registrados hoy.</div>
-        </div>
-        <div class="card">
-          <div style="font-weight:700;font-size:14px;margin-bottom:12px;">📋 Cortes anteriores</div>
-          <div id="cortes-lista" style="max-height:280px;overflow-y:auto;"></div>
-          <div id="cortes-empty" style="font-size:13px;color:var(--ink-soft);text-align:center;padding:20px;">Sin cortes registrados.</div>
         </div>
       </div>
     </div>
@@ -4331,9 +4502,10 @@ function renderPedidos(){
     <td><span class="badge ${estatusColor[p.estatus]||'badge-gray'}">${p.estatus}</span></td>
     <td style="display:flex;gap:4px;flex-wrap:wrap;">
       ${isAdmin?`<button class="btn btn-ghost btn-sm" onclick="openPedidoModal('${p.id}')">✏️</button>`:''}
+      ${+p.saldo>0?`<button class="btn btn-sm" style="background:var(--accent);color:#fff;" onclick="openPagoSaldoModal('${p.id}')">💰 Pago</button>`:''}
       <button class="btn btn-sm" style="background:#25D366;color:#fff;" onclick="wsComprobante('${p.id}','anticipo')">💬 Anticipo</button>
       <button class="btn btn-sm" style="background:#128C7E;color:#fff;" onclick="wsComprobante('${p.id}','estatus')">💬 Estatus</button>
-      ${p.saldo===0?`<button class="btn btn-sm" style="background:#25D366;color:#fff;" onclick="wsComprobante('${p.id}','liquidado')">💬 Liquidado</button>`:''}
+      ${+p.saldo===0?`<button class="btn btn-sm" style="background:#25D366;color:#fff;" onclick="wsComprobante('${p.id}','liquidado')">💬 Liquidado</button>`:''}
       ${isAdmin?`<button class="btn btn-danger btn-sm" onclick="eliminarPedido('${p.id}')">🗑</button>`:''}
     </td>
   </tr>`).join('');
@@ -4977,6 +5149,233 @@ window.exportarReporteExcel=function(){
 };
 
 
+// ── PAGO DE SALDO EN PEDIDOS ──────────────────────────────────────
+window.openPagoSaldoModal=function(id){
+  const p=pedidos.find(x=>x.id===id);
+  if(!p)return;
+  document.getElementById('ps-pedido-id').value=id;
+  document.getElementById('ps-fecha').value=hoy();
+  document.getElementById('ps-monto').value='';
+  document.getElementById('ps-notas').value='';
+  document.querySelector('input[name="ps-metodo"][value="efectivo"]').checked=true;
+  document.getElementById('ps-saldo-nuevo-wrap').style.display='none';
+  document.getElementById('ps-info').innerHTML=`
+    <div style="font-weight:700;font-size:14px;margin-bottom:6px;">📦 ${p.descripcion||'Pedido'}</div>
+    <div style="display:flex;gap:16px;flex-wrap:wrap;">
+      <span>👤 <strong>${p.cliente}</strong></span>
+      <span>💰 Total: <strong>${fmtMoney(p.total)}</strong></span>
+      <span>✅ Anticipo: <strong style="color:var(--green);">${fmtMoney(p.anticipo||0)}</strong></span>
+      <span>⏳ Saldo: <strong style="color:var(--red);">${fmtMoney(p.saldo||0)}</strong></span>
+    </div>`;
+  openModal('modal-pago-saldo');
+};
+
+window.recalcPagoSaldo=function(){
+  const id=document.getElementById('ps-pedido-id').value;
+  const p=pedidos.find(x=>x.id===id);
+  if(!p)return;
+  const pago=+document.getElementById('ps-monto').value||0;
+  const nuevoAnticipo=(+p.anticipo||0)+pago;
+  const nuevoSaldo=Math.max(0,(+p.total||0)-nuevoAnticipo);
+  const wrap=document.getElementById('ps-saldo-nuevo-wrap');
+  if(pago>0){
+    wrap.style.display='block';
+    document.getElementById('ps-anticipo-anterior').textContent=fmtMoney(p.anticipo||0);
+    document.getElementById('ps-pago-nuevo').textContent=fmtMoney(pago);
+    document.getElementById('ps-saldo-nuevo').textContent=fmtMoney(nuevoSaldo);
+    document.getElementById('ps-saldo-nuevo').style.color=nuevoSaldo===0?'var(--green)':'var(--red)';
+  } else {
+    wrap.style.display='none';
+  }
+};
+
+window.guardarPagoSaldo=async function(){
+  const id=document.getElementById('ps-pedido-id').value;
+  const pago=+document.getElementById('ps-monto').value||0;
+  if(!pago){toast('⚠️ Ingresa el monto recibido');return;}
+  const p=pedidos.find(x=>x.id===id);
+  if(!p)return;
+  const nuevoAnticipo=+(+(p.anticipo||0)+pago).toFixed(2);
+  const nuevoSaldo=+Math.max(0,(+p.total||0)-nuevoAnticipo).toFixed(2);
+  const metodo=document.querySelector('input[name="ps-metodo"]:checked')?.value||'efectivo';
+  const nuevoEstatus=nuevoSaldo===0?'Liquidado':p.estatus;
+  await setDoc(doc(db,'pl_pedidos',id),{
+    ...p,
+    anticipo:nuevoAnticipo,
+    saldo:nuevoSaldo,
+    estatus:nuevoEstatus,
+    ultimoPago:{fecha:document.getElementById('ps-fecha').value,monto:pago,metodo,notas:document.getElementById('ps-notas').value}
+  });
+  closeModal('modal-pago-saldo');
+  toast(nuevoSaldo===0?'✅ Pedido liquidado por completo':'✅ Pago registrado — Saldo: '+fmtMoney(nuevoSaldo));
+};
+
+// ═══════════════════════════════════════════════════════════════════
+//  GASTOS FIJOS
+// ═══════════════════════════════════════════════════════════════════
+let gastosFijosConceptos = [];
+let pagosFijos = [];
+
+onSnapshot(collection(db,'pl_gastos_fijos_conceptos'), s=>{
+  gastosFijosConceptos = s.docs.map(d=>d.data()).sort((a,b)=>(a.nombre||'').localeCompare(b.nombre||''));
+  renderGastosFijosConceptos();
+  actualizarSelectConceptos();
+});
+
+onSnapshot(collection(db,'pl_pagos_fijos'), s=>{
+  pagosFijos = s.docs.map(d=>d.data()).sort((a,b)=>b.fecha.localeCompare(a.fecha));
+  renderPagosFijos();
+  actualizarResumenGastosFijos();
+});
+
+function renderGastosFijosConceptos(){
+  const tbody=document.getElementById('tabla-gastos-fijos');
+  const empty=document.getElementById('gf-conceptos-empty');
+  if(!tbody)return;
+  if(!gastosFijosConceptos.length){tbody.innerHTML='';if(empty)empty.style.display='block';return;}
+  if(empty)empty.style.display='none';
+  const periodicidadLabel={mensual:'Mensual',quincenal:'Quincenal',semanal:'Semanal',bimestral:'Bimestral',trimestral:'Trimestral',anual:'Anual'};
+  tbody.innerHTML=gastosFijosConceptos.map(g=>`<tr>
+    <td style="font-weight:600;">${g.nombre}</td>
+    <td style="font-size:12px;">${g.categoria||'—'}</td>
+    <td><span class="badge badge-blue" style="font-size:10px;">${periodicidadLabel[g.periodicidad]||g.periodicidad}</span></td>
+    <td style="font-weight:700;">${fmtMoney(g.montoEst||0)}</td>
+    <td style="font-size:12px;">${g.metodo||'—'}</td>
+    <td style="display:flex;gap:4px;">
+      <button class="btn btn-ghost btn-sm" onclick="openGastoFijoModal('${g.id}')">✏️</button>
+      <button class="btn btn-danger btn-sm" onclick="eliminarGastoFijoConcepto('${g.id}')">🗑</button>
+    </td>
+  </tr>`).join('');
+}
+
+window.renderPagosFijos=function(){
+  const tbody=document.getElementById('tabla-pagos-fijos');
+  const empty=document.getElementById('gf-pagos-empty');
+  if(!tbody)return;
+  const filtroConcepto=document.getElementById('gf-filtro-concepto')?.value||'';
+  const desde=document.getElementById('gf-filtro-desde')?.value||'';
+  const hasta=document.getElementById('gf-filtro-hasta')?.value||'';
+  let f=pagosFijos.filter(p=>{
+    const mc=!filtroConcepto||p.conceptoId===filtroConcepto;
+    const md=!desde||p.fecha>=desde;
+    const mh=!hasta||p.fecha<=hasta;
+    return mc&&md&&mh;
+  });
+  if(!f.length){tbody.innerHTML='';if(empty)empty.style.display='block';return;}
+  if(empty)empty.style.display='none';
+  tbody.innerHTML=f.map(p=>`<tr>
+    <td>${p.fecha}</td>
+    <td style="font-weight:600;">${p.conceptoNombre||'—'}</td>
+    <td style="font-size:12px;">${p.categoria||'—'}</td>
+    <td style="font-size:12px;">${p.periodo||'—'}</td>
+    <td style="font-weight:700;color:var(--red);">${fmtMoney(p.monto)}</td>
+    <td style="font-size:12px;">${p.metodo||'—'}</td>
+    <td style="font-size:11px;color:var(--ink-soft);">${p.notas||'—'}</td>
+    <td><button class="btn btn-danger btn-sm" onclick="eliminarPagoFijo('${p.id}')">🗑</button></td>
+  </tr>`).join('');
+};
+
+function actualizarResumenGastosFijos(){
+  const mesActual=hoy().slice(0,7); // YYYY-MM
+  const pagadoMes=pagosFijos.filter(p=>p.fecha.startsWith(mesActual)).reduce((s,p)=>s+(+p.monto||0),0);
+  // Estimado mensual: suma conceptos mensuales, quincenal*2, semanal*4, bimestral/2, trimestral/3, anual/12
+  const factores={mensual:1,quincenal:2,semanal:4,bimestral:0.5,trimestral:0.333,anual:0.0833};
+  const estimado=gastosFijosConceptos.reduce((s,g)=>s+(+g.montoEst||0)*(factores[g.periodicidad]||1),0);
+  const elC=document.getElementById('gf-total-conceptos');
+  const elP=document.getElementById('gf-pagado-mes');
+  const elE=document.getElementById('gf-estimado-mes');
+  if(elC)elC.textContent=gastosFijosConceptos.length;
+  if(elP)elP.textContent=fmtMoney(pagadoMes);
+  if(elE)elE.textContent=fmtMoney(estimado);
+}
+
+function actualizarSelectConceptos(){
+  const sel=document.getElementById('pf-concepto-id');
+  const filtro=document.getElementById('gf-filtro-concepto');
+  const opts=gastosFijosConceptos.map(g=>`<option value="${g.id}">${g.nombre}</option>`).join('');
+  if(sel) sel.innerHTML='<option value="">— Seleccionar concepto —</option>'+opts;
+  if(filtro) filtro.innerHTML='<option value="">Todos los conceptos</option>'+opts;
+}
+
+window.openGastoFijoModal=function(id){
+  document.getElementById('gf-id').value='';
+  ['gf-nombre','gf-notas-cat'].forEach(f=>document.getElementById(f).value='');
+  document.getElementById('gf-categoria').value='Servicios básicos';
+  document.getElementById('gf-periodicidad').value='mensual';
+  document.getElementById('gf-monto-est').value='';
+  document.getElementById('gf-metodo').value='Transferencia';
+  if(id){
+    const g=gastosFijosConceptos.find(x=>x.id===id);
+    if(g){
+      document.getElementById('gf-id').value=g.id;
+      document.getElementById('gf-nombre').value=g.nombre||'';
+      document.getElementById('gf-categoria').value=g.categoria||'Servicios básicos';
+      document.getElementById('gf-periodicidad').value=g.periodicidad||'mensual';
+      document.getElementById('gf-monto-est').value=g.montoEst||'';
+      document.getElementById('gf-metodo').value=g.metodo||'Transferencia';
+      document.getElementById('gf-notas-cat').value=g.notas||'';
+    }
+  }
+  openModal('modal-gasto-fijo');
+};
+
+window.guardarGastoFijo=async function(){
+  const nombre=document.getElementById('gf-nombre').value.trim();
+  if(!nombre){toast('⚠️ El concepto es obligatorio');return;}
+  const id=document.getElementById('gf-id').value||uid();
+  const data={id,nombre,categoria:document.getElementById('gf-categoria').value,periodicidad:document.getElementById('gf-periodicidad').value,montoEst:+document.getElementById('gf-monto-est').value||0,metodo:document.getElementById('gf-metodo').value,notas:document.getElementById('gf-notas-cat').value,creado:new Date().toISOString()};
+  await setDoc(doc(db,'pl_gastos_fijos_conceptos',id),data);
+  closeModal('modal-gasto-fijo');
+  toast('✅ Concepto guardado');
+};
+
+window.eliminarGastoFijoConcepto=async function(id){
+  if(!confirm('¿Eliminar este concepto? Los pagos registrados no se eliminan.'))return;
+  await deleteDoc(doc(db,'pl_gastos_fijos_conceptos',id));
+  toast('🗑 Concepto eliminado');
+};
+
+window.openPagoFijoModal=function(){
+  document.getElementById('pf-id').value='';
+  document.getElementById('pf-fecha').value=hoy();
+  document.getElementById('pf-concepto-id').value='';
+  document.getElementById('pf-periodo').value='';
+  document.getElementById('pf-monto').value='';
+  document.getElementById('pf-metodo').value='Transferencia';
+  document.getElementById('pf-notas').value='';
+  openModal('modal-pago-fijo');
+};
+
+window.autoFillPago=function(){
+  const id=document.getElementById('pf-concepto-id').value;
+  const g=gastosFijosConceptos.find(x=>x.id===id);
+  if(!g)return;
+  if(g.montoEst)document.getElementById('pf-monto').value=g.montoEst;
+  if(g.metodo)document.getElementById('pf-metodo').value=g.metodo;
+  // Auto-generar período
+  const hoyArr=hoy().split('-');
+  const meses=['Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre'];
+  document.getElementById('pf-periodo').value=`${meses[+hoyArr[1]-1]} ${hoyArr[0]}`;
+};
+
+window.guardarPagoFijo=async function(){
+  const conceptoId=document.getElementById('pf-concepto-id').value;
+  const monto=+document.getElementById('pf-monto').value;
+  if(!conceptoId||!monto){toast('⚠️ Concepto y monto son obligatorios');return;}
+  const concepto=gastosFijosConceptos.find(x=>x.id===conceptoId);
+  const id=document.getElementById('pf-id').value||uid();
+  const data={id,conceptoId,conceptoNombre:concepto?.nombre||'—',categoria:concepto?.categoria||'—',fecha:document.getElementById('pf-fecha').value,periodo:document.getElementById('pf-periodo').value,monto,metodo:document.getElementById('pf-metodo').value,notas:document.getElementById('pf-notas').value,creado:new Date().toISOString()};
+  await setDoc(doc(db,'pl_pagos_fijos',id),data);
+  closeModal('modal-pago-fijo');
+  toast('✅ Pago registrado');
+};
+
+window.eliminarPagoFijo=async function(id){
+  if(!confirm('¿Eliminar este pago?'))return;
+  await deleteDoc(doc(db,'pl_pagos_fijos',id));
+  toast('🗑 Pago eliminado');
+};
+
 // ─── AUTH Y ROLES ───
 const auth = getAuth();
 let currentUser = null;
@@ -5296,8 +5695,17 @@ function actualizarCajaConFondo() {
 let cortesCaja = [];
 let _corteActualData = {};
 
-window.abrirCorteCaja = function() {
+window.abrirCorteCaja = async function() {
+  // Si fondosCaja aún no cargó, traerlo directo de Firestore
+  if(!fondosCaja.length){
+    try{
+      const snap = await getDocs(collection(db,'pl_fondos_caja'));
+      fondosCaja = snap.docs.map(d=>d.data());
+      window.fondosCaja = fondosCaja;
+    }catch(e){console.error('Error cargando fondos:',e);}
+  }
   document.getElementById('corte-fecha').value = hoy();
+  document.getElementById('corte-notas').value = '';
   recalcCorte();
   openModal('modal-corte-caja');
 };
@@ -5351,7 +5759,13 @@ window.calcDiferenciaCorte = function() {
 };
 
 window.guardarCorte = async function() {
-  const real = +document.getElementById('corte-real').value || 0;
+  const realInput = document.getElementById('corte-real').value;
+  if(realInput===''||realInput===null){
+    toast('⚠️ Debes contar e ingresar el efectivo real en caja antes de guardar el corte.');
+    document.getElementById('corte-real').focus();
+    return;
+  }
+  const real = +realInput;
   const notas = document.getElementById('corte-notas').value;
   const dif = real - _corteActualData.efectivoSistema;
   const id = uid();
@@ -5475,6 +5889,15 @@ window.generarReporte=function(){
   const porMetodo=_agrupar(f,'metodoPago');
   const porFecha={};
   f.forEach(v=>{const k=v.fecha;if(!porFecha[k])porFecha[k]={cnt:0,total:0};porFecha[k].cnt++;porFecha[k].total+=+v.total||0;});
+
+  // ── UTILIDAD NETA ──────────────────────────────────────────────
+  const costoTinta=f.reduce((s,v)=>s+(+v.costoTinta||0),0);
+  const gastosOp=gastos.filter(g=>(!desde||g.fecha>=desde)&&(!hasta||g.fecha<=hasta)).reduce((s,g)=>s+(+g.monto||0),0);
+  const gastosLocOp=gastosLocales.filter(g=>(!desde||g.fecha>=desde)&&(!hasta||g.fecha<=hasta)).reduce((s,g)=>s+(+g.monto||0),0);
+  const comprasInsumos=compras.filter(c=>(!desde||c.fecha>=desde)&&(!hasta||c.fecha<=hasta)&&c.pagado).reduce((s,c)=>s+(+c.costoTotal||0),0);
+  const utilidadBruta=total-costoTinta;
+  const utilidadNeta=total-costoTinta-gastosOp-gastosLocOp;
+
   cont.innerHTML=
     _cards([
       {label:'Ventas',val:f.length},{label:'Unidades',val:unidades},
@@ -5482,6 +5905,20 @@ window.generarReporte=function(){
       {label:'Ticket promedio',val:fmtMoney(ticket)},
       {label:'Saldo pendiente',val:fmtMoney(f.reduce((s,v)=>s+(+v.saldo||0),0)),color:'var(--red)'},
     ])+
+    `<div style="background:var(--bg-card);border:1px solid var(--border);border-radius:10px;padding:16px;margin-bottom:18px;">
+      <div style="font-weight:700;font-size:15px;margin-bottom:12px;">📈 Utilidad del período</div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;font-size:13px;">
+        <span style="color:var(--ink-soft);">💰 Ingresos totales:</span><strong style="color:var(--green);">${fmtMoney(total)}</strong>
+        <span style="color:var(--ink-soft);">🖨️ Costo tinta:</span><strong style="color:var(--red);">-${fmtMoney(costoTinta)}</strong>
+        <span style="color:var(--ink-soft);border-top:1px solid var(--border);padding-top:6px;margin-top:2px;">📊 Utilidad bruta:</span>
+        <strong style="color:${utilidadBruta>=0?'var(--green)':'var(--red)'};border-top:1px solid var(--border);padding-top:6px;margin-top:2px;">${fmtMoney(utilidadBruta)}</strong>
+        <span style="color:var(--ink-soft);">💸 Gastos operativos:</span><strong style="color:var(--red);">-${fmtMoney(gastosOp)}</strong>
+        <span style="color:var(--ink-soft);">🏪 Gastos caja chica:</span><strong style="color:var(--red);">-${fmtMoney(gastosLocOp)}</strong>
+        <span style="color:var(--ink-soft);border-top:2px solid var(--border);padding-top:8px;margin-top:4px;font-weight:700;">💡 Utilidad neta:</span>
+        <strong style="font-size:18px;color:${utilidadNeta>=0?'var(--green)':'var(--red)'};border-top:2px solid var(--border);padding-top:8px;margin-top:4px;">${fmtMoney(utilidadNeta)}</strong>
+      </div>
+      <div style="font-size:11px;color:var(--ink-soft);margin-top:10px;">* Compras de insumos del período (pagadas): ${fmtMoney(comprasInsumos)} — se reflejan en el costo de tinta por venta capturado.</div>
+    </div>`+
     `<div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:18px;">
       <div><div style="font-weight:700;margin-bottom:8px;">📊 Por canal</div>
       ${_tabla(['Canal','Ventas','Total'],porCanal.map(c=>`<tr><td>${c.key}</td><td>${c.cnt}</td><td style="color:var(--green);font-weight:700;">${fmtMoney(c.total)}</td></tr>`))}
