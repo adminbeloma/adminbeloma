@@ -607,6 +607,7 @@ tbody td{padding:11px 14px;font-size:13.5px;vertical-align:middle;}
         <button class="reporte-tab" data-tab="inventario" onclick="cambiarTabReporte('inventario')">📦 Inventario</button>
         <button class="reporte-tab" data-tab="compras" onclick="cambiarTabReporte('compras')">🛒 Compras</button>
         <button class="reporte-tab" data-tab="gastos" onclick="cambiarTabReporte('gastos')">💸 Gastos</button>
+        <button class="reporte-tab" data-tab="gastos-fijos" onclick="cambiarTabReporte('gastos-fijos')">📌 Gastos Fijos</button>
         <button class="reporte-tab" data-tab="pedidos" onclick="cambiarTabReporte('pedidos')">📋 Pedidos</button>
         <button class="reporte-tab" data-tab="cortes" onclick="cambiarTabReporte('cortes')">🏪 Caja</button>
       </div>
@@ -694,6 +695,11 @@ tbody td{padding:11px 14px;font-size:13.5px;vertical-align:middle;}
       <!-- TAB: GASTOS -->
       <div id="reporte-tab-gastos" style="display:none;">
         <div id="reporte-gastos-contenido"></div>
+      </div>
+
+      <!-- TAB: GASTOS FIJOS -->
+      <div id="reporte-tab-gastos-fijos" style="display:none;">
+        <div id="reporte-gastos-fijos-contenido"></div>
       </div>
 
       <!-- TAB: PEDIDOS -->
@@ -5836,7 +5842,7 @@ let tabReporteActual='ventas';
 window.cambiarTabReporte=function(tab){
   tabReporteActual=tab;
   document.querySelectorAll('.reporte-tab').forEach(b=>b.classList.toggle('activo',b.dataset.tab===tab));
-  ['ventas','prendas','clientes','inventario','compras','gastos','pedidos','cortes'].forEach(t=>{
+  ['ventas','prendas','clientes','inventario','compras','gastos','gastos-fijos','pedidos','cortes'].forEach(t=>{
     const el=document.getElementById('reporte-tab-'+t);
     if(el) el.style.display=t===tab?'block':'none';
   });
@@ -5851,6 +5857,7 @@ window.generarReporteActivo=function(){
   else if(t==='inventario') generarReporteInventario();
   else if(t==='compras') generarReporteCompras();
   else if(t==='gastos') generarReporteGastosRep();
+  else if(t==='gastos-fijos') generarReporteGastosFijos();
   else if(t==='pedidos') generarReportePedidos();
   else if(t==='cortes') generarReporteCortes();
 };
@@ -5866,7 +5873,8 @@ function _cards(items){
   return`<div style="display:flex;gap:12px;margin-bottom:18px;flex-wrap:wrap;">${items.map(c=>`<div style="background:var(--bg-card);border:1px solid var(--border);border-radius:8px;padding:10px 16px;min-width:120px;"><div style="font-size:11px;color:var(--ink-soft);font-weight:600;text-transform:uppercase;">${c.label}</div><div style="font-size:20px;font-weight:700;color:${c.color||'inherit'};">${c.val}</div></div>`).join('')}</div>`;
 }
 function _tabla(cols,rows){
-  return`<div class="table-wrap"><table><thead><tr>${cols.map(c=>`<th>${c}</th>`).join('')}</tr></thead><tbody>${rows.join('')}</tbody></table></div>`;
+  const safeRows=Array.isArray(rows)?rows:[];
+  return`<div class="table-wrap"><table><thead><tr>${cols.map(c=>`<th>${c}</th>`).join('')}</tr></thead><tbody>${safeRows.join('')}</tbody></table></div>`;
 }
 function _agrupar(lista,key){const m={};lista.forEach(x=>{const k=x[key]||'—';m[k]=(m[k]||0)+1;});return Object.entries(m).sort((a,b)=>b[1]-a[1]);}
 function _agruparMonto(lista,key){const m={};lista.forEach(x=>{const k=x[key]||'—';if(!m[k])m[k]={cnt:0,total:0};m[k].cnt++;m[k].total+=+x.total||0;});return Object.entries(m).map(([k,v])=>({key:k,...v})).sort((a,b)=>b.total-a.total);}
@@ -6104,6 +6112,68 @@ function generarReporteGastosRep(){
     </tr>`));
 }
 
+// GASTOS FIJOS
+function generarReporteGastosFijos(){
+  const cont=document.getElementById('reporte-gastos-fijos-contenido');if(!cont)return;
+  const f=_filtrarFechas(pagosFijos,'fecha');
+  const totalPagado=f.reduce((s,p)=>s+(+p.monto||0),0);
+  const estimadoMensual=gastosFijosConceptos.reduce((s,g)=>{
+    const factores={mensual:1,quincenal:2,semanal:4,bimestral:0.5,trimestral:0.333,anual:0.0833};
+    return s+(+g.montoEst||0)*(factores[g.periodicidad]||1);
+  },0);
+
+  // Agrupar pagos por concepto
+  const porConcepto={};
+  f.forEach(p=>{
+    const k=p.conceptoNombre||'—';
+    if(!porConcepto[k])porConcepto[k]={nombre:k,pagos:0,total:0,categoria:p.categoria||'—'};
+    porConcepto[k].pagos++;
+    porConcepto[k].total+=+p.monto||0;
+  });
+  const listaConcepto=Object.values(porConcepto).sort((a,b)=>b.total-a.total);
+
+  if(!f.length&&!gastosFijosConceptos.length){
+    cont.innerHTML='<div class="empty-state"><div class="icon">📌</div><p>Sin gastos fijos registrados.</p></div>';return;
+  }
+
+  cont.innerHTML=
+    _cards([
+      {label:'Conceptos activos',val:gastosFijosConceptos.length},
+      {label:'Estimado mensual',val:fmtMoney(estimadoMensual)},
+      {label:'Total pagado en período',val:fmtMoney(totalPagado),color:'var(--red)'},
+      {label:'Pagos registrados',val:f.length},
+    ])+
+    `<div style="font-weight:700;margin-bottom:8px;">📋 Catálogo de conceptos</div>`+
+    _tabla(['Concepto','Categoría','Periodicidad','Monto estimado','Método'],
+      gastosFijosConceptos.map(g=>`<tr>
+        <td style="font-weight:600;">${g.nombre}</td>
+        <td style="font-size:12px;">${g.categoria||'—'}</td>
+        <td style="font-size:12px;">${g.periodicidad||'—'}</td>
+        <td style="font-weight:700;">${fmtMoney(g.montoEst||0)}</td>
+        <td style="font-size:12px;">${g.metodo||'—'}</td>
+      </tr>`))+
+    (listaConcepto.length?
+    `<div style="font-weight:700;margin:18px 0 8px;">📊 Pagos por concepto (período)</div>`+
+    _tabla(['Concepto','Categoría','No. Pagos','Total pagado'],
+      listaConcepto.map(c=>`<tr>
+        <td style="font-weight:600;">${c.nombre}</td>
+        <td style="font-size:12px;">${c.categoria}</td>
+        <td>${c.pagos}</td>
+        <td style="color:var(--red);font-weight:700;">${fmtMoney(c.total)}</td>
+      </tr>`)):'')+
+    (f.length?
+    `<div style="font-weight:700;margin:18px 0 8px;">💳 Historial de pagos</div>`+
+    _tabla(['Fecha','Concepto','Período','Monto','Método','Notas'],
+      f.sort((a,b)=>b.fecha.localeCompare(a.fecha)).map(p=>`<tr>
+        <td>${p.fecha}</td>
+        <td style="font-weight:600;">${p.conceptoNombre||'—'}</td>
+        <td style="font-size:12px;">${p.periodo||'—'}</td>
+        <td style="color:var(--red);font-weight:700;">${fmtMoney(p.monto)}</td>
+        <td style="font-size:12px;">${p.metodo||'—'}</td>
+        <td style="font-size:11px;color:var(--ink-soft);">${p.notas||'—'}</td>
+      </tr>`)):'');
+}
+
 // PEDIDOS
 function generarReportePedidos(){
   const cont=document.getElementById('reporte-pedidos-contenido');if(!cont)return;
@@ -6165,7 +6235,7 @@ window.generarReporteCortes=function(){
         <td>${fmtMoney(c.efectivoReal||0)}</td>
         <td style="font-weight:700;color:${dif>=0?'var(--green)':'var(--red)'};">${dif>=0?'+':''}${fmtMoney(dif)}</td>
       </tr>`;
-    }).join(''));
+    }));
 };
 
 
