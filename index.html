@@ -1225,7 +1225,8 @@ tbody td{padding:11px 14px;font-size:13.5px;vertical-align:middle;}
     <div class="modal-body">
       <input type="hidden" id="venta-id">
       <div class="form-grid">
-        <div class="form-group"><label>Fecha *</label><input type="date" id="v-fecha"></div>
+        <div class="form-group"><label>📅 Fecha de la venta *</label><input type="date" id="v-fecha" style="font-weight:700;font-size:15px;border:2px solid var(--accent);border-radius:8px;padding:8px 12px;" onchange="verificarFechaVenta()"></div>
+        <div id="v-fecha-aviso" style="display:none;grid-column:1/-1;background:#FFF3CD;border:1px solid #FFC107;border-radius:8px;padding:8px 12px;font-size:12px;color:#856404;"></div>
         <div class="form-group"><label>Canal *</label>
           <select id="v-canal" onchange="onCanalChange()">
             <option value="Local">Local</option>
@@ -2227,6 +2228,12 @@ tbody td{padding:11px 14px;font-size:13.5px;vertical-align:middle;}
         <label>Notas del corte</label>
         <textarea id="corte-notas" placeholder="Observaciones, diferencias, etc." style="height:80px;"></textarea>
       </div>
+      <div class="form-group" style="margin-top:10px;background:var(--bg);border-radius:8px;padding:12px;">
+        <label style="font-weight:700;">💰 Fondo para mañana ($)</label>
+        <input type="number" id="corte-fondo-manana" placeholder="¿Cuánto dejas en caja para el día siguiente?" step="0.01"
+          style="width:100%;border:1.5px solid var(--border);border-radius:8px;padding:9px 12px;font-size:14px;outline:none;margin-top:6px;">
+        <div style="font-size:11px;color:var(--ink-soft);margin-top:4px;">Opcional — se guardará automáticamente como fondo del día siguiente.</div>
+      </div>
     </div>
     <div class="modal-footer">
       <button class="btn btn-ghost" onclick="closeModal('modal-corte-caja')">Cancelar</button>
@@ -2705,6 +2712,18 @@ window.renderItemsVenta=function(){
     </div>`).join('');
   recalcTotalVenta();
 }
+
+window.verificarFechaVenta=function(){
+  const fecha=document.getElementById('v-fecha').value;
+  const el=document.getElementById('v-fecha-aviso');
+  if(!el)return;
+  if(fecha!==hoy()){
+    el.textContent=`⚠️ Estás registrando una venta con fecha ${fecha} (no es hoy)`;
+    el.style.display='block';
+  } else {
+    el.style.display='none';
+  }
+};
 
 window.recalcTotalVenta=function(){
   const subtotal=window._ventaItems.reduce((s,it)=>s+(+it.cantidad||0)*(+it.precio||0),0);
@@ -5712,6 +5731,7 @@ window.abrirCorteCaja = async function() {
   }
   document.getElementById('corte-fecha').value = hoy();
   document.getElementById('corte-notas').value = '';
+  if(document.getElementById('corte-fondo-manana')) document.getElementById('corte-fondo-manana').value='';
   recalcCorte();
   openModal('modal-corte-caja');
 };
@@ -5787,8 +5807,25 @@ window.guardarCorte = async function() {
     efectivoReal:real, diferencia:dif, notas, creado:new Date().toISOString()
   };
   await setDoc(doc(db, 'pl_cortes_caja', id), data);
+
+  // Preguntar fondo para el día siguiente
+  const manana = new Date(_corteActualData.fecha);
+  manana.setDate(manana.getDate()+1);
+  const mananaStr = manana.toISOString().slice(0,10);
+  const fondoManana = document.getElementById('corte-fondo-manana')?.value;
+  if(fondoManana!==''&&fondoManana!==null&&fondoManana!==undefined&&+fondoManana>=0){
+    const idFondo = uid();
+    await setDoc(doc(db,'pl_fondos_caja',idFondo),{
+      id:idFondo, fecha:mananaStr, monto:+fondoManana,
+      creado:new Date().toISOString()
+    });
+    fondosCaja = fondosCaja.filter(f=>f.fecha!==mananaStr);
+    fondosCaja.push({id:idFondo,fecha:mananaStr,monto:+fondoManana});
+    window.fondosCaja = fondosCaja;
+  }
+
   closeModal('modal-corte-caja');
-  toast('✅ Corte guardado');
+  toast('✅ Corte guardado'+(fondoManana?` — Fondo ${mananaStr}: ${fmtMoney(+fondoManana)}`:''));
   await cargarCortesCaja();
   renderCortesCaja();
 };
