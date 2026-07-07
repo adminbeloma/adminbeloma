@@ -3028,7 +3028,7 @@ window.setRango=async function(tipo){
   renderVentas();
 };
 
-function renderVentas(){
+window.renderVentas=function renderVentas(){
   const search=(document.getElementById('search-ventas')||{value:''}).value.toLowerCase();
   const canal=(document.getElementById('filter-canal')||{value:''}).value;
   const desde=(document.getElementById('filter-venta-desde')||{value:''}).value;
@@ -3192,7 +3192,7 @@ function gastosCombinados(){
   return [...deGastos, ...deCaja];
 }
 
-function renderGastos(){
+window.renderGastos=function renderGastos(){
   const desde=(document.getElementById('filter-gasto-desde')||{value:''}).value;
   const hasta=(document.getElementById('filter-gasto-hasta')||{value:''}).value;
   const catFG=(document.getElementById('filter-gasto-categoria')||{value:''}).value;
@@ -3465,7 +3465,7 @@ window.guardarPlayera=async function(){
   toast('✅ Playera guardada');
 };
 
-function renderPlayeras(){
+window.renderPlayeras=function renderPlayeras(){
   const search=(document.getElementById('search-playeras')||{value:''}).value.toLowerCase();
   const talla=(document.getElementById('filter-talla')||{value:''}).value;
   const color=(document.getElementById('filter-color-p')||{value:''}).value;
@@ -4493,7 +4493,7 @@ window.guardarProveedor=async function(){
   toast('✅ Proveedor guardado');
 };
 
-function renderProveedores(){
+window.renderProveedores=function renderProveedores(){
   const search=(document.getElementById('search-proveedores')||{value:''}).value.toLowerCase();
   const catFiltro=(document.getElementById('filter-prov-categoria')||{value:''}).value;
   let lista=proveedores.filter(p=>{
@@ -5135,7 +5135,7 @@ window.marcarCompraPagada=async function(id){
   renderCXP();
 };
 
-function renderCompras(){
+window.renderCompras=function renderCompras(){
   const desde=(document.getElementById('filter-compra-desde')||{value:''}).value;
   const hasta=(document.getElementById('filter-compra-hasta')||{value:''}).value;
   let lista=compras.filter(c=>{
@@ -5718,7 +5718,7 @@ window.guardarMovimiento=async function(){
   toast('✅ Movimiento registrado');
 };
 
-function renderMovimientos(){
+window.renderMovimientos=function renderMovimientos(){
   const cuentaF=(document.getElementById('filter-banco-cuenta')||{value:''}).value;
   const tipoF=(document.getElementById('filter-banco-tipo')||{value:''}).value;
   const desdeF=(document.getElementById('filter-banco-desde')||{value:''}).value;
@@ -6613,7 +6613,7 @@ window.buscarMuestras = async function() {
   }
 };
 
-async function mostrarSubcarpetas(parentId, cat, breadcrumb) {
+window.mostrarSubcarpetas=async function mostrarSubcarpetas(parentId, cat, breadcrumb) {
   const estado = document.getElementById('muestras-estado');
   const grid   = document.getElementById('muestras-grid');
   const pag    = document.getElementById('muestras-paginacion');
