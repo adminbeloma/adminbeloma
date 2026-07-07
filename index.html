@@ -130,6 +130,8 @@ tbody td{padding:11px 14px;font-size:13.5px;vertical-align:middle;}
 .tabs{display:flex;gap:4px;background:var(--border);border-radius:10px;padding:4px;margin-bottom:20px;width:fit-content;}
 .tab-btn{padding:7px 16px;border-radius:7px;font-size:13px;font-weight:600;border:none;cursor:pointer;background:transparent;color:var(--ink-soft);transition:all 0.15s;font-family:'Inter',sans-serif;}
 .tab-btn.active{background:var(--bg-card);color:var(--ink);box-shadow:0 1px 4px rgba(0,0,0,0.1);}
+.tab-btn-fecha{padding:6px 14px;border-radius:7px;font-size:12px;font-weight:600;border:1px solid var(--border);cursor:pointer;background:transparent;color:var(--ink-soft);transition:all 0.15s;font-family:'Inter',sans-serif;}
+.tab-btn-fecha.active{background:var(--accent);color:#fff;border-color:var(--accent);}
 
 /* ALERTAS INSUMOS */
 .alerta-item{display:flex;align-items:center;gap:12px;padding:12px 16px;border-radius:10px;margin-bottom:8px;border:1px solid;}
@@ -956,7 +958,7 @@ tbody td{padding:11px 14px;font-size:13.5px;vertical-align:middle;}
     <div class="topbar">
       <h1>Pedidos</h1>
       <div class="actions">
-        <button class="btn btn-accent admin-only" style="display:none;" onclick="openPedidoModal()">+ Nuevo Pedido</button>
+        <span style="font-size:12px;color:var(--ink-soft);">Los pedidos se generan automáticamente desde Ventas</span>
       </div>
     </div>
     <div class="content">
@@ -966,6 +968,18 @@ tbody td{padding:11px 14px;font-size:13.5px;vertical-align:middle;}
         <button class="tab-btn" onclick="filterPedidos('Listo',this)">Listos</button>
         <button class="tab-btn" onclick="filterPedidos('Entregado',this)">Entregados</button>
         <button class="tab-btn" onclick="filterPedidos('Liquidado',this)">Liquidados</button>
+      </div>
+      <div class="tabs" style="margin-top:8px;">
+        <button class="tab-btn-fecha active" onclick="filterPedidosFecha('todos',this)">Todas las fechas</button>
+        <button class="tab-btn-fecha" onclick="filterPedidosFecha('hoy',this)">Hoy</button>
+        <button class="tab-btn-fecha" onclick="filterPedidosFecha('ayer',this)">Ayer</button>
+        <button class="tab-btn-fecha" onclick="filterPedidosFecha('semana',this)">Últimos 7 días</button>
+        <button class="tab-btn-fecha" onclick="filterPedidosFecha('mes',this)">Último mes</button>
+        <div style="display:flex;align-items:center;gap:6px;margin-left:4px;">
+          <input type="date" id="ped-fecha-desde" style="padding:6px 8px;border:1px solid var(--border);border-radius:8px;font-size:12px;" onchange="filterPedidosFecha('rango')">
+          <span style="font-size:12px;color:var(--ink-soft);">a</span>
+          <input type="date" id="ped-fecha-hasta" style="padding:6px 8px;border:1px solid var(--border);border-radius:8px;font-size:12px;" onchange="filterPedidosFecha('rango')">
+        </div>
       </div>
       <div class="table-wrap">
         <table>
@@ -2573,6 +2587,7 @@ window.openVentaModal=function(tipo, ventaId){
       document.getElementById('v-costo-guia').value=v.costoGuia||0;
       document.getElementById('v-guia').value=v.guia||'';
       document.getElementById('v-domicilio-envio').value=v.domicilioEnvio||'';
+      document.getElementById('v-banco-origen').value=v.bancoOrigen||'';
       if(v.sinTinta && document.getElementById('v-sin-tinta')) document.getElementById('v-sin-tinta').checked=true;
       // Cargar items guardados o construir uno desde campos legacy
       if(Array.isArray(v.items)&&v.items.length>0){
@@ -2768,6 +2783,41 @@ window.onSinTintaChange=function(){
   }
 };
 
+// Crea/actualiza un "pedido espejo" en pl_pedidos por CADA venta capturada en
+// Ventas (tenga o no saldo pendiente), para que todo se pueda dar seguimiento
+// desde el módulo de Pedidos:
+//  - Si la venta tiene saldo pendiente (abono) → estatus "En elaboración"
+//    (o el estatus de producción que ya le hayas puesto: Listo/Entregado).
+//  - Si la venta se pagó completa (saldo = 0) → estatus "Liquidado" automático.
+async function sincronizarPedidoDesdeVenta(ventaData, telefonoCliente){
+  const pedidoId='venta_'+ventaData.id;
+  const existente=pedidos.find(p=>p.id===pedidoId);
+  const saldoPendiente=(+ventaData.saldo||0)>0;
+  let estatus;
+  if(!saldoPendiente){
+    estatus='Liquidado';
+  } else {
+    // Si ya traía un avance manual (Listo/Entregado), se respeta.
+    // Si es nuevo o venía "Liquidado" de un pago anterior, arranca en "En elaboración".
+    estatus=(existente&&existente.estatus&&existente.estatus!=='Liquidado')?existente.estatus:'En elaboración';
+  }
+  const pedidoData={
+    id:pedidoId, origen:'venta', ventaId:ventaData.id,
+    fecha:ventaData.fecha, entrega:existente?.entrega||'',
+    cliente:ventaData.cliente, telefono:telefonoCliente||existente?.telefono||'',
+    descripcion:ventaData.producto,
+    total:ventaData.total, anticipo:ventaData.anticipo, saldo:ventaData.saldo,
+    formaPago:ventaData.metodoPago,
+    estatus,
+    notas:'Generado automáticamente desde Ventas — folio '+ventaData.folio,
+    ciudad:ventaData.ciudad, paqueteria:ventaData.paqueteria,
+    costoGuia:ventaData.costoGuia, guia:ventaData.guia,
+    domicilio:ventaData.domicilioEnvio,
+    creado:existente?.creado||new Date().toISOString()
+  };
+  await setDoc(doc(db,'pl_pedidos',pedidoId),pedidoData);
+}
+
 window.guardarVenta=async function(){
   if(window._ventaItems.length===0){toast('⚠️ Agrega al menos un producto');return;}
   const canal2=document.getElementById('v-canal').value;
@@ -2820,6 +2870,7 @@ window.guardarVenta=async function(){
     creado:ventaOriginal?.creado||new Date().toISOString(),
     actualizado:new Date().toISOString()};
   await setDoc(doc(db,'pl_ventas',id),data);
+  await sincronizarPedidoDesdeVenta(data, document.getElementById('v-cliente-tel')?.value||'');
   closeModal('modal-venta');
   toast('✅ Venta guardada — Folio: '+folioVal);
   await cargarVentas(true);
@@ -3007,6 +3058,9 @@ function renderVentas(){
 window.eliminarVenta=async function(id){
   if(!confirm('¿Eliminar esta venta?'))return;
   await deleteDoc(doc(db,'pl_ventas',id));
+  // Si esta venta tenía un pedido espejo (por saldo pendiente), lo eliminamos también
+  const pedidoEspejo=pedidos.find(p=>p.id==='venta_'+id);
+  if(pedidoEspejo) await deleteDoc(doc(db,'pl_pedidos','venta_'+id));
   toast('🗑 Venta eliminada');
   await cargarVentas(true);
 };
@@ -4457,10 +4511,15 @@ window.eliminarProveedor=async function(id){
 
 // ─── PEDIDOS ───
 let pedidos = [], gastosLocales = [], pedidosFiltro = 'todos';
+let pedidosFechaFiltro = 'todos'; // 'todos' | 'hoy' | 'ayer' | 'semana' | 'mes' | 'rango'
 onSnapshot(collection(db,'pl_pedidos'),s=>{pedidos=s.docs.map(d=>d.data());renderPedidos();renderCaja();});
 onSnapshot(collection(db,'pl_gastos_locales'),s=>{gastosLocales=s.docs.map(d=>d.data());renderCaja();});
 
 window.openPedidoModal=function(id){
+  if(!id){
+    toast('⚠️ Los pedidos ya no se capturan aquí — captúralos en Ventas');
+    return;
+  }
   document.getElementById('ped-id').value='';
   ['ped-cliente','ped-telefono','ped-descripcion','ped-notas'].forEach(f=>document.getElementById(f).value='');
   document.getElementById('ped-fecha').value=hoy();
@@ -4519,8 +4578,42 @@ window.filterPedidos=function(tipo,btn){
   renderPedidos();
 };
 
+window.filterPedidosFecha=function(tipo,btn){
+  pedidosFechaFiltro=tipo;
+  if(btn){
+    document.querySelectorAll('.tab-btn-fecha').forEach(b=>b.classList.remove('active'));
+    btn.classList.add('active');
+  } else {
+    // Se disparó desde los inputs de rango manual: quitar activo de los botones rápidos
+    document.querySelectorAll('.tab-btn-fecha').forEach(b=>b.classList.remove('active'));
+  }
+  renderPedidos();
+};
+
+function rangoFechaPedidos(){
+  const h=hoy();
+  if(pedidosFechaFiltro==='hoy') return {desde:h,hasta:h};
+  if(pedidosFechaFiltro==='ayer'){ const a=sumarDiasFecha(h,-1); return {desde:a,hasta:a}; }
+  if(pedidosFechaFiltro==='semana') return {desde:sumarDiasFecha(h,-6),hasta:h};
+  if(pedidosFechaFiltro==='mes') return {desde:sumarDiasFecha(h,-30),hasta:h};
+  if(pedidosFechaFiltro==='rango'){
+    const desde=document.getElementById('ped-fecha-desde')?.value||'';
+    const hasta=document.getElementById('ped-fecha-hasta')?.value||'';
+    return {desde,hasta};
+  }
+  return null; // 'todos'
+}
+
 function renderPedidos(){
   let lista=pedidosFiltro==='todos'?[...pedidos]:pedidos.filter(p=>p.estatus===pedidosFiltro);
+  const rango=rangoFechaPedidos();
+  if(rango && (rango.desde||rango.hasta)){
+    lista=lista.filter(p=>{
+      if(rango.desde && p.fecha<rango.desde) return false;
+      if(rango.hasta && p.fecha>rango.hasta) return false;
+      return true;
+    });
+  }
   lista.sort((a,b)=>b.fecha>a.fecha?1:-1);
   const tbody=document.getElementById('tabla-pedidos');
   const empty=document.getElementById('pedidos-empty');
@@ -4530,7 +4623,7 @@ function renderPedidos(){
   const estatusColor={'En elaboración':'badge-gold','Listo':'badge-blue','Entregado':'badge-green','Liquidado':'badge-gray'};
   tbody.innerHTML=lista.map(p=>`<tr>
     <td>${fmtFecha(p.fecha)}</td>
-    <td style="font-weight:600;">${p.cliente}</td>
+    <td style="font-weight:600;">${p.cliente}${p.origen==='venta'?' <span class="badge badge-blue" style="font-size:9px;" title="Generado automáticamente desde Ventas">🔗 Venta</span>':''}</td>
     <td style="font-size:12px;max-width:180px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${p.descripcion}</td>
     <td style="font-weight:700;">${fmtMoney(p.total)}</td>
     <td style="color:var(--green);font-weight:600;">${fmtMoney(p.anticipo)}</td>
@@ -6876,20 +6969,32 @@ window.calcCambio=function(){
 };
 
 // ══════════════════════════════════════════════════════
-//  CONFIG TRANSFERENCIA
+//  CONFIG TRANSFERENCIA (compartido vía Firestore, ya no localStorage,
+//  para que playerasbeloma y analuzbeloma vean los mismos datos)
 // ══════════════════════════════════════════════════════
-window.guardarConfigPagos=function(){
+let configPagos={banco:'',titular:'',clabe:'','num-tarjeta':''};
+onSnapshot(doc(db,'pl_config','pagos'), s=>{
+  configPagos=s.exists()?s.data():{banco:'',titular:'',clabe:'','num-tarjeta':''};
   ['banco','titular','clabe','num-tarjeta'].forEach(k=>{
     const el=document.getElementById('cfg-'+k);
-    if(el) localStorage.setItem('pl_pago_'+k,el.value);
+    if(el) el.value=configPagos[k]||'';
   });
+  cargarDatosTransferenciaPreview();
+});
+window.guardarConfigPagos=async function(){
+  const data={};
+  ['banco','titular','clabe','num-tarjeta'].forEach(k=>{
+    const el=document.getElementById('cfg-'+k);
+    data[k]=el?el.value:'';
+  });
+  await setDoc(doc(db,'pl_config','pagos'),data);
   toast('✅ Datos de transferencia guardados');
 };
 function cargarDatosTransferenciaPreview(){
-  const banco=localStorage.getItem('pl_pago_banco')||'';
-  const titular=localStorage.getItem('pl_pago_titular')||'';
-  const clabe=localStorage.getItem('pl_pago_clabe')||'';
-  const tarjeta=localStorage.getItem('pl_pago_num-tarjeta')||'';
+  const banco=configPagos.banco||'';
+  const titular=configPagos.titular||'';
+  const clabe=configPagos.clabe||'';
+  const tarjeta=configPagos['num-tarjeta']||'';
   const el=document.getElementById('v-datos-transferencia-preview');
   if(!el) return;
   if(!banco&&!titular&&!clabe){
@@ -6902,12 +7007,5 @@ function cargarDatosTransferenciaPreview(){
     ${clabe?`<div><strong>CLABE:</strong> ${clabe}</div>`:''}
     ${tarjeta?`<div><strong>No. Tarjeta:</strong> ${tarjeta}</div>`:''}`;
 }
-// Cargar valores al iniciar
-(function(){
-  ['banco','titular','clabe','num-tarjeta'].forEach(k=>{
-    const val=localStorage.getItem('pl_pago_'+k);
-    const el=document.getElementById('cfg-'+k);
-    if(val&&el) el.value=val;
-  });
-})();
+
 </script>
