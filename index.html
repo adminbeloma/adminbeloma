@@ -920,6 +920,19 @@ tbody td{padding:11px 14px;font-size:13.5px;vertical-align:middle;}
         </div>
       </div>
       <div class="card" style="max-width:520px;margin-bottom:18px;">
+        <div style="font-weight:700;font-size:15px;margin-bottom:16px;">🔄 Migrar Ventas Anteriores a Pedidos</div>
+        <p style="font-size:13px;color:var(--ink-soft);margin-bottom:14px;line-height:1.5;">
+          El enlace automático Ventas → Pedidos solo aplica a ventas capturadas o editadas desde ahora en adelante.
+          Usa este botón <strong>una sola vez</strong> para generar el pedido espejo de todas las ventas que ya
+          existían antes de este cambio. Es seguro correrlo varias veces: no duplica nada ni te pisa el
+          estatus (Listo/Entregado) que ya le hayas puesto a un pedido.
+        </p>
+        <div style="margin-top:12px;">
+          <button class="btn btn-primary btn-sm" onclick="migrarVentasAPedidos()">Migrar ventas anteriores</button>
+        </div>
+        <div id="migracion-progreso" style="margin-top:10px;font-size:13px;color:var(--ink-soft);"></div>
+      </div>
+      <div class="card" style="max-width:520px;margin-bottom:18px;">
         <div style="font-weight:700;font-size:15px;margin-bottom:16px;">📐 Punto de Equilibrio</div>
         <div class="form-grid">
           <div class="form-group"><label>Precio promedio de venta ($)</label><input type="number" id="cfg-precio" placeholder="250"></div>
@@ -2588,6 +2601,9 @@ window.openVentaModal=function(tipo, ventaId){
       document.getElementById('v-guia').value=v.guia||'';
       document.getElementById('v-domicilio-envio').value=v.domicilioEnvio||'';
       document.getElementById('v-banco-origen').value=v.bancoOrigen||'';
+      if(v.metodoPago==='efectivo' && +v.pagoCon>0){
+        document.getElementById('v-pago-con').value=v.pagoCon;
+      }
       if(v.sinTinta && document.getElementById('v-sin-tinta')) document.getElementById('v-sin-tinta').checked=true;
       // Cargar items guardados o construir uno desde campos legacy
       if(Array.isArray(v.items)&&v.items.length>0){
@@ -2617,6 +2633,7 @@ window.openVentaModal=function(tipo, ventaId){
       }
       renderItemsVenta();
       if(v.metodoPago) selPago(v.metodoPago, true);
+      if(v.metodoPago==='efectivo') calcCambio();
       toggleEnvioFields();
       document.getElementById('modal-venta-title').textContent='Editar Venta';
     }
@@ -2817,6 +2834,27 @@ async function sincronizarPedidoDesdeVenta(ventaData, telefonoCliente){
   };
   await setDoc(doc(db,'pl_pedidos',pedidoId),pedidoData);
 }
+
+// Migración única: recorre TODAS las ventas ya guardadas en Firestore (no solo
+// las 50 cargadas en pantalla) y les genera su pedido espejo, por si se
+// capturaron antes de que existiera este enlace automático.
+window.migrarVentasAPedidos=async function(){
+  if(!confirm('Esto va a revisar TODAS tus ventas guardadas y crear/actualizar su pedido espejo. Puede tardar unos minutos si tienes muchas. ¿Continuar?')) return;
+  const prog=document.getElementById('migracion-progreso');
+  if(prog) prog.textContent='Leyendo ventas...';
+  const snap=await getDocs(collection(db,'pl_ventas'));
+  const todasVentas=snap.docs.map(d=>d.data());
+  let hechas=0;
+  const LOTE=15; // procesar en lotes para no saturar Firestore
+  for(let i=0;i<todasVentas.length;i+=LOTE){
+    const lote=todasVentas.slice(i,i+LOTE);
+    await Promise.all(lote.map(v=>sincronizarPedidoDesdeVenta(v,'')));
+    hechas+=lote.length;
+    if(prog) prog.textContent=`Procesadas ${hechas} de ${todasVentas.length} ventas...`;
+  }
+  if(prog) prog.textContent=`✅ Listo — se generó/actualizó el pedido espejo de ${todasVentas.length} ventas.`;
+  toast(`✅ Migración completa: ${todasVentas.length} ventas revisadas`);
+};
 
 window.guardarVenta=async function(){
   if(window._ventaItems.length===0){toast('⚠️ Agrega al menos un producto');return;}
