@@ -2844,18 +2844,25 @@ window.migrarVentasAPedidos=async function(){
   if(!confirm('Esto va a revisar TODAS tus ventas guardadas y crear/actualizar su pedido espejo. Puede tardar unos minutos si tienes muchas. ¿Continuar?')) return;
   const prog=document.getElementById('migracion-progreso');
   if(prog) prog.textContent='Leyendo ventas...';
-  const snap=await getDocs(collection(db,'pl_ventas'));
-  const todasVentas=snap.docs.map(d=>d.data());
-  let hechas=0;
-  const LOTE=15; // procesar en lotes para no saturar Firestore
-  for(let i=0;i<todasVentas.length;i+=LOTE){
-    const lote=todasVentas.slice(i,i+LOTE);
-    await Promise.all(lote.map(v=>sincronizarPedidoDesdeVenta(v,'')));
-    hechas+=lote.length;
-    if(prog) prog.textContent=`Procesadas ${hechas} de ${todasVentas.length} ventas...`;
+  try{
+    const snap=await getDocs(collection(db,'pl_ventas'));
+    const todasVentas=snap.docs.map(d=>d.data());
+    if(prog) prog.textContent=`Se encontraron ${todasVentas.length} ventas. Procesando...`;
+    let hechas=0;
+    const LOTE=15; // procesar en lotes para no saturar Firestore
+    for(let i=0;i<todasVentas.length;i+=LOTE){
+      const lote=todasVentas.slice(i,i+LOTE);
+      await Promise.all(lote.map(v=>sincronizarPedidoDesdeVenta(v,'')));
+      hechas+=lote.length;
+      if(prog) prog.textContent=`Procesadas ${hechas} de ${todasVentas.length} ventas...`;
+    }
+    if(prog) prog.textContent=`✅ Listo — se generó/actualizó el pedido espejo de ${todasVentas.length} ventas.`;
+    toast(`✅ Migración completa: ${todasVentas.length} ventas revisadas`);
+  }catch(err){
+    console.error('Error en migración Ventas→Pedidos:', err);
+    if(prog) prog.textContent=`❌ Error: ${err.message}`;
+    toast('❌ Error al migrar: '+err.message);
   }
-  if(prog) prog.textContent=`✅ Listo — se generó/actualizó el pedido espejo de ${todasVentas.length} ventas.`;
-  toast(`✅ Migración completa: ${todasVentas.length} ventas revisadas`);
 };
 
 window.guardarVenta=async function(){
