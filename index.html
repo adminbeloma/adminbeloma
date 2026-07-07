@@ -2488,7 +2488,8 @@ function renderDashboard(){
   const ventasMes=ventas.filter(v=>v.fecha>=mesDesde);
   const totalVentasMes=ventasMes.reduce((s,v)=>s+(+v.total||0),0);
   const gastosMes=gastos.filter(g=>g.fecha>=mesDesde);
-  const totalGastosMes=gastosMes.reduce((s,g)=>s+(+g.monto||0),0);
+  const gastosLocalesMes=gastosLocales.filter(g=>g.fecha>=mesDesde);
+  const totalGastosMes=gastosMes.reduce((s,g)=>s+(+g.monto||0),0)+gastosLocalesMes.reduce((s,g)=>s+(+g.monto||0),0);
   const utilidad=totalVentasMes-totalGastosMes;
   const ventasHoy=ventas.filter(v=>v.fecha===hoy()).reduce((s,v)=>s+(+v.total||0),0);
   const cfgPrecio=+localStorage.getItem('pl_precio')||0;
@@ -4551,7 +4552,7 @@ window.eliminarProveedor=async function(id){
 let pedidos = [], gastosLocales = [], pedidosFiltro = 'todos';
 let pedidosFechaFiltro = 'todos'; // 'todos' | 'hoy' | 'ayer' | 'semana' | 'mes' | 'rango'
 onSnapshot(collection(db,'pl_pedidos'),s=>{pedidos=s.docs.map(d=>d.data());renderPedidos();renderCaja();});
-onSnapshot(collection(db,'pl_gastos_locales'),s=>{gastosLocales=s.docs.map(d=>d.data());renderCaja();});
+onSnapshot(collection(db,'pl_gastos_locales'),s=>{gastosLocales=s.docs.map(d=>d.data());renderCaja();renderDashboard();});
 
 window.openPedidoModal=function(id){
   if(!id){
