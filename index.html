@@ -2493,8 +2493,8 @@ function renderDashboard(){
   const totalGastosMes=gastosMes.reduce((s,g)=>s+(+g.monto||0),0)+gastosLocalesMes.reduce((s,g)=>s+(+g.monto||0),0);
   const utilidad=totalVentasMes-totalGastosMes;
   const ventasHoy=ventas.filter(v=>v.fecha===hoy()).reduce((s,v)=>s+(+v.total||0),0);
-  const cfgPrecio=+localStorage.getItem('pl_precio')||0;
-  const cfgCostoVar=+localStorage.getItem('pl_costo_var')||0;
+  const cfgPrecio=+configPE.precio||0;
+  const cfgCostoVar=+configPE.costoVar||0;
   const gastosFijos=gastos.filter(g=>g.tipo==='Fijo'&&g.fecha>=mesDesde).reduce((s,g)=>s+(+g.monto||0),0);
   const margen=cfgPrecio-cfgCostoVar;
   const pe=margen>0?gastosFijos/margen:0;
@@ -3853,10 +3853,11 @@ window.eliminarCliente=async function(id){
 };
 
 // ─── CONFIG ───
-window.guardarConfigPE=function(){
-  localStorage.setItem('pl_precio',document.getElementById('cfg-precio').value);
-  localStorage.setItem('pl_costo_var',document.getElementById('cfg-costo-var').value);
-  renderDashboard();
+window.guardarConfigPE=async function(){
+  await setDoc(doc(db,'pl_config','puntoEquilibrio'),{
+    precio:document.getElementById('cfg-precio').value,
+    costoVar:document.getElementById('cfg-costo-var').value
+  });
   toast('✅ Configuración guardada');
 };
 
@@ -4929,8 +4930,7 @@ window.subirImagenTransferencia=async function(input){
   const res=await fetch(`https://api.cloudinary.com/v1_1/${CLOUD}/image/upload`,{method:'POST',body:fd});
   const data=await res.json();
   if(data.secure_url){
-    localStorage.setItem('pl_transferencia_url',data.secure_url);
-    mostrarImagenTransferencia(data.secure_url);
+    await setDoc(doc(db,'pl_config','pagos'),{...configPagos,imagenUrl:data.secure_url});
     toast('✅ Imagen guardada');
   }
 };
@@ -4943,7 +4943,7 @@ function mostrarImagenTransferencia(url){
 }
 
 window.enviarDatosTransferencia=function(){
-  const url=localStorage.getItem('pl_transferencia_url');
+  const url=configPagos.imagenUrl;
   if(!url){toast('⚠️ Primero sube la imagen de tu tarjeta');return;}
   const tel=document.getElementById('transferencia-ws-num').value.replace(/[^0-9]/g,'');
   if(!tel){toast('⚠️ Ingresa el número de WhatsApp');return;}
@@ -5817,14 +5817,8 @@ document.querySelectorAll(".modal-overlay").forEach(o=>{
     if(e.target===o) e.stopPropagation();
   });
 });
-const cfgP=localStorage.getItem('pl_precio');const cfgC=localStorage.getItem('pl_costo_var');
-if(cfgP)document.getElementById('cfg-precio').value=cfgP;
-if(cfgC)document.getElementById('cfg-costo-var').value=cfgC;
 setRango('mes');
 setRangoReporte('mes');
-// Cargar imagen transferencia si existe
-const tUrl=localStorage.getItem('pl_transferencia_url');
-if(tUrl) setTimeout(()=>mostrarImagenTransferencia(tUrl),800);
 
 // Login con Enter en email
 document.getElementById('login-email').addEventListener('keydown', e => {
@@ -7034,6 +7028,14 @@ window.calcCambio=function(){
 //  para que playerasbeloma y analuzbeloma vean los mismos datos)
 // ══════════════════════════════════════════════════════
 let configPagos={banco:'',titular:'',clabe:'','num-tarjeta':''};
+let configPE={precio:0,costoVar:0};
+onSnapshot(doc(db,'pl_config','puntoEquilibrio'), s=>{
+  configPE=s.exists()?s.data():{precio:0,costoVar:0};
+  const elP=document.getElementById('cfg-precio'), elC=document.getElementById('cfg-costo-var');
+  if(elP) elP.value=configPE.precio||'';
+  if(elC) elC.value=configPE.costoVar||'';
+  renderDashboard();
+});
 onSnapshot(doc(db,'pl_config','pagos'), s=>{
   configPagos=s.exists()?s.data():{banco:'',titular:'',clabe:'','num-tarjeta':''};
   ['banco','titular','clabe','num-tarjeta'].forEach(k=>{
@@ -7041,6 +7043,7 @@ onSnapshot(doc(db,'pl_config','pagos'), s=>{
     if(el) el.value=configPagos[k]||'';
   });
   cargarDatosTransferenciaPreview();
+  if(configPagos.imagenUrl) mostrarImagenTransferencia(configPagos.imagenUrl);
 });
 window.guardarConfigPagos=async function(){
   const data={};
