@@ -935,11 +935,19 @@ tbody td{padding:11px 14px;font-size:13.5px;vertical-align:middle;}
       </div>
       <div class="card" style="max-width:520px;margin-bottom:18px;">
         <div style="font-weight:700;font-size:15px;margin-bottom:16px;">📐 Punto de Equilibrio</div>
+        <p style="font-size:13px;color:var(--ink-soft);margin-bottom:12px;line-height:1.5;">
+          Puedes escribir estos valores a mano, o dar clic en <strong>"Calcular con mis datos"</strong> para que
+          el sistema saque el precio promedio real de tus ventas y el costo de tinta real por playera
+          (el costo de playera en blanco lo promedia de tu inventario en <strong>Playeras</strong>, así que revísalo
+          y ajústalo si hace falta).
+        </p>
         <div class="form-grid">
           <div class="form-group"><label>Precio promedio de venta ($)</label><input type="number" id="cfg-precio" placeholder="250"></div>
           <div class="form-group"><label>Costo variable por playera ($)</label><input type="number" id="cfg-costo-var" placeholder="120"></div>
         </div>
-        <div style="margin-top:12px;">
+        <div id="cfg-pe-detalle" style="font-size:12px;color:var(--ink-soft);margin-top:6px;"></div>
+        <div style="margin-top:12px;display:flex;gap:8px;">
+          <button class="btn btn-ghost btn-sm" onclick="calcularConfigAutomatica()">📊 Calcular con mis datos</button>
           <button class="btn btn-primary btn-sm" onclick="guardarConfigPE()">Guardar</button>
         </div>
       </div>
@@ -2822,16 +2830,16 @@ async function sincronizarPedidoDesdeVenta(ventaData, telefonoCliente){
   }
   const pedidoData={
     id:pedidoId, origen:'venta', ventaId:ventaData.id,
-    fecha:ventaData.fecha, entrega:existente?.entrega||'',
-    cliente:ventaData.cliente, telefono:telefonoCliente||existente?.telefono||'',
-    descripcion:ventaData.producto,
-    total:ventaData.total, anticipo:ventaData.anticipo, saldo:ventaData.saldo,
-    formaPago:ventaData.metodoPago,
+    fecha:ventaData.fecha||'', entrega:existente?.entrega||'',
+    cliente:ventaData.cliente||'Público en general', telefono:telefonoCliente||existente?.telefono||'',
+    descripcion:ventaData.producto||'',
+    total:+ventaData.total||0, anticipo:+ventaData.anticipo||0, saldo:+ventaData.saldo||0,
+    formaPago:ventaData.metodoPago||'',
     estatus,
-    notas:'Generado automáticamente desde Ventas — folio '+ventaData.folio,
-    ciudad:ventaData.ciudad, paqueteria:ventaData.paqueteria,
-    costoGuia:ventaData.costoGuia, guia:ventaData.guia,
-    domicilio:ventaData.domicilioEnvio,
+    notas:'Generado automáticamente desde Ventas — folio '+(ventaData.folio||'s/f'),
+    ciudad:ventaData.ciudad||'', paqueteria:ventaData.paqueteria||'',
+    costoGuia:+ventaData.costoGuia||0, guia:ventaData.guia||'',
+    domicilio:ventaData.domicilioEnvio||'',
     creado:existente?.creado||new Date().toISOString()
   };
   await setDoc(doc(db,'pl_pedidos',pedidoId),pedidoData);
@@ -2874,8 +2882,8 @@ window.guardarVenta=async function(){
   const sinTinta=document.getElementById('v-sin-tinta')?.checked||false;
   const tintaBlanca=sinTinta?0:+document.getElementById('v-tinta-blanca').value||0;
   const tintaColor=sinTinta?0:+document.getElementById('v-tinta-color').value||0;
-  const precioTintaB=+localStorage.getItem('pl_tinta_blanca_precio')||0;
-  const precioTintaC=+localStorage.getItem('pl_tinta_color_precio')||0;
+  const precioTintaB=+configTinta.blanca||0;
+  const precioTintaC=+configTinta.color||0;
   const subtotal=window._ventaItems.reduce((s,it)=>s+(+it.cantidad||0)*(+it.precio||0),0);
   const desc=+document.getElementById('v-descuento').value||0;
   const total=Math.max(0,subtotal-desc);
@@ -3853,6 +3861,41 @@ window.eliminarCliente=async function(id){
 };
 
 // ─── CONFIG ───
+// Calcula automáticamente el precio promedio de venta y el costo variable
+// por playera usando datos reales ya capturados:
+//  - Precio promedio = ingresos totales ÷ piezas totales vendidas (de Ventas)
+//  - Costo de tinta promedio = costo de tinta total ÷ piezas totales (de Ventas)
+//  - Costo de playera en blanco = promedio del campo "Costo unitario" en Playeras
+window.calcularConfigAutomatica=function(){
+  const ventasConDatos=ventas.filter(v=>(+v.cantidad||0)>0);
+  if(ventasConDatos.length===0){
+    toast('⚠️ No hay ventas con cantidad registrada todavía para calcular');
+    return;
+  }
+  const totalIngresos=ventasConDatos.reduce((s,v)=>s+(+v.total||0),0);
+  const totalUnidades=ventasConDatos.reduce((s,v)=>s+(+v.cantidad||0),0);
+  const totalCostoTinta=ventasConDatos.reduce((s,v)=>s+(+v.costoTinta||0),0);
+  const precioProm=totalUnidades>0?totalIngresos/totalUnidades:0;
+  const costoTintaProm=totalUnidades>0?totalCostoTinta/totalUnidades:0;
+
+  const costosBlanco=playeras.map(p=>+p.costo||0).filter(c=>c>0);
+  const costoBlancoProm=costosBlanco.length>0?costosBlanco.reduce((a,b)=>a+b,0)/costosBlanco.length:0;
+
+  const costoVariableProm=costoTintaProm+costoBlancoProm;
+
+  document.getElementById('cfg-precio').value=precioProm.toFixed(2);
+  document.getElementById('cfg-costo-var').value=costoVariableProm.toFixed(2);
+
+  const detalle=document.getElementById('cfg-pe-detalle');
+  if(detalle){
+    detalle.innerHTML=`Calculado con ${ventasConDatos.length} ventas (${totalUnidades} piezas): `+
+      `tinta promedio $${costoTintaProm.toFixed(2)}/playera`+
+      (costoBlancoProm>0?` + playera en blanco (promedio de ${costosBlanco.length} productos en inventario) $${costoBlancoProm.toFixed(2)}`:' — ⚠️ no hay costos cargados en Playeras, agrégalos para que este número sea más real')+
+      `. Revisa y ajusta antes de guardar.`;
+  }
+  toast('✅ Valores calculados — revísalos y da clic en Guardar');
+};
+
 window.guardarConfigPE=async function(){
   await setDoc(doc(db,'pl_config','puntoEquilibrio'),{
     precio:document.getElementById('cfg-precio').value,
@@ -5191,16 +5234,17 @@ window.eliminarCompra=async function(id){
 };
 
 // ─── TINTA ───
-window.guardarConfigTinta=function(){
-  localStorage.setItem('pl_tinta_blanca_precio',document.getElementById('cfg-tinta-blanca-precio').value);
-  localStorage.setItem('pl_tinta_color_precio',document.getElementById('cfg-tinta-color-precio').value);
-  actualizarEjemploTinta();
+window.guardarConfigTinta=async function(){
+  await setDoc(doc(db,'pl_config','tinta'),{
+    blanca:document.getElementById('cfg-tinta-blanca-precio').value,
+    color:document.getElementById('cfg-tinta-color-precio').value
+  });
   toast('✅ Costos de tinta guardados');
 };
 
 function actualizarEjemploTinta(){
-  const pb=+localStorage.getItem('pl_tinta_blanca_precio')||0;
-  const pc=+localStorage.getItem('pl_tinta_color_precio')||0;
+  const pb=+configTinta.blanca||0;
+  const pc=+configTinta.color||0;
   const ej=5.83*pb+0.62*pc;
   const el=document.getElementById('cfg-tinta-ej-val');
   if(el) el.textContent=fmtMoney(ej);
@@ -5210,8 +5254,8 @@ function calcCostoTinta(){
   const tb=+document.getElementById('v-tinta-blanca').value||0;
   const tc=+document.getElementById('v-tinta-color').value||0;
   const cant=+document.getElementById('v-cantidad').value||1;
-  const pb=+localStorage.getItem('pl_tinta_blanca_precio')||0;
-  const pc=+localStorage.getItem('pl_tinta_color_precio')||0;
+  const pb=+configTinta.blanca||0;
+  const pc=+configTinta.color||0;
   const costo=(tb*pb+tc*pc)*cant;
   const infoEl=document.getElementById('v-costo-tinta-info');
   const valEl=document.getElementById('v-costo-tinta-val');
@@ -5827,12 +5871,6 @@ document.getElementById('login-email').addEventListener('keydown', e => {
 // Listeners tinta
 document.getElementById('v-tinta-blanca').addEventListener('input',calcCostoTinta);
 document.getElementById('v-tinta-color').addEventListener('input',calcCostoTinta);
-// Cargar config tinta
-const cfgTB=localStorage.getItem('pl_tinta_blanca_precio');
-const cfgTC=localStorage.getItem('pl_tinta_color_precio');
-if(cfgTB) document.getElementById('cfg-tinta-blanca-precio').value=cfgTB;
-if(cfgTC) document.getElementById('cfg-tinta-color-precio').value=cfgTC;
-actualizarEjemploTinta();
 
 // ═══════════════════════════════════════════════════════════════════
 //  FONDO DE CAJA
@@ -6445,6 +6483,64 @@ function _csv(nombre,enc,filas){
 
 // Carga inicial
 (async function(){await cargarCortesCaja();renderCortesCaja();})();
+
+// ══════════════════════════════════════════════════════
+//  CONFIG TRANSFERENCIA (compartido vía Firestore, ya no localStorage,
+//  para que playerasbeloma y analuzbeloma vean los mismos datos)
+// ══════════════════════════════════════════════════════
+let configPagos={banco:'',titular:'',clabe:'','num-tarjeta':''};
+let configPE={precio:0,costoVar:0};
+let configTinta={blanca:0,color:0};
+onSnapshot(doc(db,'pl_config','tinta'), s=>{
+  configTinta=s.exists()?s.data():{blanca:0,color:0};
+  const elB=document.getElementById('cfg-tinta-blanca-precio'), elC=document.getElementById('cfg-tinta-color-precio');
+  if(elB) elB.value=configTinta.blanca||'';
+  if(elC) elC.value=configTinta.color||'';
+  actualizarEjemploTinta();
+});
+onSnapshot(doc(db,'pl_config','puntoEquilibrio'), s=>{
+  configPE=s.exists()?s.data():{precio:0,costoVar:0};
+  const elP=document.getElementById('cfg-precio'), elC=document.getElementById('cfg-costo-var');
+  if(elP) elP.value=configPE.precio||'';
+  if(elC) elC.value=configPE.costoVar||'';
+  renderDashboard();
+});
+onSnapshot(doc(db,'pl_config','pagos'), s=>{
+  configPagos=s.exists()?s.data():{banco:'',titular:'',clabe:'','num-tarjeta':''};
+  ['banco','titular','clabe','num-tarjeta'].forEach(k=>{
+    const el=document.getElementById('cfg-'+k);
+    if(el) el.value=configPagos[k]||'';
+  });
+  cargarDatosTransferenciaPreview();
+  if(configPagos.imagenUrl) mostrarImagenTransferencia(configPagos.imagenUrl);
+});
+window.guardarConfigPagos=async function(){
+  const data={};
+  ['banco','titular','clabe','num-tarjeta'].forEach(k=>{
+    const el=document.getElementById('cfg-'+k);
+    data[k]=el?el.value:'';
+  });
+  await setDoc(doc(db,'pl_config','pagos'),data);
+  toast('✅ Datos de transferencia guardados');
+};
+// Expuesta a window porque selPago() (en el otro <script>, fuera del módulo) la llama
+window.cargarDatosTransferenciaPreview=function cargarDatosTransferenciaPreview(){
+  const banco=configPagos.banco||'';
+  const titular=configPagos.titular||'';
+  const clabe=configPagos.clabe||'';
+  const tarjeta=configPagos['num-tarjeta']||'';
+  const el=document.getElementById('v-datos-transferencia-preview');
+  if(!el) return;
+  if(!banco&&!titular&&!clabe){
+    el.innerHTML='<em style="color:var(--ink-soft);">— Configura tu cuenta en Config → Datos para Transferencia —</em>';
+    return;
+  }
+  el.innerHTML=`
+    ${banco?`<div><strong>Banco:</strong> ${banco}</div>`:''}
+    ${titular?`<div><strong>Titular:</strong> ${titular}</div>`:''}
+    ${clabe?`<div><strong>CLABE:</strong> ${clabe}</div>`:''}
+    ${tarjeta?`<div><strong>No. Tarjeta:</strong> ${tarjeta}</div>`:''}`;
+}
 </script>
 </body>
 </html>
@@ -7024,52 +7120,9 @@ window.calcCambio=function(){
 };
 
 // ══════════════════════════════════════════════════════
-//  CONFIG TRANSFERENCIA (compartido vía Firestore, ya no localStorage,
-//  para que playerasbeloma y analuzbeloma vean los mismos datos)
+//  CONFIG TRANSFERENCIA — movido al script principal (ver arriba),
+//  este bloque necesitaba acceso a Firebase (db/onSnapshot/setDoc)
+//  que no existe en este <script> separado.
 // ══════════════════════════════════════════════════════
-let configPagos={banco:'',titular:'',clabe:'','num-tarjeta':''};
-let configPE={precio:0,costoVar:0};
-onSnapshot(doc(db,'pl_config','puntoEquilibrio'), s=>{
-  configPE=s.exists()?s.data():{precio:0,costoVar:0};
-  const elP=document.getElementById('cfg-precio'), elC=document.getElementById('cfg-costo-var');
-  if(elP) elP.value=configPE.precio||'';
-  if(elC) elC.value=configPE.costoVar||'';
-  renderDashboard();
-});
-onSnapshot(doc(db,'pl_config','pagos'), s=>{
-  configPagos=s.exists()?s.data():{banco:'',titular:'',clabe:'','num-tarjeta':''};
-  ['banco','titular','clabe','num-tarjeta'].forEach(k=>{
-    const el=document.getElementById('cfg-'+k);
-    if(el) el.value=configPagos[k]||'';
-  });
-  cargarDatosTransferenciaPreview();
-  if(configPagos.imagenUrl) mostrarImagenTransferencia(configPagos.imagenUrl);
-});
-window.guardarConfigPagos=async function(){
-  const data={};
-  ['banco','titular','clabe','num-tarjeta'].forEach(k=>{
-    const el=document.getElementById('cfg-'+k);
-    data[k]=el?el.value:'';
-  });
-  await setDoc(doc(db,'pl_config','pagos'),data);
-  toast('✅ Datos de transferencia guardados');
-};
-function cargarDatosTransferenciaPreview(){
-  const banco=configPagos.banco||'';
-  const titular=configPagos.titular||'';
-  const clabe=configPagos.clabe||'';
-  const tarjeta=configPagos['num-tarjeta']||'';
-  const el=document.getElementById('v-datos-transferencia-preview');
-  if(!el) return;
-  if(!banco&&!titular&&!clabe){
-    el.innerHTML='<em style="color:var(--ink-soft);">— Configura tu cuenta en Config → Datos para Transferencia —</em>';
-    return;
-  }
-  el.innerHTML=`
-    ${banco?`<div><strong>Banco:</strong> ${banco}</div>`:''}
-    ${titular?`<div><strong>Titular:</strong> ${titular}</div>`:''}
-    ${clabe?`<div><strong>CLABE:</strong> ${clabe}</div>`:''}
-    ${tarjeta?`<div><strong>No. Tarjeta:</strong> ${tarjeta}</div>`:''}`;
-}
 
 </script>
