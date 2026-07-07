@@ -373,6 +373,7 @@ tbody td{padding:11px 14px;font-size:13.5px;vertical-align:middle;}
           <option>Papelería</option><option>Limpieza</option><option>Otro</option>
         </select>
         <input type="text" id="filter-gasto-buscar" placeholder="🔍 Buscar concepto..." oninput="renderGastos()" style="min-width:180px;">
+        <button class="btn btn-accent btn-sm" onclick="renderGastos()">Buscar</button>
       </div>
       <div style="display:flex;gap:14px;margin-bottom:16px;flex-wrap:wrap;">
         <div style="background:var(--bg-card);border:1px solid var(--border);border-radius:8px;padding:12px 16px;"><div style="font-size:11px;color:var(--ink-soft);font-weight:600;text-transform:uppercase;">Total Fijos</div><div style="font-size:20px;font-weight:700;color:var(--red);" id="gastos-fijos-total">$0</div></div>
@@ -3178,12 +3179,26 @@ window.filterGastos=function(tipo,btn){
   renderGastos();
 };
 
+// Combina los gastos capturados en la sección Gastos (pl_gastos) con los
+// gastos registrados en Caja (pl_gastos_locales), para que el reporte de
+// Gastos muestre TODO en un solo lugar, sin importar dónde se capturó.
+function gastosCombinados(){
+  const deGastos=gastos.map(g=>({...g, origen:'gastos'}));
+  const deCaja=gastosLocales.map(g=>({
+    id:g.id, fecha:g.fecha, concepto:g.concepto||'(Gasto de caja)',
+    categoria:g.categoria||'Otro', tipo:g.tipo||'Variable',
+    proveedor:'', factura:'', monto:g.monto, origen:'caja'
+  }));
+  return [...deGastos, ...deCaja];
+}
+
 function renderGastos(){
   const desde=(document.getElementById('filter-gasto-desde')||{value:''}).value;
   const hasta=(document.getElementById('filter-gasto-hasta')||{value:''}).value;
   const catFG=(document.getElementById('filter-gasto-categoria')||{value:''}).value;
   const buscarG=(document.getElementById('filter-gasto-buscar')||{value:''}).value.toLowerCase();
-  let lista=gastos.filter(g=>{
+  const todos=gastosCombinados();
+  let lista=todos.filter(g=>{
     const mt=gastosFiltro==='todos'||g.tipo===gastosFiltro;
     const md=!desde||g.fecha>=desde;
     const mh=!hasta||g.fecha<=hasta;
@@ -3191,8 +3206,8 @@ function renderGastos(){
     const mb=!buscarG||(g.concepto||'').toLowerCase().includes(buscarG)||(g.proveedor||'').toLowerCase().includes(buscarG);
     return mt&&md&&mh&&mc&&mb;
   }).sort((a,b)=>b.fecha>a.fecha?1:-1);
-  const fijos=gastos.filter(g=>(!desde||g.fecha>=desde)&&(!hasta||g.fecha<=hasta)&&g.tipo==='Fijo').reduce((s,g)=>s+(+g.monto||0),0);
-  const variables=gastos.filter(g=>(!desde||g.fecha>=desde)&&(!hasta||g.fecha<=hasta)&&g.tipo==='Variable').reduce((s,g)=>s+(+g.monto||0),0);
+  const fijos=todos.filter(g=>(!desde||g.fecha>=desde)&&(!hasta||g.fecha<=hasta)&&g.tipo==='Fijo').reduce((s,g)=>s+(+g.monto||0),0);
+  const variables=todos.filter(g=>(!desde||g.fecha>=desde)&&(!hasta||g.fecha<=hasta)&&g.tipo==='Variable').reduce((s,g)=>s+(+g.monto||0),0);
   document.getElementById('gastos-fijos-total').textContent=fmtMoney(fijos);
   document.getElementById('gastos-variables-total').textContent=fmtMoney(variables);
   document.getElementById('gastos-total').textContent=fmtMoney(fijos+variables);
@@ -3203,15 +3218,15 @@ function renderGastos(){
   empty.style.display='none';
   tbody.innerHTML=lista.map(g=>`<tr>
     <td>${fmtFecha(g.fecha)}</td>
-    <td style="font-weight:500;">${g.concepto}</td>
+    <td style="font-weight:500;">${g.concepto}${g.origen==='caja'?' <span class="badge badge-blue" style="font-size:9px;" title="Registrado en Caja">🔗 Caja</span>':''}</td>
     <td>${g.categoria}</td>
     <td><span class="badge ${g.tipo==='Fijo'?'badge-blue':'badge-gold'}">${g.tipo}</span></td>
     <td style="font-size:12px;">${g.proveedor||'—'}</td>
     <td style="font-size:12px;">${g.factura||'—'}</td>
     <td style="font-weight:700;color:var(--red);">${fmtMoney(g.monto)}</td>
     <td style="display:flex;gap:4px;">
-      <button class="btn btn-ghost btn-sm" onclick="openGastoModal('${g.id}')">✏️</button>
-      <button class="btn btn-danger btn-sm" onclick="eliminarGasto('${g.id}')">🗑</button>
+      <button class="btn btn-ghost btn-sm" onclick="${g.origen==='caja'?`editarGastoLocal('${g.id}')`:`openGastoModal('${g.id}')`}">✏️</button>
+      <button class="btn btn-danger btn-sm" onclick="${g.origen==='caja'?`eliminarGastoLocal('${g.id}')`:`eliminarGasto('${g.id}')`}">🗑</button>
     </td>
   </tr>`).join('');
 
@@ -4552,7 +4567,7 @@ window.eliminarProveedor=async function(id){
 let pedidos = [], gastosLocales = [], pedidosFiltro = 'todos';
 let pedidosFechaFiltro = 'todos'; // 'todos' | 'hoy' | 'ayer' | 'semana' | 'mes' | 'rango'
 onSnapshot(collection(db,'pl_pedidos'),s=>{pedidos=s.docs.map(d=>d.data());renderPedidos();renderCaja();});
-onSnapshot(collection(db,'pl_gastos_locales'),s=>{gastosLocales=s.docs.map(d=>d.data());renderCaja();renderDashboard();});
+onSnapshot(collection(db,'pl_gastos_locales'),s=>{gastosLocales=s.docs.map(d=>d.data());renderCaja();renderDashboard();renderGastos();});
 
 window.openPedidoModal=function(id){
   if(!id){
