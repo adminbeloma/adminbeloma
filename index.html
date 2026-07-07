@@ -2410,10 +2410,22 @@ function closeModal(id){document.getElementById(id).classList.remove('open');}
 window.closeModal=closeModal;
 function fmtMoney(n){return '$'+Number(n||0).toLocaleString('es-MX',{minimumFractionDigits:2,maximumFractionDigits:2});}
 function fmtFecha(f){if(!f)return'—';const[y,m,d]=f.split('-');return`${d}/${m}/${y}`;}
-function hoy(){return new Date().toISOString().split('T')[0];}
+// Formatea una fecha usando componentes LOCALES (no UTC), para evitar que
+// después de las 5-6pm hora Mazatlán (UTC-7) la fecha "brinque" al día siguiente.
+function fmtFechaLocal(d){
+  return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');
+}
+// Suma/resta días a una fecha 'YYYY-MM-DD' de forma segura en hora local.
+function sumarDiasFecha(fechaStr, dias){
+  const [y,m,d]=fechaStr.split('-').map(Number);
+  const dt=new Date(y,m-1,d);
+  dt.setDate(dt.getDate()+dias);
+  return fmtFechaLocal(dt);
+}
+function hoy(){return fmtFechaLocal(new Date());}
 function getRango(tipo){
   const h=new Date();
-  const fmt=d=>d.toISOString().split('T')[0];
+  const fmt=d=>fmtFechaLocal(d);
   if(tipo==='hoy') return{desde:fmt(h),hasta:fmt(h)};
   if(tipo==='semana'){const d=new Date(h);d.setDate(h.getDate()-6);return{desde:fmt(d),hasta:fmt(h)};}
   if(tipo==='mes') return{desde:fmt(new Date(h.getFullYear(),h.getMonth(),1)),hasta:fmt(h)};
@@ -2474,7 +2486,7 @@ function renderDashboard(){
   const chart=document.getElementById('chart-7dias');
   const dias=[];
   for(let i=6;i>=0;i--){const d=new Date();d.setDate(d.getDate()-i);dias.push(d);}
-  const vals=dias.map(d=>{const ds=d.toISOString().split('T')[0];return ventas.filter(v=>v.fecha===ds).reduce((s,v)=>s+(+v.total||0),0);});
+  const vals=dias.map(d=>{const ds=fmtFechaLocal(d);return ventas.filter(v=>v.fecha===ds).reduce((s,v)=>s+(+v.total||0),0);});
   const max=Math.max(...vals,1);
   const dias_nombres=['Dom','Lun','Mar','Mié','Jue','Vie','Sáb'];
   chart.innerHTML=vals.map((v,i)=>`
@@ -3487,7 +3499,7 @@ function renderInsumos(){
   const promedioTintaC=ventasConTintaC.length>0
     ?ventasConTintaC.reduce((s,v)=>s+(+v.tintaColor||0)/(+v.cantidad||1),0)/ventasConTintaC.length:0;
   // Promedio de playeras por día (últimos 30 días con ventas)
-  const hace30=new Date(Date.now()-30*86400000).toISOString().slice(0,10);
+  const hace30=sumarDiasFecha(hoy(),-30);
   const ventasRecientes=ventas.filter(v=>v.fecha>=hace30);
   const diasConVentas=[...new Set(ventasRecientes.map(v=>v.fecha))].length||1;
   const playeirasPorDia=ventasRecientes.reduce((s,v)=>s+(+v.cantidad||0),0)/diasConVentas;
@@ -5809,9 +5821,7 @@ window.guardarCorte = async function() {
   await setDoc(doc(db, 'pl_cortes_caja', id), data);
 
   // Preguntar fondo para el día siguiente
-  const manana = new Date(_corteActualData.fecha);
-  manana.setDate(manana.getDate()+1);
-  const mananaStr = manana.toISOString().slice(0,10);
+  const mananaStr = sumarDiasFecha(_corteActualData.fecha, 1);
   const fondoManana = document.getElementById('corte-fondo-manana')?.value;
   if(fondoManana!==''&&fondoManana!==null&&fondoManana!==undefined&&+fondoManana>=0){
     const idFondo = uid();
