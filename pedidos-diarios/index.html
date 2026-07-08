@@ -170,6 +170,10 @@
           <label>Fecha del pedido</label>
           <input type="date" id="fFecha">
         </div>
+        <div>
+          <label>¿Playeras en el mismo paquete? (opcional)</label>
+          <input type="number" id="fPaquete" min="2" placeholder="Ej. 2, 3... (déjalo vacío si es 1 sola)">
+        </div>
       </div>
 
       <h2>Prendas del pedido</h2>
@@ -352,6 +356,7 @@ function limpiarFormulario(){
   document.getElementById("fCanal").value = "Local";
   document.getElementById("fTipoCliente").value = "Local";
   document.getElementById("fFecha").value = hoyISO();
+  document.getElementById("fPaquete").value = "";
   document.getElementById("itemsBody").innerHTML = "";
   agregarFilaItem();
 }
@@ -372,6 +377,7 @@ async function guardarPedido(){
   const cliente = document.getElementById("fCliente").value.trim() || canal;
   const fecha = document.getElementById("fFecha").value || hoyISO();
   const items = leerItems().filter(it => it.descripcion || it.talla || it.color);
+  const piezasPaquete = parseInt(document.getElementById("fPaquete").value) || 0;
 
   if(items.length === 0){ mostrarMsg("Agrega al menos una prenda.", "error"); return; }
 
@@ -386,6 +392,7 @@ async function guardarPedido(){
       fecha,
       items,
       totalPiezas,
+      piezasPaquete,
       creadoEn: firebase.firestore.FieldValue.serverTimestamp()
     });
     mostrarMsg("Pedido guardado ✔", "ok");
@@ -449,13 +456,16 @@ function pintarTablaPedidos(lista, contenedor){
     const detalle = (p.items||[]).map(it=>
       `${it.cantidad}× ${it.genero} ${it.talla} ${it.color} — ${it.descripcion}`
     ).join("<br>");
+    const notaPaquete = p.piezasPaquete>1
+      ? `<br><span style="color:#b45309;font-weight:600;">📦 ${p.piezasPaquete} playeras en el mismo paquete</span>`
+      : "";
     html += `<tr>
       <td>${p.folio}</td>
       <td>${badgeCanal(p.canal)}</td>
       <td>${p.cliente}</td>
       <td>${p.tipoCliente}</td>
       <td>${p.totalPiezas}</td>
-      <td style="font-size:.78rem;color:#6b7280;">${detalle}</td>
+      <td style="font-size:.78rem;color:#6b7280;">${detalle}${notaPaquete}</td>
     </tr>`;
   });
   html += "</tbody></table>";
@@ -524,6 +534,7 @@ function exportarExcel(origen){
   // Una fila por CADA PRENDA (línea de item), con datos del pedido repetidos
   const filas = [];
   lista.forEach(p=>{
+    const notaPaquete = p.piezasPaquete>1 ? `${p.piezasPaquete} PLAYERAS EN EL MISMO PAQUETE` : "";
     (p.items||[]).forEach(it=>{
       filas.push({
         "Fecha": p.fecha,
@@ -535,7 +546,8 @@ function exportarExcel(origen){
         "Talla": it.talla,
         "Color": it.color,
         "Descripción": it.descripcion,
-        "Cantidad": it.cantidad
+        "Cantidad": it.cantidad,
+        "Nota Paquete": notaPaquete
       });
     });
   });
@@ -543,7 +555,7 @@ function exportarExcel(origen){
   const ws = XLSX.utils.json_to_sheet(filas);
   ws['!cols'] = [
     {wch:12},{wch:16},{wch:14},{wch:12},{wch:22},
-    {wch:10},{wch:8},{wch:10},{wch:30},{wch:9}
+    {wch:10},{wch:8},{wch:10},{wch:30},{wch:9},{wch:32}
   ];
   const wb = XLSX.utils.book_new();
   XLSX.utils.book_append_sheet(wb, ws, "Pedidos");
