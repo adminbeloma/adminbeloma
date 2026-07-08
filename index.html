@@ -5193,20 +5193,23 @@ function renderCaja(){
   const CANALES_LOCAL = ['Local','Foráneo'];
   const ventasHoyArr=ventas.filter(v=>v.fecha===h && CANALES_LOCAL.includes(v.canal));
   const ingresosHoy=ventasHoyArr.reduce((s,v)=>s+(+v.total||0),0);
-  // Anticipos: de pedidos + de ventas con anticipo parcial (saldo pendiente)
-  const anticiposPedidos=pedidos.filter(p=>p.fecha===h).reduce((s,p)=>s+(+p.anticipo||0),0);
-  const anticiposVentas=ventasHoyArr.filter(v=>(+v.anticipo||0)>0&&(+v.saldo||0)>0).reduce((s,v)=>s+(+v.anticipo||0),0);
-  const anticiposHoy=anticiposPedidos+anticiposVentas;
+  // Lo realmente cobrado HOY de cada venta: si quedó saldo pendiente, solo el
+  // anticipo (lo demás se cobrará después); si se pagó completo, el total.
+  const cobradoDeVenta=v=>(+v.saldo||0)>0 ? (+v.anticipo||0) : (+v.total||0);
+  // Anticipos de pedidos CAPTURADOS DIRECTO (no los que vienen espejo de una
+  // venta — esos ya se cuentan abajo en el desglose por método de pago de la
+  // propia venta, y sumarlos aquí también los duplicaría).
+  const anticiposHoy=pedidos.filter(p=>p.fecha===h && p.origen!=='venta').reduce((s,p)=>s+(+p.anticipo||0),0);
   const gastosHoy=gastosLocales.filter(g=>g.fecha===h).reduce((s,g)=>s+(+g.monto||0),0);
 
-  // Desglose por método de pago (solo ventas locales)
-  const efectivoVentas=ventasHoyArr.filter(v=>v.metodoPago==='efectivo').reduce((s,v)=>s+(+v.total||0),0);
-  const transferencias=ventasHoyArr.filter(v=>v.metodoPago==='transferencia').reduce((s,v)=>s+(+v.total||0),0);
-  const depositos=ventasHoyArr.filter(v=>v.metodoPago==='deposito').reduce((s,v)=>s+(+v.total||0),0);
-  const tarjeta=ventasHoyArr.filter(v=>v.metodoPago==='tarjeta').reduce((s,v)=>s+(+v.total||0),0);
-  const sinMetodo=ventasHoyArr.filter(v=>!v.metodoPago).reduce((s,v)=>s+(+v.total||0),0);
+  // Desglose por método de pago (solo ventas locales) — usando lo realmente cobrado
+  const efectivoVentas=ventasHoyArr.filter(v=>v.metodoPago==='efectivo').reduce((s,v)=>s+cobradoDeVenta(v),0);
+  const transferencias=ventasHoyArr.filter(v=>v.metodoPago==='transferencia').reduce((s,v)=>s+cobradoDeVenta(v),0);
+  const depositos=ventasHoyArr.filter(v=>v.metodoPago==='deposito').reduce((s,v)=>s+cobradoDeVenta(v),0);
+  const tarjeta=ventasHoyArr.filter(v=>v.metodoPago==='tarjeta').reduce((s,v)=>s+cobradoDeVenta(v),0);
+  const sinMetodo=ventasHoyArr.filter(v=>!v.metodoPago).reduce((s,v)=>s+cobradoDeVenta(v),0);
 
-  // Efectivo en caja = fondo + (ventas en efectivo) + anticipos - gastos
+  // Efectivo en caja = fondo + (efectivo realmente cobrado) + anticipos de pedidos directos - gastos
   const fondoHoy = (window.fondosCaja||[]).find(f=>f.fecha===h);
   const fondoMonto = fondoHoy ? +fondoHoy.monto : 0;
   const efectivoCaja = fondoMonto + efectivoVentas + anticiposHoy - gastosHoy;
@@ -6261,11 +6264,16 @@ function calcCorteParaFecha(h){
   const fondo = fondosCaja.find(f => f.fecha === h);
   const ventasLocales = ventas.filter(v => v.fecha === h && CANALES_LOCAL.includes(v.canal));
   const ingresosHoy = ventasLocales.reduce((s,v) => s + (+v.total||0), 0);
-  const enEfectivo = ventasLocales.filter(v=>v.metodoPago==='efectivo').reduce((s,v)=>s+(+v.total||0),0);
-  const enTransf   = ventasLocales.filter(v=>v.metodoPago==='transferencia').reduce((s,v)=>s+(+v.total||0),0);
-  const enDeposito = ventasLocales.filter(v=>v.metodoPago==='deposito').reduce((s,v)=>s+(+v.total||0),0);
-  const enTarjeta  = ventasLocales.filter(v=>v.metodoPago==='tarjeta').reduce((s,v)=>s+(+v.total||0),0);
-  const anticiposHoy = (pedidos||[]).filter(p => p.fecha === h).reduce((s,p) => s + (+p.anticipo||0), 0);
+  // Lo realmente cobrado hoy de cada venta (si quedó saldo pendiente, solo el
+  // anticipo recibido; si se pagó completo, el total).
+  const cobradoDeVenta=v=>(+v.saldo||0)>0 ? (+v.anticipo||0) : (+v.total||0);
+  const enEfectivo = ventasLocales.filter(v=>v.metodoPago==='efectivo').reduce((s,v)=>s+cobradoDeVenta(v),0);
+  const enTransf   = ventasLocales.filter(v=>v.metodoPago==='transferencia').reduce((s,v)=>s+cobradoDeVenta(v),0);
+  const enDeposito = ventasLocales.filter(v=>v.metodoPago==='deposito').reduce((s,v)=>s+cobradoDeVenta(v),0);
+  const enTarjeta  = ventasLocales.filter(v=>v.metodoPago==='tarjeta').reduce((s,v)=>s+cobradoDeVenta(v),0);
+  // Solo pedidos capturados directo (no los que son espejo de una venta —
+  // esos ya quedaron contados arriba en el desglose por método de pago).
+  const anticiposHoy = (pedidos||[]).filter(p => p.fecha === h && p.origen!=='venta').reduce((s,p) => s + (+p.anticipo||0), 0);
   const gastosHoy = (gastosLocales||[]).filter(g => g.fecha === h).reduce((s,g) => s + (+g.monto||0), 0);
   const fondoMonto = fondo ? +fondo.monto : 0;
   const efectivoSistema = fondoMonto + enEfectivo + anticiposHoy - gastosHoy;
