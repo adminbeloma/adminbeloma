@@ -72,14 +72,7 @@
       </div>
       <div>
         <label>Talla</label>
-        <select id="fTalla">
-          <option value="CH">CH</option>
-          <option value="M" selected>M</option>
-          <option value="G">G</option>
-          <option value="EG">EG</option>
-          <option value="EEG">EEG</option>
-          <option value="EEEG">EEEG</option>
-        </select>
+        <select id="fTalla"></select>
       </div>
       <div>
         <label>Piezas</label>
@@ -134,50 +127,58 @@ const NUMERO_YAZBEK = "6682574817"; // 668 257 4817
    CATÁLOGO YAZBEK — códigos y colores oficiales
    (colores = sugerencias; también puedes escribir uno nuevo y se guarda)
 ===================================================== */
+// Tallas estándar por tipo de prenda (ajustadas a lo que Yazbek realmente maneja)
+const T_CAB = ['CH','MED','GDE','XL','XXL','XXXL'];       // Caballero manga corta
+const T_CAB_ML = ['CH','MED','GDE','XL','XXL'];            // Caballero manga larga (no llega a XXXL)
+const T_DAMA = ['CH','MED','GDE','XL','XXL'];              // Dama manga corta
+const T_DAMA_ML = ['CH','MED','GDE','XL'];                 // Dama manga larga (no pasa de XL)
+const T_NINO = ['CH','MED','GDE','XL'];                    // Niño / Juvenil (corta y larga)
+const T_BEBE = ['Talla 1','Talla 2','Talla 3'];            // Bebé
+
 const CATALOGO_YAZBEK = [
-  {codigo:'C0200', nombre:'Playera Cuello Redondo Manga Corta Caballero', linea:'Mid Weight · 100% Algodón',
+  {codigo:'C0200', nombre:'Playera Cuello Redondo Manga Corta Caballero', linea:'Mid Weight · 100% Algodón', categoria:'Caballero C. Redondo', tallas:T_CAB,
     colores:['Negro','Carbón','Gris Jaspe','Blanco','Arena','Marrón','Rojo','Naranja','Canario','Jade','Marino','Royal','Turquesa','Caribe','Rosa Pastel','Salmón','Fucsia','Lavanda','Morado']},
-  {codigo:'D0200', nombre:'Playera Cuello Redondo Manga Corta Dama', linea:'Mid Weight · 100% Algodón',
+  {codigo:'D0200', nombre:'Playera Cuello Redondo Manga Corta Dama', linea:'Mid Weight · 100% Algodón', categoria:'Mujer C. Redondo', tallas:T_DAMA,
     colores:['Negro','Gris Jaspe','Blanco','Arena','Rojo','Jade','Marino','Royal','Caribe','Salmón','Fucsia','Lavanda']},
-  {codigo:'C0306', nombre:'Playera Cuello V Manga Corta Caballero', linea:'Mid Weight · 100% Algodón',
+  {codigo:'C0306', nombre:'Playera Cuello V Manga Corta Caballero', linea:'Mid Weight · 100% Algodón', categoria:'Caballero Cuello V', tallas:T_CAB,
     colores:['Negro','Blanco','Marino','Royal']},
-  {codigo:'D0306', nombre:'Playera Cuello V Manga Corta con Silueta Dama', linea:'Mid Weight · 100% Algodón',
+  {codigo:'D0306', nombre:'Playera Cuello V Manga Corta con Silueta Dama', linea:'Mid Weight · 100% Algodón', categoria:'Mujer Cuello V', tallas:T_DAMA,
     colores:['Negro','Blanco','Marino']},
-  {codigo:'C0310', nombre:'Playera Cuello Redondo Sin Mangas Caballero', linea:'Mid Weight · 100% Algodón',
+  {codigo:'C0310', nombre:'Playera Cuello Redondo Sin Mangas Caballero', linea:'Mid Weight · 100% Algodón', categoria:'Caballero Sin Mangas', tallas:T_CAB,
     colores:['Negro','Gris Jaspe','Blanco','Rojo','Marino','Royal']},
-  {codigo:'C0300', nombre:'Playera Peso Completo Cuello Redondo Manga Corta Caballero', linea:'Heavy Weight · 100% Algodón',
+  {codigo:'C0300', nombre:'Playera Peso Completo Cuello Redondo Manga Corta Caballero', linea:'Heavy Weight · 100% Algodón', categoria:'Caballero C. Redondo', tallas:T_CAB,
     colores:['Negro','Carbón','Gris Jaspe','Plata','Blanco','Arena','Beige','Chocolate','Marrón','Ladrillo','Rojo','Ocre','Naranja','Mango','Canario','Lima','Jade','Olivo','Verde Bosque','Marino','Delfín','Royal','Turquesa','Celeste','Caribe','Azul Claro','Aqua','Rosa Pastel','Coral','Salmón','Fucsia','Lavanda','Morado']},
-  {codigo:'D0300', nombre:'Playera Peso Completo Cuello Redondo Manga Corta Dama', linea:'Heavy Weight · 100% Algodón',
+  {codigo:'D0300', nombre:'Playera Peso Completo Cuello Redondo Manga Corta Dama', linea:'Heavy Weight · 100% Algodón', categoria:'Mujer C. Redondo', tallas:T_DAMA,
     colores:['Negro','Carbón','Gris Jaspe','Blanco','Rojo','Naranja','Canario','Lima','Jade','Marino','Turquesa','Celeste','Azul Claro','Aqua','Rosa Pastel','Coral','Fucsia','Morado']},
-  {codigo:'J0300', nombre:'Playera Peso Completo Cuello Redondo Manga Corta Jóvenes (Juvenil)', linea:'Heavy Weight · 100% Algodón',
+  {codigo:'J0300', nombre:'Playera Peso Completo Cuello Redondo Manga Corta Jóvenes (Juvenil)', linea:'Heavy Weight · 100% Algodón', categoria:'Juvenil C. Redondo', tallas:T_NINO,
     colores:['Negro','Carbón','Gris Jaspe','Blanco','Rojo','Naranja','Mango','Canario','Lima','Jade','Marino','Celeste','Rosa Pastel','Fucsia','Morado','Turquesa']},
-  {codigo:'N0300', nombre:'Playera Peso Completo Cuello Redondo Manga Corta Niños', linea:'Heavy Weight · 100% Algodón',
+  {codigo:'N0300', nombre:'Playera Peso Completo Cuello Redondo Manga Corta Niños', linea:'Heavy Weight · 100% Algodón', categoria:'Niño C. Redondo', tallas:T_NINO,
     colores:['Negro','Carbón','Gris Jaspe','Blanco','Rojo','Naranja','Mango','Canario','Lima','Jade','Marino','Celeste','Rosa Pastel','Fucsia','Morado','Turquesa']},
-  {codigo:'B0300', nombre:'Playera Peso Completo Cuello Redondo Manga Corta Bebés', linea:'Heavy Weight · 100% Algodón',
+  {codigo:'B0300', nombre:'Playera Peso Completo Cuello Redondo Manga Corta Bebés', linea:'Heavy Weight · 100% Algodón', categoria:'Bebé C. Redondo', tallas:T_BEBE,
     colores:['Negro','Blanco','Rojo','Naranja','Canario','Lima','Marino','Celeste','Rosa Pastel','Fucsia','Turquesa']},
-  {codigo:'C0304', nombre:'Playera Peso Completo Cuello Redondo Manga Larga Caballero', linea:'Heavy Weight · 100% Algodón',
+  {codigo:'C0304', nombre:'Playera Peso Completo Cuello Redondo Manga Larga Caballero', linea:'Heavy Weight · 100% Algodón', categoria:'Caballero Manga Larga', tallas:T_CAB_ML,
     colores:['Negro','Carbón','Gris Jaspe','Blanco','Arena','Marrón','Rojo','Naranja','Mango','Jade','Marino','Royal']},
-  {codigo:'D0304', nombre:'Playera Peso Completo Cuello Redondo Manga Larga Dama', linea:'Heavy Weight · 100% Algodón',
+  {codigo:'D0304', nombre:'Playera Peso Completo Cuello Redondo Manga Larga Dama', linea:'Heavy Weight · 100% Algodón', categoria:'Mujer Manga Larga', tallas:T_DAMA_ML,
     colores:['Negro','Gris Jaspe','Blanco','Marino','Turquesa','Fucsia']},
-  {codigo:'N0304', nombre:'Playera Peso Completo Cuello Redondo Manga Larga Niños', linea:'Heavy Weight · 100% Algodón',
+  {codigo:'N0304', nombre:'Playera Peso Completo Cuello Redondo Manga Larga Niños', linea:'Heavy Weight · 100% Algodón', categoria:'Niño Manga Larga', tallas:T_NINO,
     colores:['Negro','Gris Jaspe','Blanco','Rojo','Marino','Royal']},
-  {codigo:'C0501', nombre:'Playera Tipo Polo Manga Corta Caballero (Algodón)', linea:'Heavy Weight · 100% Algodón',
+  {codigo:'C0501', nombre:'Playera Tipo Polo Manga Corta Caballero (Algodón)', linea:'Heavy Weight · 100% Algodón', categoria:'Caballero Polo Algodón', tallas:T_CAB,
     colores:['Negro','Gris Jaspe','Blanco','Rojo','Marino','Royal']},
-  {codigo:'N0501', nombre:'Playera Tipo Polo Manga Corta Niños (Algodón)', linea:'Heavy Weight · 100% Algodón',
+  {codigo:'N0501', nombre:'Playera Tipo Polo Manga Corta Niños (Algodón)', linea:'Heavy Weight · 100% Algodón', categoria:'Niño Polo Algodón', tallas:T_NINO,
     colores:['Blanco','Rojo','Marino']},
-  {codigo:'C0700', nombre:'Sudadera Cuello Redondo Adultos', linea:'Poly-CottonFleece · 50% Algodón 50% Poliéster',
+  {codigo:'C0700', nombre:'Sudadera Cuello Redondo Adultos', linea:'Poly-CottonFleece · 50% Algodón 50% Poliéster', categoria:'Sudadera C. Redondo', tallas:T_CAB,
     colores:['Negro','Gris Jaspe','Blanco','Rojo','Marino','Royal']},
-  {codigo:'C0701', nombre:'Sudadera con Capucha y Cangurera Adultos', linea:'Poly-CottonFleece · 50% Algodón 50% Poliéster',
+  {codigo:'C0701', nombre:'Sudadera con Capucha y Cangurera Adultos', linea:'Poly-CottonFleece · 50% Algodón 50% Poliéster', categoria:'Sudadera Gorro y Cangurera', tallas:T_CAB,
     colores:['Negro','Gris Jaspe','Blanco','Arena','Marrón','Rojo','Verde Bosque','Marino','Royal','Rosa Pastel','Lavanda']},
-  {codigo:'C0702', nombre:'Sudadera con Capucha, Cangurera y Cierre Adultos', linea:'Poly-CottonFleece · 50% Algodón 50% Poliéster',
+  {codigo:'C0702', nombre:'Sudadera con Capucha, Cangurera y Cierre Adultos', linea:'Poly-CottonFleece · 50% Algodón 50% Poliéster', categoria:'Sudadera Gorro, Cangurera y Cierre', tallas:T_CAB,
     colores:['Negro','Gris Jaspe','Blanco','Rojo','Marino','Royal']},
-  {codigo:'C1302', nombre:'Playera Dry Fit (ActiviTee) Cuello Redondo Manga Corta Caballero', linea:'ActiviTee · Mesh 100% Poliéster',
+  {codigo:'C1302', nombre:'Playera Dry Fit (ActiviTee) Cuello Redondo Manga Corta Caballero', linea:'ActiviTee · Mesh 100% Poliéster', categoria:'Caballero Dry Fit C. Redondo', tallas:T_CAB,
     colores:['Negro','Gris','Blanco','Rojo','Jade','Marino','Royal','Amarillo Neón','Verde Neón','Naranja Neón']},
-  {codigo:'D1302', nombre:'Playera Dry Fit (ActiviTee) Cuello Redondo Manga Corta Dama', linea:'ActiviTee · Mesh 100% Poliéster',
+  {codigo:'D1302', nombre:'Playera Dry Fit (ActiviTee) Cuello Redondo Manga Corta Dama', linea:'ActiviTee · Mesh 100% Poliéster', categoria:'Mujer Dry Fit C. Redondo', tallas:T_DAMA,
     colores:['Negro','Gris','Blanco','Rojo','Jade','Marino','Royal','Amarillo Neón','Verde Neón','Naranja Neón']},
-  {codigo:'C1502', nombre:'Playera Tipo Polo Dry Fit (ActiviTee) Manga Corta Caballero', linea:'ActiviTee · Mesh 100% Poliéster',
+  {codigo:'C1502', nombre:'Playera Tipo Polo Dry Fit (ActiviTee) Manga Corta Caballero', linea:'ActiviTee · Mesh 100% Poliéster', categoria:'Caballero Polo Dry Fit', tallas:T_CAB,
     colores:['Negro','Gris','Blanco','Rojo','Marino','Royal']},
-  {codigo:'D1502', nombre:'Playera Tipo Polo Dry Fit (ActiviTee) Manga Corta Dama', linea:'ActiviTee · Mesh 100% Poliéster',
+  {codigo:'D1502', nombre:'Playera Tipo Polo Dry Fit (ActiviTee) Manga Corta Dama', linea:'ActiviTee · Mesh 100% Poliéster', categoria:'Mujer Polo Dry Fit', tallas:T_DAMA,
     colores:['Negro','Gris','Blanco','Rojo','Marino','Royal']},
 ];
 
@@ -216,6 +217,16 @@ function onProductoChange(){
   const p = productoActual();
   document.getElementById("fLineaInfo").textContent = p ? p.linea : "";
   actualizarListaColores();
+  actualizarListaTallas();
+}
+
+function actualizarListaTallas(){
+  const p = productoActual();
+  const tallas = p ? p.tallas : ['CH','MED','GDE','XL'];
+  const sel = document.getElementById("fTalla");
+  const valActual = sel.value;
+  sel.innerHTML = tallas.map(t=>`<option value="${t}">${t}</option>`).join("");
+  sel.value = tallas.includes(valActual) ? valActual : tallas[Math.min(1,tallas.length-1)];
 }
 
 function actualizarListaColores(){
@@ -236,7 +247,7 @@ function agregarRenglon(){
   if(!color){ mostrarMsg("Escribe o elige un color.", "error"); return; }
 
   pedidoActual.push({
-    codigo: p.codigo, nombre: p.nombre, color, talla, cantidad
+    codigo: p.codigo, nombre: p.nombre, categoria: p.categoria, color, talla, cantidad
   });
 
   // Guardar color nuevo si no estaba ya sugerido en ningún lado
@@ -298,13 +309,28 @@ function renderPedido(){
 function construirMensajePedido(){
   if(pedidoActual.length===0) return "";
   const ref = document.getElementById("fReferencia").value.trim();
-  let msg = `📋 *Pedido Playeras Beloma*\nFecha: ${hoyISO()}\n\n`;
+
+  // Agrupar renglones por categoría, respetando el orden en que se fueron agregando
+  const categoriasOrden = [];
+  const porCategoria = {};
   pedidoActual.forEach(r=>{
-    msg += `• ${r.codigo} — ${r.nombre}\n  Color: ${r.color} · Talla: ${r.talla} · Piezas: ${r.cantidad}\n\n`;
+    const cat = r.categoria || r.nombre;
+    if(!porCategoria[cat]){ porCategoria[cat]=[]; categoriasOrden.push(cat); }
+    porCategoria[cat].push(r);
   });
+
+  let msg = "";
+  categoriasOrden.forEach(cat=>{
+    msg += `*${cat}*\n`;
+    porCategoria[cat].forEach(r=>{
+      msg += `${r.cantidad} ${r.color} ${r.talla}\n`;
+    });
+    msg += `\n`;
+  });
+
   const totalPiezas = pedidoActual.reduce((s,r)=>s+r.cantidad,0);
-  msg += `Total de piezas: ${totalPiezas}\n`;
-  if(ref) msg += `\nNotas: ${ref}\n`;
+  msg += `Total: ${totalPiezas} piezas`;
+  if(ref) msg += `\nNotas: ${ref}`;
   return msg;
 }
 
