@@ -163,8 +163,8 @@
           </select>
         </div>
         <div>
-          <label>Nombre del cliente</label>
-          <input type="text" id="fCliente" placeholder="Nombre libre">
+          <label>Nombre del cliente (opcional)</label>
+          <input type="text" id="fCliente" placeholder="Déjalo vacío si no aplica (ej. MercadoLibre)">
         </div>
         <div>
           <label>Fecha del pedido</label>
@@ -312,6 +312,7 @@ function agregarFilaItem(valores){
           <option value="Dama">Dama</option>
           <option value="Niño">Niño</option>
           <option value="Niña">Niña</option>
+          <option value="Juvenil">Juvenil</option>
           <option value="Unisex">Unisex</option>
         </select></td>
     <td><input type="text" class="it-talla" placeholder="Ch/M/G/XL"></td>
@@ -368,11 +369,10 @@ async function guardarPedido(){
   const folio = document.getElementById("fFolio").value.trim();
   const canal = document.getElementById("fCanal").value;
   const tipoCliente = document.getElementById("fTipoCliente").value;
-  const cliente = document.getElementById("fCliente").value.trim();
+  const cliente = document.getElementById("fCliente").value.trim() || canal;
   const fecha = document.getElementById("fFecha").value || hoyISO();
   const items = leerItems().filter(it => it.descripcion || it.talla || it.color);
 
-  if(!cliente){ mostrarMsg("Falta el nombre del cliente.", "error"); return; }
   if(items.length === 0){ mostrarMsg("Agrega al menos una prenda.", "error"); return; }
 
   const totalPiezas = items.reduce((s,it)=> s + it.cantidad, 0);
