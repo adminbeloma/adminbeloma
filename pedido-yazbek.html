@@ -1,0 +1,393 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Pedido a Yazbek · Playeras Beloma</title>
+
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore-compat.js"></script>
+
+<style>
+  :root{
+    --azul:#1d4ed8; --azul-suave:#eef3ff; --gris-borde:#dde3ee; --gris-texto:#3a4356;
+    --gris-fondo:#f6f8fc; --verde:#16a34a; --rojo:#dc2626; --blanco:#ffffff; --radio:10px;
+  }
+  *{box-sizing:border-box;}
+  body{margin:0;font-family:'Segoe UI', system-ui, -apple-system, sans-serif;background:var(--gris-fondo);color:var(--gris-texto);}
+  header{background:var(--azul);color:#fff;padding:18px 24px;}
+  header h1{margin:0;font-size:1.2rem;font-weight:600;}
+  header p{margin:4px 0 0;font-size:.8rem;opacity:.9;}
+  .contenedor{max-width:1100px;margin:0 auto;padding:20px 16px 60px;}
+  .card{background:#fff;border:1px solid var(--gris-borde);border-radius:var(--radio);padding:18px 20px;margin-bottom:18px;}
+  .card h2{margin:0 0 14px;font-size:1rem;color:var(--azul);}
+  label{font-size:.78rem;font-weight:600;color:#6b7280;display:block;margin-bottom:4px;}
+  select, input, textarea{width:100%;padding:8px 10px;border:1px solid var(--gris-borde);border-radius:7px;font-size:.88rem;font-family:inherit;background:#fff;color:var(--gris-texto);}
+  input:focus, select:focus, textarea:focus{outline:2px solid var(--azul);outline-offset:1px;}
+  .grid-form{display:grid;grid-template-columns:2fr 1fr 1fr 1fr;gap:10px;align-items:end;}
+  @media (max-width:700px){.grid-form{grid-template-columns:1fr 1fr;}}
+  .linea-info{font-size:.72rem;color:#9aa4b5;margin-top:2px;}
+  table{width:100%;border-collapse:collapse;font-size:.85rem;}
+  th, td{padding:8px 10px;border-bottom:1px solid var(--gris-borde);text-align:left;}
+  th{background:var(--azul-suave);color:var(--azul);font-weight:600;font-size:.75rem;text-transform:uppercase;}
+  .btn{padding:9px 16px;border:none;border-radius:8px;cursor:pointer;font-size:.86rem;font-weight:600;}
+  .btn-primario{background:var(--azul);color:#fff;}
+  .btn-primario:hover{background:#1a3fc0;}
+  .btn-secundario{background:#fff;color:var(--azul);border:1px solid var(--azul);}
+  .btn-verde{background:var(--verde);color:#fff;}
+  .btn-rojo{background:#fde8e8;color:var(--rojo);}
+  .btn-chico{padding:5px 10px;font-size:.78rem;}
+  .fila-acciones{display:flex;gap:10px;margin-top:14px;flex-wrap:wrap;}
+  .vacio{text-align:center;color:#94a3b8;padding:24px 10px;font-size:.9rem;}
+  .msg{padding:10px 14px;border-radius:8px;font-size:.85rem;margin-bottom:12px;display:none;}
+  .msg.ok{background:#e7f8ee;color:#127a3d;display:block;}
+  .msg.error{background:#fde8e8;color:var(--rojo);display:block;}
+  .resumen{background:var(--azul-suave);border-radius:8px;padding:12px 14px;font-size:.85rem;margin-top:14px;}
+  datalist{}
+</style>
+</head>
+<body>
+
+<header>
+  <h1>🛍️ Pedido a Yazbek</h1>
+  <p>Arma el pedido y mándalo directo por WhatsApp al proveedor</p>
+</header>
+
+<div class="contenedor">
+  <div id="msgGlobal" class="msg"></div>
+
+  <!-- ===== Agregar producto ===== -->
+  <div class="card">
+    <h2>Agregar producto al pedido</h2>
+    <div class="grid-form">
+      <div>
+        <label>Producto</label>
+        <select id="fProducto" onchange="onProductoChange()"></select>
+        <div class="linea-info" id="fLineaInfo"></div>
+      </div>
+      <div>
+        <label>Color</label>
+        <input type="text" id="fColor" list="listaColores" placeholder="Escribe o elige...">
+        <datalist id="listaColores"></datalist>
+      </div>
+      <div>
+        <label>Talla</label>
+        <select id="fTalla">
+          <option value="CH">CH</option>
+          <option value="M" selected>M</option>
+          <option value="G">G</option>
+          <option value="EG">EG</option>
+          <option value="EEG">EEG</option>
+          <option value="EEEG">EEEG</option>
+        </select>
+      </div>
+      <div>
+        <label>Piezas</label>
+        <input type="number" id="fCantidad" value="1" min="1">
+      </div>
+    </div>
+    <div class="fila-acciones">
+      <button class="btn btn-primario" onclick="agregarRenglon()">+ Agregar al pedido</button>
+    </div>
+  </div>
+
+  <!-- ===== Pedido actual ===== -->
+  <div class="card">
+    <h2>📋 Pedido actual</h2>
+    <div id="tablaPedidoCont"><div class="vacio">Aún no has agregado productos.</div></div>
+    <div class="resumen" id="resumenPedido" style="display:none;"></div>
+    <div class="fila-acciones">
+      <input type="text" id="fReferencia" placeholder="Referencia / notas para Yazbek (opcional)" style="max-width:400px;">
+    </div>
+    <div class="fila-acciones">
+      <button class="btn btn-verde" onclick="enviarPedidoWhatsApp()">📱 Enviar pedido por WhatsApp</button>
+      <button class="btn btn-secundario" onclick="copiarPedido()">📋 Copiar texto</button>
+      <button class="btn btn-rojo" onclick="limpiarPedido()">🗑 Vaciar pedido</button>
+    </div>
+  </div>
+
+  <!-- ===== Historial ===== -->
+  <div class="card">
+    <h2>🕘 Historial de pedidos enviados</h2>
+    <div id="tablaHistCont"><div class="vacio">Sin pedidos guardados todavía.</div></div>
+  </div>
+</div>
+
+<script>
+/* =====================================================
+   FIREBASE — misma config que adminbeloma / kiosco / mayoreo
+===================================================== */
+const firebaseConfig = {
+  apiKey: "AIzaSyAvhG8RuytIv9rjsILWF8twyZeqTwfJ10I",
+  authDomain: "adminbeloma.firebaseapp.com",
+  projectId: "adminbeloma",
+  storageBucket: "adminbeloma.firebasestorage.app",
+  messagingSenderId: "542305826307",
+  appId: "1:542305826307:web:4d97b65719bf534eff0036"
+};
+firebase.initializeApp(firebaseConfig);
+const db = firebase.firestore();
+
+const NUMERO_YAZBEK = "6682574817"; // 668 257 4817
+
+/* =====================================================
+   CATÁLOGO YAZBEK — códigos y colores oficiales
+   (colores = sugerencias; también puedes escribir uno nuevo y se guarda)
+===================================================== */
+const CATALOGO_YAZBEK = [
+  {codigo:'C0200', nombre:'Playera Cuello Redondo Manga Corta Caballero', linea:'Mid Weight · 100% Algodón',
+    colores:['Negro','Carbón','Gris Jaspe','Blanco','Arena','Marrón','Rojo','Naranja','Canario','Jade','Marino','Royal','Turquesa','Caribe','Rosa Pastel','Salmón','Fucsia','Lavanda','Morado']},
+  {codigo:'D0200', nombre:'Playera Cuello Redondo Manga Corta Dama', linea:'Mid Weight · 100% Algodón',
+    colores:['Negro','Gris Jaspe','Blanco','Arena','Rojo','Jade','Marino','Royal','Caribe','Salmón','Fucsia','Lavanda']},
+  {codigo:'C0306', nombre:'Playera Cuello V Manga Corta Caballero', linea:'Mid Weight · 100% Algodón',
+    colores:['Negro','Blanco','Marino','Royal']},
+  {codigo:'D0306', nombre:'Playera Cuello V Manga Corta con Silueta Dama', linea:'Mid Weight · 100% Algodón',
+    colores:['Negro','Blanco','Marino']},
+  {codigo:'C0310', nombre:'Playera Cuello Redondo Sin Mangas Caballero', linea:'Mid Weight · 100% Algodón',
+    colores:['Negro','Gris Jaspe','Blanco','Rojo','Marino','Royal']},
+  {codigo:'C0300', nombre:'Playera Peso Completo Cuello Redondo Manga Corta Caballero', linea:'Heavy Weight · 100% Algodón',
+    colores:['Negro','Carbón','Gris Jaspe','Plata','Blanco','Arena','Beige','Chocolate','Marrón','Ladrillo','Rojo','Ocre','Naranja','Mango','Canario','Lima','Jade','Olivo','Verde Bosque','Marino','Delfín','Royal','Turquesa','Celeste','Caribe','Azul Claro','Aqua','Rosa Pastel','Coral','Salmón','Fucsia','Lavanda','Morado']},
+  {codigo:'D0300', nombre:'Playera Peso Completo Cuello Redondo Manga Corta Dama', linea:'Heavy Weight · 100% Algodón',
+    colores:['Negro','Carbón','Gris Jaspe','Blanco','Rojo','Naranja','Canario','Lima','Jade','Marino','Turquesa','Celeste','Azul Claro','Aqua','Rosa Pastel','Coral','Fucsia','Morado']},
+  {codigo:'J0300', nombre:'Playera Peso Completo Cuello Redondo Manga Corta Jóvenes (Juvenil)', linea:'Heavy Weight · 100% Algodón',
+    colores:['Negro','Carbón','Gris Jaspe','Blanco','Rojo','Naranja','Mango','Canario','Lima','Jade','Marino','Celeste','Rosa Pastel','Fucsia','Morado','Turquesa']},
+  {codigo:'N0300', nombre:'Playera Peso Completo Cuello Redondo Manga Corta Niños', linea:'Heavy Weight · 100% Algodón',
+    colores:['Negro','Carbón','Gris Jaspe','Blanco','Rojo','Naranja','Mango','Canario','Lima','Jade','Marino','Celeste','Rosa Pastel','Fucsia','Morado','Turquesa']},
+  {codigo:'B0300', nombre:'Playera Peso Completo Cuello Redondo Manga Corta Bebés', linea:'Heavy Weight · 100% Algodón',
+    colores:['Negro','Blanco','Rojo','Naranja','Canario','Lima','Marino','Celeste','Rosa Pastel','Fucsia','Turquesa']},
+  {codigo:'C0304', nombre:'Playera Peso Completo Cuello Redondo Manga Larga Caballero', linea:'Heavy Weight · 100% Algodón',
+    colores:['Negro','Carbón','Gris Jaspe','Blanco','Arena','Marrón','Rojo','Naranja','Mango','Jade','Marino','Royal']},
+  {codigo:'D0304', nombre:'Playera Peso Completo Cuello Redondo Manga Larga Dama', linea:'Heavy Weight · 100% Algodón',
+    colores:['Negro','Gris Jaspe','Blanco','Marino','Turquesa','Fucsia']},
+  {codigo:'N0304', nombre:'Playera Peso Completo Cuello Redondo Manga Larga Niños', linea:'Heavy Weight · 100% Algodón',
+    colores:['Negro','Gris Jaspe','Blanco','Rojo','Marino','Royal']},
+  {codigo:'C0501', nombre:'Playera Tipo Polo Manga Corta Caballero (Algodón)', linea:'Heavy Weight · 100% Algodón',
+    colores:['Negro','Gris Jaspe','Blanco','Rojo','Marino','Royal']},
+  {codigo:'N0501', nombre:'Playera Tipo Polo Manga Corta Niños (Algodón)', linea:'Heavy Weight · 100% Algodón',
+    colores:['Blanco','Rojo','Marino']},
+  {codigo:'C0700', nombre:'Sudadera Cuello Redondo Adultos', linea:'Poly-CottonFleece · 50% Algodón 50% Poliéster',
+    colores:['Negro','Gris Jaspe','Blanco','Rojo','Marino','Royal']},
+  {codigo:'C0701', nombre:'Sudadera con Capucha y Cangurera Adultos', linea:'Poly-CottonFleece · 50% Algodón 50% Poliéster',
+    colores:['Negro','Gris Jaspe','Blanco','Arena','Marrón','Rojo','Verde Bosque','Marino','Royal','Rosa Pastel','Lavanda']},
+  {codigo:'C0702', nombre:'Sudadera con Capucha, Cangurera y Cierre Adultos', linea:'Poly-CottonFleece · 50% Algodón 50% Poliéster',
+    colores:['Negro','Gris Jaspe','Blanco','Rojo','Marino','Royal']},
+  {codigo:'C1302', nombre:'Playera Dry Fit (ActiviTee) Cuello Redondo Manga Corta Caballero', linea:'ActiviTee · Mesh 100% Poliéster',
+    colores:['Negro','Gris','Blanco','Rojo','Jade','Marino','Royal','Amarillo Neón','Verde Neón','Naranja Neón']},
+  {codigo:'D1302', nombre:'Playera Dry Fit (ActiviTee) Cuello Redondo Manga Corta Dama', linea:'ActiviTee · Mesh 100% Poliéster',
+    colores:['Negro','Gris','Blanco','Rojo','Jade','Marino','Royal','Amarillo Neón','Verde Neón','Naranja Neón']},
+  {codigo:'C1502', nombre:'Playera Tipo Polo Dry Fit (ActiviTee) Manga Corta Caballero', linea:'ActiviTee · Mesh 100% Poliéster',
+    colores:['Negro','Gris','Blanco','Rojo','Marino','Royal']},
+  {codigo:'D1502', nombre:'Playera Tipo Polo Dry Fit (ActiviTee) Manga Corta Dama', linea:'ActiviTee · Mesh 100% Poliéster',
+    colores:['Negro','Gris','Blanco','Rojo','Marino','Royal']},
+];
+
+let coloresGuardados = []; // colores extra que el usuario ha tecleado y guardado
+let pedidoActual = [];     // renglones del pedido en curso
+let historial = [];
+
+/* ---------- utilidades ---------- */
+function mostrarMsg(texto, tipo){
+  const el = document.getElementById("msgGlobal");
+  el.textContent = texto;
+  el.className = "msg " + tipo;
+  setTimeout(()=>{ el.className = "msg"; }, 3500);
+}
+function hoyISO(){
+  const d = new Date();
+  return d.getFullYear()+"-"+String(d.getMonth()+1).padStart(2,"0")+"-"+String(d.getDate()).padStart(2,"0");
+}
+function uid(){ return Date.now().toString(36)+Math.random().toString(36).slice(2,8); }
+
+/* ---------- llenar selector de producto ---------- */
+function llenarSelectorProductos(){
+  const sel = document.getElementById("fProducto");
+  sel.innerHTML = CATALOGO_YAZBEK.map(p=>
+    `<option value="${p.codigo}">${p.codigo} — ${p.nombre}</option>`
+  ).join("");
+  onProductoChange();
+}
+
+function productoActual(){
+  const codigo = document.getElementById("fProducto").value;
+  return CATALOGO_YAZBEK.find(p=>p.codigo===codigo);
+}
+
+function onProductoChange(){
+  const p = productoActual();
+  document.getElementById("fLineaInfo").textContent = p ? p.linea : "";
+  actualizarListaColores();
+}
+
+function actualizarListaColores(){
+  const p = productoActual();
+  const oficiales = p ? p.colores : [];
+  const todos = [...new Set([...oficiales, ...coloresGuardados])].sort();
+  document.getElementById("listaColores").innerHTML =
+    todos.map(c=>`<option value="${c}">`).join("");
+}
+
+/* ---------- agregar renglón al pedido ---------- */
+function agregarRenglon(){
+  const p = productoActual();
+  const color = document.getElementById("fColor").value.trim();
+  const talla = document.getElementById("fTalla").value;
+  const cantidad = parseInt(document.getElementById("fCantidad").value)||1;
+
+  if(!color){ mostrarMsg("Escribe o elige un color.", "error"); return; }
+
+  pedidoActual.push({
+    codigo: p.codigo, nombre: p.nombre, color, talla, cantidad
+  });
+
+  // Guardar color nuevo si no estaba ya sugerido en ningún lado
+  const yaExiste = [...p.colores, ...coloresGuardados].some(c=>c.toLowerCase()===color.toLowerCase());
+  if(!yaExiste){
+    guardarColorNuevo(color);
+  }
+
+  document.getElementById("fColor").value = "";
+  document.getElementById("fCantidad").value = "1";
+  renderPedido();
+  mostrarMsg("✅ Producto agregado al pedido", "ok");
+}
+
+async function guardarColorNuevo(color){
+  try{
+    coloresGuardados.push(color);
+    await db.collection("yazbek_colores").add({nombre: color, creado: new Date().toISOString()});
+    actualizarListaColores();
+  }catch(err){ console.error("Error guardando color:", err); }
+}
+
+function eliminarRenglon(idx){
+  pedidoActual.splice(idx,1);
+  renderPedido();
+}
+
+/* ---------- render del pedido actual ---------- */
+function renderPedido(){
+  const cont = document.getElementById("tablaPedidoCont");
+  const resumen = document.getElementById("resumenPedido");
+  if(pedidoActual.length===0){
+    cont.innerHTML = '<div class="vacio">Aún no has agregado productos.</div>';
+    resumen.style.display = "none";
+    return;
+  }
+  let html = `<table><thead><tr>
+    <th>Código</th><th>Producto</th><th>Color</th><th>Talla</th><th>Piezas</th><th></th>
+  </tr></thead><tbody>`;
+  let totalPiezas = 0;
+  pedidoActual.forEach((r,idx)=>{
+    totalPiezas += r.cantidad;
+    html += `<tr>
+      <td><strong>${r.codigo}</strong></td>
+      <td style="font-size:.8rem;">${r.nombre}</td>
+      <td>${r.color}</td>
+      <td>${r.talla}</td>
+      <td>${r.cantidad}</td>
+      <td><button class="btn btn-rojo btn-chico" onclick="eliminarRenglon(${idx})">✕</button></td>
+    </tr>`;
+  });
+  html += "</tbody></table>";
+  cont.innerHTML = html;
+  resumen.style.display = "block";
+  resumen.innerHTML = `📦 <strong>${pedidoActual.length}</strong> renglón(es) · <strong>${totalPiezas}</strong> piezas en total`;
+}
+
+/* ---------- construir mensaje ---------- */
+function construirMensajePedido(){
+  if(pedidoActual.length===0) return "";
+  const ref = document.getElementById("fReferencia").value.trim();
+  let msg = `📋 *Pedido Playeras Beloma*\nFecha: ${hoyISO()}\n\n`;
+  pedidoActual.forEach(r=>{
+    msg += `• ${r.codigo} — ${r.nombre}\n  Color: ${r.color} · Talla: ${r.talla} · Piezas: ${r.cantidad}\n\n`;
+  });
+  const totalPiezas = pedidoActual.reduce((s,r)=>s+r.cantidad,0);
+  msg += `Total de piezas: ${totalPiezas}\n`;
+  if(ref) msg += `\nNotas: ${ref}\n`;
+  return msg;
+}
+
+/* ---------- acciones ---------- */
+function copiarPedido(){
+  const msg = construirMensajePedido();
+  if(!msg){ mostrarMsg("Agrega al menos un producto.", "error"); return; }
+  navigator.clipboard.writeText(msg).then(()=>{
+    mostrarMsg("📋 Pedido copiado al portapapeles", "ok");
+  }).catch(()=>{
+    mostrarMsg("No se pudo copiar, selecciona el texto manualmente.", "error");
+  });
+}
+
+async function enviarPedidoWhatsApp(){
+  const msg = construirMensajePedido();
+  if(!msg){ mostrarMsg("Agrega al menos un producto antes de enviar.", "error"); return; }
+
+  // Guardar en historial
+  try{
+    await db.collection("yazbek_pedidos").add({
+      fecha: hoyISO(),
+      items: pedidoActual,
+      referencia: document.getElementById("fReferencia").value.trim(),
+      mensaje: msg,
+      creado: new Date().toISOString()
+    });
+  }catch(err){ console.error("Error guardando historial:", err); }
+
+  window.open(`https://wa.me/52${NUMERO_YAZBEK}?text=${encodeURIComponent(msg)}`, "_blank");
+}
+
+function limpiarPedido(){
+  if(pedidoActual.length>0 && !confirm("¿Vaciar el pedido actual?")) return;
+  pedidoActual = [];
+  document.getElementById("fReferencia").value = "";
+  renderPedido();
+}
+
+/* ---------- historial ---------- */
+function renderHistorial(){
+  const cont = document.getElementById("tablaHistCont");
+  if(historial.length===0){
+    cont.innerHTML = '<div class="vacio">Sin pedidos guardados todavía.</div>';
+    return;
+  }
+  const lista = [...historial].sort((a,b)=> a.fecha < b.fecha ? 1 : -1);
+  let html = `<table><thead><tr>
+    <th>Fecha</th><th>Renglones</th><th>Piezas</th><th>Notas</th>
+  </tr></thead><tbody>`;
+  lista.forEach(p=>{
+    const piezas = (p.items||[]).reduce((s,r)=>s+(r.cantidad||0),0);
+    html += `<tr>
+      <td>${p.fecha}</td>
+      <td>${(p.items||[]).length}</td>
+      <td>${piezas}</td>
+      <td style="font-size:.8rem;color:#6b7280;">${p.referencia||'—'}</td>
+    </tr>`;
+  });
+  html += "</tbody></table>";
+  cont.innerHTML = html;
+}
+
+/* ---------- carga inicial desde Firestore ---------- */
+async function cargarColoresGuardados(){
+  try{
+    const snap = await db.collection("yazbek_colores").get();
+    coloresGuardados = snap.docs.map(d=>d.data().nombre).filter(Boolean);
+    actualizarListaColores();
+  }catch(err){ console.error("Error cargando colores:", err); }
+}
+
+function escucharHistorial(){
+  db.collection("yazbek_pedidos").onSnapshot(snap=>{
+    historial = snap.docs.map(d=>d.data());
+    renderHistorial();
+  }, err=>console.error("Error en historial:", err));
+}
+
+/* ---------- init ---------- */
+llenarSelectorProductos();
+cargarColoresGuardados();
+escucharHistorial();
+</script>
+</body>
+</html>
