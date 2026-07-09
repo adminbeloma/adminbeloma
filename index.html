@@ -3361,7 +3361,7 @@ window.renderGastos=function renderGastos(){
   empty.style.display='none';
   tbody.innerHTML=lista.map(g=>`<tr>
     <td>${fmtFecha(g.fecha)}</td>
-    <td style="font-weight:500;">${g.concepto}${g.origen==='caja'?' <span class="badge badge-blue" style="font-size:9px;" title="Registrado en Caja">🔗 Caja</span>':''}</td>
+    <td style="font-weight:500;">${g.concepto}${g.origen==='caja'?' <span class="badge badge-blue" style="font-size:9px;" title="Registrado en Caja">🔗 Caja</span>':''}${g.origen==='compra'?' <span class="badge badge-blue" style="font-size:9px;" title="Generado desde Compras">🔗 Compra</span>':''}</td>
     <td>${g.categoria}</td>
     <td><span class="badge ${g.tipo==='Fijo'?'badge-blue':'badge-gold'}">${g.tipo}</span></td>
     <td style="font-size:12px;">${g.proveedor||'—'}</td>
@@ -5378,6 +5378,28 @@ window.calcCompraTotal=function(){
   document.getElementById('compra-contenido-info').innerHTML=info;
 };
 
+// Crea un registro real en Gastos cuando una compra se paga (de contado al
+// registrarla, o después al marcar un crédito como pagado), para que el
+// dinero que realmente salió quede contabilizado en Gastos/Reportes.
+async function crearGastoDesdeCompra(compra){
+  const gastoId='compra_'+compra.id;
+  await setDoc(doc(db,'pl_gastos',gastoId),{
+    id:gastoId,
+    origen:'compra',
+    compraId:compra.id,
+    fecha:compra.fechaPago||compra.fecha,
+    concepto:`Compra: ${compra.insumoNombre||compra.descripcion||'Insumo'}`,
+    categoria:'Insumos impresión',
+    tipo:'Variable',
+    proveedor:compra.proveedor||'',
+    factura:compra.referencia||'',
+    monto:+compra.costoTotal||0,
+    metodoPago:compra.metodoPago||'',
+    notas:`Generado automáticamente desde Compras${compra.proveedor?' — '+compra.proveedor:''}`,
+    creado:new Date().toISOString()
+  });
+}
+
 window.guardarCompra=async function(){
   const descripcion=document.getElementById('compra-descripcion').value.trim();
   const costoTotal=+document.getElementById('compra-costo-total').value;
@@ -5415,6 +5437,9 @@ window.guardarCompra=async function(){
     creado:new Date().toISOString()
   };
   await setDoc(doc(db,'pl_compras',id),data);
+  if(pagoTipo==='pagado'){
+    await crearGastoDesdeCompra(data);
+  }
 
   // Actualizar stock del insumo si está marcado
   if(document.getElementById('compra-actualizar-stock').checked && insId && totalContenido>0){
@@ -5499,11 +5524,13 @@ window.renderCXP=function(){
 };
 
 window.marcarCompraPagada=async function(id){
-  if(!confirm('¿Marcar esta compra como pagada?')) return;
+  if(!confirm('¿Marcar esta compra como pagada? Esto también la va a registrar como un gasto.')) return;
   const compra=compras.find(c=>c.id===id);
   if(!compra) return;
-  await setDoc(doc(db,'pl_compras',id),{...compra,pagado:true,fechaPago:hoy()});
-  toast('✅ Compra marcada como pagada');
+  const compraActualizada={...compra,pagado:true,fechaPago:hoy()};
+  await setDoc(doc(db,'pl_compras',id),compraActualizada);
+  await crearGastoDesdeCompra(compraActualizada);
+  toast('✅ Compra marcada como pagada y registrada en Gastos');
   renderCXP();
 };
 
@@ -5552,6 +5579,9 @@ window.renderCompras=function renderCompras(){
 window.eliminarCompra=async function(id){
   if(!confirm('¿Eliminar esta compra?'))return;
   await deleteDoc(doc(db,'pl_compras',id));
+  // Si esta compra generó un gasto (pagada de contado o crédito ya liquidado), bórralo también
+  const gastoVinculado=gastos.find(g=>g.id==='compra_'+id);
+  if(gastoVinculado) await deleteDoc(doc(db,'pl_gastos','compra_'+id));
   toast('🗑 Compra eliminada');
 };
 
