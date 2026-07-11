@@ -1584,7 +1584,19 @@ tbody td{padding:11px 14px;font-size:13.5px;vertical-align:middle;}
           <label>Nueva categoría</label>
           <input type="text" id="g-cat-nueva" placeholder="Escribe la nueva categoría">
         </div>
-        <div class="form-group"><label>Monto ($) *</label><input type="number" id="g-monto" placeholder="0.00" step="0.01"></div>
+        <div class="form-group"><label>Monto ($) *</label><input type="number" id="g-monto" placeholder="0.00" step="0.01" oninput="actualizarPreviewMSI()"></div>
+        <div class="form-group full">
+          <label style="display:flex;align-items:center;gap:8px;cursor:pointer;font-weight:600;">
+            <input type="checkbox" id="g-es-msi" onchange="toggleMSI()" style="width:16px;height:16px;">
+            💳 Es pago a meses sin intereses (tarjeta de crédito)
+          </label>
+        </div>
+        <div class="form-group" id="g-msi-meses-wrap" style="display:none;">
+          <label>¿A cuántos meses?</label>
+          <input type="number" id="g-msi-meses" min="2" placeholder="Ej. 3, 6, 12, 15" oninput="actualizarPreviewMSI()">
+        </div>
+        <div class="form-group full" id="g-msi-preview" style="display:none;background:var(--accent-light);border-radius:8px;padding:10px 12px;font-size:13px;">
+        </div>
         <div class="form-group"><label>Proveedor / Establecimiento</label>
           <input type="text" id="g-proveedor" placeholder="Buscar proveedor..." list="lista-proveedores-gasto">
           <datalist id="lista-proveedores-gasto"></datalist>
@@ -3258,6 +3270,10 @@ window.openGastoModal=function(id){
   document.getElementById('g-proveedor').value='';
   document.getElementById('g-factura').value='';
   document.getElementById('g-notas').value='';
+  document.getElementById('g-es-msi').checked=false;
+  document.getElementById('g-msi-meses').value='';
+  document.getElementById('g-msi-meses-wrap').style.display='none';
+  document.getElementById('g-msi-preview').style.display='none';
   document.getElementById('cat-personalizada-group').style.display='none';
   // Agregar categorías personalizadas guardadas al select
   const sel = document.getElementById('g-categoria');
@@ -3301,6 +3317,38 @@ window.openGastoModal=function(id){
   openModal('modal-gasto');
 };
 
+// Suma/resta meses a una fecha 'YYYY-MM-DD', conservando el día cuando se pueda
+// (si el mes destino tiene menos días, cae en el último día de ese mes).
+function sumarMesesFecha(fechaStr, meses){
+  const [y,m,d]=fechaStr.split('-').map(Number);
+  const dt=new Date(y,m-1,d);
+  const diaOriginal=dt.getDate();
+  dt.setMonth(dt.getMonth()+meses);
+  if(dt.getDate()!==diaOriginal) dt.setDate(0); // se pasó de mes corto → último día del mes anterior
+  return fmtFechaLocal(dt);
+}
+
+window.toggleMSI=function(){
+  const on=document.getElementById('g-es-msi').checked;
+  document.getElementById('g-msi-meses-wrap').style.display=on?'block':'none';
+  if(!on) document.getElementById('g-msi-preview').style.display='none';
+  actualizarPreviewMSI();
+};
+
+window.actualizarPreviewMSI=function(){
+  const on=document.getElementById('g-es-msi').checked;
+  const preview=document.getElementById('g-msi-preview');
+  if(!on){ preview.style.display='none'; return; }
+  const monto=+document.getElementById('g-monto').value||0;
+  const meses=parseInt(document.getElementById('g-msi-meses').value)||0;
+  if(monto<=0||meses<2){ preview.style.display='none'; return; }
+  const pagoMensual=monto/meses;
+  const fecha=document.getElementById('g-fecha').value||hoy();
+  const fechaUltimo=sumarMesesFecha(fecha,meses-1);
+  preview.style.display='block';
+  preview.innerHTML=`📅 Se van a crear <strong>${meses} gastos mensuales</strong> de <strong>${fmtMoney(pagoMensual)}</strong> cada uno, uno por mes desde ${fmtFecha(fecha)} hasta ${fmtFecha(fechaUltimo)} — así el gasto se refleja el mes que realmente pega a tu tarjeta, no todo de un jalón.`;
+};
+
 window.guardarGasto=async function(){
   const concepto=document.getElementById('g-concepto').value.trim();
   const monto=+document.getElementById('g-monto').value;
@@ -3313,7 +3361,34 @@ window.guardarGasto=async function(){
     const cats = JSON.parse(localStorage.getItem('pl_cats_gastos')||'[]');
     if(!cats.includes(categoria)) { cats.push(categoria); localStorage.setItem('pl_cats_gastos', JSON.stringify(cats)); }
   }
-  const data={id,fecha:document.getElementById('g-fecha').value,tipo:document.getElementById('g-tipo').value,concepto,categoria,monto,proveedor:document.getElementById('g-proveedor').value,factura:document.getElementById('g-factura').value,notas:document.getElementById('g-notas').value,creado:new Date().toISOString()};
+  const fecha=document.getElementById('g-fecha').value;
+  const tipo=document.getElementById('g-tipo').value;
+  const proveedor=document.getElementById('g-proveedor').value;
+  const factura=document.getElementById('g-factura').value;
+  const notas=document.getElementById('g-notas').value;
+  const esMSI=document.getElementById('g-es-msi').checked;
+  const mesesMSI=esMSI?(parseInt(document.getElementById('g-msi-meses').value)||0):0;
+
+  if(esMSI && mesesMSI>=2){
+    const pagoMensual=+(monto/mesesMSI).toFixed(2);
+    const grupoMSI=uid();
+    for(let i=0;i<mesesMSI;i++){
+      const idMes=i===0?id:uid();
+      const fechaMes=sumarMesesFecha(fecha,i);
+      await setDoc(doc(db,'pl_gastos',idMes),{
+        id:idMes, fecha:fechaMes, tipo, categoria,
+        concepto:`${concepto} (MSI ${i+1}/${mesesMSI})`,
+        monto:pagoMensual, proveedor, factura, notas,
+        esMSI:true, mesMSI:i+1, totalMesesMSI:mesesMSI, grupoMSI, montoTotalMSI:monto,
+        creado:new Date().toISOString()
+      });
+    }
+    closeModal('modal-gasto');
+    toast(`✅ ${mesesMSI} gastos mensuales creados (${fmtMoney(pagoMensual)} c/u)`);
+    return;
+  }
+
+  const data={id,fecha,tipo,concepto,categoria,monto,proveedor,factura,notas,creado:new Date().toISOString()};
   await setDoc(doc(db,'pl_gastos',id),data);
   closeModal('modal-gasto');
   toast('✅ Gasto guardado');
@@ -3365,7 +3440,7 @@ window.renderGastos=function renderGastos(){
   empty.style.display='none';
   tbody.innerHTML=lista.map(g=>`<tr>
     <td>${fmtFecha(g.fecha)}</td>
-    <td style="font-weight:500;">${g.concepto}${g.origen==='caja'?' <span class="badge badge-blue" style="font-size:9px;" title="Registrado en Caja">🔗 Caja</span>':''}${g.origen==='compra'?' <span class="badge badge-blue" style="font-size:9px;" title="Generado desde Compras">🔗 Compra</span>':''}</td>
+    <td style="font-weight:500;">${g.concepto}${g.origen==='caja'?' <span class="badge badge-blue" style="font-size:9px;" title="Registrado en Caja">🔗 Caja</span>':''}${g.origen==='compra'?' <span class="badge badge-blue" style="font-size:9px;" title="Generado desde Compras">🔗 Compra</span>':''}${g.esMSI?` <span class="badge badge-gold" style="font-size:9px;" title="Meses sin intereses — total ${fmtMoney(g.montoTotalMSI)}">💳 MSI ${g.mesMSI}/${g.totalMesesMSI}</span>`:''}</td>
     <td>${g.categoria}</td>
     <td><span class="badge ${g.tipo==='Fijo'?'badge-blue':'badge-gold'}">${g.tipo}</span></td>
     <td style="font-size:12px;">${g.proveedor||'—'}</td>
