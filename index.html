@@ -1712,6 +1712,18 @@ tbody td{padding:11px 14px;font-size:13.5px;vertical-align:middle;}
           <select id="ins-unidad"><option>ml/cc</option><option>ml</option><option>cc</option><option>L</option><option>gr</option><option>kg</option><option>piezas</option><option>kits</option></select>
         </div>
         <div class="form-group"><label>Stock actual *</label><input type="number" id="ins-stock" placeholder="1500" step="0.01"></div>
+        <div class="form-group full">
+          <label>🔗 Descuento automático desde Ventas (DTG)</label>
+          <select id="ins-auto-consumo">
+            <option value="">Ninguno — el stock solo se mueve al capturar compras/uso manual</option>
+            <option value="blanca">Tinta Blanca — descontar cc automáticamente de cada venta DTG</option>
+            <option value="cmyk">Tinta CMYK (color) — descontar cc automáticamente de cada venta DTG</option>
+          </select>
+          <div style="font-size:12px;color:var(--ink-soft);margin-top:4px;">
+            Marca esto en tu insumo de tinta blanca y en tu insumo de tinta de color — el sistema
+            va a ir restando solo los cc que captures en cada venta, sin que tengas que medir nada.
+          </div>
+        </div>
         <!-- Campos ocultos para compatibilidad con código existente -->
         <input type="hidden" id="ins-stock-min" value="0">
         <input type="hidden" id="ins-costo" value="0">
@@ -3014,6 +3026,17 @@ window.migrarVentasAPedidos=async function(){
   }
 };
 
+// Descuenta (o repone, si deltaCc es negativo) cc del insumo marcado como
+// vinculación automática ('blanca' o 'cmyk'), según lo capturado en ventas DTG.
+// No baja de 0 — si da negativo, es señal de que falta registrar una compra.
+async function ajustarStockInsumoAuto(tipo, deltaCc){
+  if(!deltaCc) return;
+  const ins=insumos.find(i=>i.autoConsumo===tipo);
+  if(!ins) return;
+  const nuevoStock=Math.max(0,+(+ins.stock-deltaCc).toFixed(4));
+  await setDoc(doc(db,'pl_insumos',ins.id),{...ins,stock:nuevoStock});
+}
+
 window.guardarVenta=async function(){
   if(window._ventaItems.length===0){toast('⚠️ Agrega al menos un producto');return;}
   const canal2=document.getElementById('v-canal').value;
@@ -3077,6 +3100,12 @@ window.guardarVenta=async function(){
     actualizado:new Date().toISOString()};
   await setDoc(doc(db,'pl_ventas',id),data);
   await sincronizarPedidoDesdeVenta(data, document.getElementById('v-cliente-tel')?.value||'');
+  // Descuento automático de stock de tinta (solo lo que cambió, si es una edición)
+  const prevCant=+ventaOriginal?.cantidad||0;
+  const prevTotalCcBlanca=(+ventaOriginal?.tintaBlanca||0)*prevCant;
+  const prevTotalCcColor=(+ventaOriginal?.tintaColor||0)*prevCant;
+  await ajustarStockInsumoAuto('blanca', totalCcBlanca-prevTotalCcBlanca);
+  await ajustarStockInsumoAuto('cmyk', totalCcColor-prevTotalCcColor);
   closeModal('modal-venta');
   toast('✅ Venta guardada — Folio: '+folioVal);
   await cargarVentas(true);
@@ -3263,10 +3292,17 @@ window.renderVentas=function renderVentas(){
 
 window.eliminarVenta=async function(id){
   if(!confirm('¿Eliminar esta venta?'))return;
+  const ventaVieja=ventas.find(v=>v.id===id);
   await deleteDoc(doc(db,'pl_ventas',id));
   // Si esta venta tenía un pedido espejo (por saldo pendiente), lo eliminamos también
   const pedidoEspejo=pedidos.find(p=>p.id==='venta_'+id);
   if(pedidoEspejo) await deleteDoc(doc(db,'pl_pedidos','venta_'+id));
+  // Reponer el stock de tinta que se había descontado por esta venta
+  if(ventaVieja){
+    const cantVieja=+ventaVieja.cantidad||0;
+    await ajustarStockInsumoAuto('blanca', -((+ventaVieja.tintaBlanca||0)*cantVieja));
+    await ajustarStockInsumoAuto('cmyk', -((+ventaVieja.tintaColor||0)*cantVieja));
+  }
   toast('🗑 Venta eliminada');
   await cargarVentas(true);
 };
@@ -3754,6 +3790,7 @@ window.openInsumoModal=function(id){
   document.getElementById('ins-categoria').value='Pretratamiento negras/color';
   document.getElementById('ins-categoria-otro').value='';
   document.getElementById('ins-otro-wrap').style.display='none';
+  document.getElementById('ins-auto-consumo').value='';
   if(id){
     const ins=insumos.find(x=>x.id===id);
     if(ins){
@@ -3775,6 +3812,7 @@ window.openInsumoModal=function(id){
       document.getElementById('ins-costo').value=ins.costo||0;
       document.getElementById('ins-uso-playera').value=ins.usoPlayera||0;
       document.getElementById('ins-uso-dia').value=ins.usoDia||0;
+      document.getElementById('ins-auto-consumo').value=ins.autoConsumo||'';
       if(ins.imagen){const img=document.getElementById('ins-imagen-preview');img.src=ins.imagen;img.style.display='block';}
     }
   }
@@ -3812,7 +3850,16 @@ window.guardarInsumo=async function(){
     const existing=insumos.find(x=>x.id===id);
     imagenUrl=existing?.imagen||'';
   }
-  const data={id,nombre,categoria,unidad:document.getElementById('ins-unidad').value,stock:+stock,stockMin:+document.getElementById('ins-stock-min').value||0,costo:+document.getElementById('ins-costo').value||0,usoPlayera:+document.getElementById('ins-uso-playera').value||0,usoDia:+document.getElementById('ins-uso-dia').value||0,imagen:imagenUrl,creado:new Date().toISOString()};
+  const autoConsumo=document.getElementById('ins-auto-consumo').value;
+  const data={id,nombre,categoria,unidad:document.getElementById('ins-unidad').value,stock:+stock,stockMin:+document.getElementById('ins-stock-min').value||0,costo:+document.getElementById('ins-costo').value||0,usoPlayera:+document.getElementById('ins-uso-playera').value||0,usoDia:+document.getElementById('ins-uso-dia').value||0,autoConsumo,imagen:imagenUrl,creado:new Date().toISOString()};
+  // Solo un insumo puede tener cada vinculación — si otro ya la tenía, se la quitamos para evitar duplicados
+  if(autoConsumo){
+    const otroConMismaLiga=insumos.find(x=>x.id!==id && x.autoConsumo===autoConsumo);
+    if(otroConMismaLiga){
+      await setDoc(doc(db,'pl_insumos',otroConMismaLiga.id),{...otroConMismaLiga,autoConsumo:''});
+      toast(`ℹ️ Se quitó la vinculación de "${otroConMismaLiga.nombre}" (solo un insumo puede tenerla)`);
+    }
+  }
   await setDoc(doc(db,'pl_insumos',id),data);
   closeModal('modal-insumo');
   toast('✅ Insumo guardado');
