@@ -3267,7 +3267,9 @@ window.openGastoModal=function(id){
   cats.forEach(cat => {
     const opt = document.createElement('option');
     opt.value = cat; opt.text = cat; opt.dataset.custom = '1';
-    sel.insertBefore(opt, sel.querySelector('option[value="__personalizada__"]'));
+    const refOpt = sel.querySelector('option[value="__personalizada__"]');
+    if(refOpt && refOpt.parentNode) refOpt.parentNode.insertBefore(opt, refOpt);
+    else sel.appendChild(opt);
   });
   // Llenar datalist de proveedores
   const dl=document.getElementById('lista-proveedores-gasto');
@@ -3285,7 +3287,9 @@ window.openGastoModal=function(id){
     if(!exists && g.categoria) {
       const opt = document.createElement('option');
       opt.value=g.categoria; opt.text=g.categoria; opt.dataset.custom='1';
-      gsel.insertBefore(opt, gsel.querySelector('option[value="__personalizada__"]'));
+      const refOpt2 = gsel.querySelector('option[value="__personalizada__"]');
+      if(refOpt2 && refOpt2.parentNode) refOpt2.parentNode.insertBefore(opt, refOpt2);
+      else gsel.appendChild(opt);
     }
     gsel.value=g.categoria||'Otro';
       document.getElementById('g-monto').value=g.monto||'';
