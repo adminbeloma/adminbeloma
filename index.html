@@ -1859,7 +1859,7 @@ tbody td{padding:11px 14px;font-size:13.5px;vertical-align:middle;}
             <option value="piezas">piezas</option>
           </select>
         </div>
-        <div class="form-group"><label>Costo total de compra ($) *</label><input type="number" id="compra-costo-total" placeholder="0.00" step="0.01" oninput="calcCompraTotal()"></div>
+        <div class="form-group"><label>Costo total de compra ($) *</label><input type="number" id="compra-costo-total" placeholder="0.00" step="0.01" oninput="calcCompraTotal();actualizarPreviewCompraMSI()"></div>
         <div class="form-group"><label>Costo por unidad</label><input type="text" id="compra-costo-unidad" readonly style="background:var(--accent-light);font-weight:700;"></div>
         <div id="compra-contenido-info" style="grid-column:1/-1;background:var(--bg);border-radius:8px;padding:10px 12px;font-size:13px;color:var(--ink-soft);"></div>
         <div class="form-group"><label>Proveedor / Tienda</label>
@@ -1886,16 +1886,27 @@ tbody td{padding:11px 14px;font-size:13.5px;vertical-align:middle;}
           <label>Método de pago</label>
           <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:4px;">
             <label style="display:flex;align-items:center;gap:5px;cursor:pointer;font-size:13px;padding:6px 12px;border:1.5px solid var(--border);border-radius:8px;">
-              <input type="radio" name="compra-metodo" value="efectivo" checked> 💵 Efectivo
+              <input type="radio" name="compra-metodo" value="efectivo" checked onchange="onCompraMetodoChange()"> 💵 Efectivo
             </label>
             <label style="display:flex;align-items:center;gap:5px;cursor:pointer;font-size:13px;padding:6px 12px;border:1.5px solid var(--border);border-radius:8px;">
-              <input type="radio" name="compra-metodo" value="transferencia"> 📲 Transferencia
+              <input type="radio" name="compra-metodo" value="transferencia" onchange="onCompraMetodoChange()"> 📲 Transferencia
             </label>
             <label style="display:flex;align-items:center;gap:5px;cursor:pointer;font-size:13px;padding:6px 12px;border:1.5px solid var(--border);border-radius:8px;">
-              <input type="radio" name="compra-metodo" value="tarjeta"> 💳 Tarjeta
+              <input type="radio" name="compra-metodo" value="tarjeta" onchange="onCompraMetodoChange()"> 💳 Tarjeta
             </label>
           </div>
         </div>
+        <div class="form-group full" id="compra-msi-wrap" style="display:none;">
+          <label style="display:flex;align-items:center;gap:8px;cursor:pointer;font-weight:600;">
+            <input type="checkbox" id="compra-es-msi" onchange="toggleCompraMSI()" style="width:16px;height:16px;">
+            💳 Es pago a meses sin intereses
+          </label>
+        </div>
+        <div class="form-group" id="compra-msi-meses-wrap" style="display:none;">
+          <label>¿A cuántos meses?</label>
+          <input type="number" id="compra-msi-meses" min="2" placeholder="Ej. 3, 6, 12, 15" oninput="actualizarPreviewCompraMSI()">
+        </div>
+        <div class="form-group full" id="compra-msi-preview" style="display:none;background:var(--accent-light);border-radius:8px;padding:10px 12px;font-size:13px;"></div>
         <div class="form-group" id="compra-vencimiento-wrap" style="display:none;">
           <label>Fecha límite de pago</label>
           <input type="date" id="compra-vencimiento">
@@ -5517,7 +5528,27 @@ window.guardarCompra=async function(){
   };
   await setDoc(doc(db,'pl_compras',id),data);
   if(pagoTipo==='pagado'){
-    await crearGastoDesdeCompra(data);
+    const esMSI=metodoPago==='tarjeta' && document.getElementById('compra-es-msi')?.checked;
+    const mesesMSI=esMSI?(parseInt(document.getElementById('compra-msi-meses').value)||0):0;
+    if(esMSI && mesesMSI>=2){
+      const pagoMensual=+(costoTotal/mesesMSI).toFixed(2);
+      const grupoMSI=uid();
+      for(let i=0;i<mesesMSI;i++){
+        const idMes=uid();
+        await setDoc(doc(db,'pl_gastos',idMes),{
+          id:idMes, origen:'compra', compraId:id,
+          fecha:sumarMesesFecha(data.fecha,i), tipo:'Variable', categoria:'Insumos impresión',
+          concepto:`Compra: ${data.insumoNombre} (MSI ${i+1}/${mesesMSI})`,
+          monto:pagoMensual, proveedor:data.proveedor, factura:data.referencia,
+          metodoPago:'tarjeta',
+          notas:`Generado automáticamente desde Compras${data.proveedor?' — '+data.proveedor:''}`,
+          esMSI:true, mesMSI:i+1, totalMesesMSI:mesesMSI, grupoMSI, montoTotalMSI:costoTotal,
+          creado:new Date().toISOString()
+        });
+      }
+    } else {
+      await crearGastoDesdeCompra(data);
+    }
   }
 
   // Actualizar stock del insumo si está marcado
@@ -5544,6 +5575,46 @@ window.onCompraPagoTipo=function(){
   const metodoWrap=document.getElementById('compra-metodo-wrap');
   if(wrap) wrap.style.display=esCredito?'':'none';
   if(metodoWrap) metodoWrap.style.display=esCredito?'none':'';
+  if(esCredito){
+    // A crédito (fiado) no aplica MSI de tarjeta — se oculta todo ese bloque
+    document.getElementById('compra-msi-wrap').style.display='none';
+    document.getElementById('compra-msi-meses-wrap').style.display='none';
+    document.getElementById('compra-msi-preview').style.display='none';
+    document.getElementById('compra-es-msi').checked=false;
+  } else {
+    onCompraMetodoChange();
+  }
+};
+
+window.onCompraMetodoChange=function(){
+  const esTarjeta=document.querySelector('input[name="compra-metodo"]:checked')?.value==='tarjeta';
+  document.getElementById('compra-msi-wrap').style.display=esTarjeta?'block':'none';
+  if(!esTarjeta){
+    document.getElementById('compra-es-msi').checked=false;
+    document.getElementById('compra-msi-meses-wrap').style.display='none';
+    document.getElementById('compra-msi-preview').style.display='none';
+  }
+};
+
+window.toggleCompraMSI=function(){
+  const on=document.getElementById('compra-es-msi').checked;
+  document.getElementById('compra-msi-meses-wrap').style.display=on?'block':'none';
+  if(!on) document.getElementById('compra-msi-preview').style.display='none';
+  actualizarPreviewCompraMSI();
+};
+
+window.actualizarPreviewCompraMSI=function(){
+  const on=document.getElementById('compra-es-msi')?.checked;
+  const preview=document.getElementById('compra-msi-preview');
+  if(!on){ preview.style.display='none'; return; }
+  const monto=+document.getElementById('compra-costo-total').value||0;
+  const meses=parseInt(document.getElementById('compra-msi-meses').value)||0;
+  if(monto<=0||meses<2){ preview.style.display='none'; return; }
+  const pagoMensual=monto/meses;
+  const fecha=document.getElementById('compra-fecha').value||hoy();
+  const fechaUltimo=sumarMesesFecha(fecha,meses-1);
+  preview.style.display='block';
+  preview.innerHTML=`📅 La compra se registra completa hoy (para actualizar tu stock e inventario de una vez), pero el gasto se va a repartir en <strong>${meses} pagos mensuales</strong> de <strong>${fmtMoney(pagoMensual)}</strong> cada uno, desde ${fmtFecha(fecha)} hasta ${fmtFecha(fechaUltimo)}.`;
 };
 
 // Reset pago tipo al abrir modal
@@ -5560,6 +5631,11 @@ window.openCompraModal=function(){
   if(efectivo) efectivo.checked=true;
   const venc=document.getElementById('compra-vencimiento');
   if(venc) venc.value='';
+  document.getElementById('compra-msi-wrap').style.display='none';
+  document.getElementById('compra-msi-meses-wrap').style.display='none';
+  document.getElementById('compra-msi-preview').style.display='none';
+  document.getElementById('compra-es-msi').checked=false;
+  document.getElementById('compra-msi-meses').value='';
 };
 
 // CUENTAS POR PAGAR
