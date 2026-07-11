@@ -379,6 +379,17 @@ tbody td{padding:11px 14px;font-size:13.5px;vertical-align:middle;}
         <input type="text" id="filter-gasto-buscar" placeholder="🔍 Buscar concepto..." oninput="renderGastos()" style="min-width:180px;">
         <button class="btn btn-accent btn-sm" onclick="renderGastos()">Buscar</button>
       </div>
+      <div style="display:flex;gap:8px;margin-bottom:14px;flex-wrap:wrap;align-items:center;">
+        <span style="font-size:12px;color:var(--ink-soft);font-weight:600;">Rango rápido:</span>
+        <button class="btn btn-ghost btn-sm" onclick="setRangoGastos('hoy')">Hoy</button>
+        <button class="btn btn-ghost btn-sm" onclick="setRangoGastos('semana')">Semana</button>
+        <button class="btn btn-ghost btn-sm" onclick="setRangoGastos('mes')">Mes</button>
+        <button class="btn btn-ghost btn-sm" onclick="setRangoGastos('trimestre')">Trimestre</button>
+        <button class="btn btn-ghost btn-sm" onclick="setRangoGastos('año')">Año</button>
+        <button class="btn btn-ghost btn-sm" onclick="setRangoGastos('todo')">Todo</button>
+        <button class="btn btn-primary btn-sm" onclick="renderGastos()" style="margin-left:4px;">🔍 Buscar</button>
+        <button class="btn btn-ghost btn-sm" onclick="limpiarFiltrosGastos()">✕ Limpiar</button>
+      </div>
       <div style="display:flex;gap:14px;margin-bottom:16px;flex-wrap:wrap;">
         <div style="background:var(--bg-card);border:1px solid var(--border);border-radius:8px;padding:12px 16px;"><div style="font-size:11px;color:var(--ink-soft);font-weight:600;text-transform:uppercase;">Total Fijos</div><div style="font-size:20px;font-weight:700;color:var(--red);" id="gastos-fijos-total">$0</div></div>
         <div style="background:var(--bg-card);border:1px solid var(--border);border-radius:8px;padding:12px 16px;"><div style="font-size:11px;color:var(--ink-soft);font-weight:600;text-transform:uppercase;">Total Variables</div><div style="font-size:20px;font-weight:700;color:var(--gold);" id="gastos-variables-total">$0</div></div>
@@ -3464,6 +3475,21 @@ function gastosCombinados(){
   }));
   return [...deGastos, ...deCaja];
 }
+
+window.setRangoGastos=function(tipo){
+  const r=getRango(tipo);
+  document.getElementById('filter-gasto-desde').value=r.desde;
+  document.getElementById('filter-gasto-hasta').value=r.hasta;
+  renderGastos();
+};
+
+window.limpiarFiltrosGastos=function(){
+  document.getElementById('filter-gasto-desde').value='';
+  document.getElementById('filter-gasto-hasta').value='';
+  document.getElementById('filter-gasto-categoria').value='';
+  document.getElementById('filter-gasto-buscar').value='';
+  renderGastos();
+};
 
 window.renderGastos=function renderGastos(){
   const desde=(document.getElementById('filter-gasto-desde')||{value:''}).value;
