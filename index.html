@@ -2015,10 +2015,14 @@ tbody td{padding:11px 14px;font-size:13.5px;vertical-align:middle;}
         <div class="form-group"><label>Monto ($) *</label><input type="number" id="gl-monto" placeholder="0.00" step="0.01"></div>
         <div class="form-group full"><label>Concepto *</label><input type="text" id="gl-concepto" placeholder="Ej. Agua, café, limpieza, mensajería..."></div>
         <div class="form-group"><label>Categoría</label>
-          <select id="gl-categoria">
+          <select id="gl-categoria" onchange="toggleGLCategoriaOtro()">
             <option>Limpieza</option><option>Alimentos</option><option>Mensajería</option>
             <option>Material oficina</option><option>Transporte</option><option>Otro</option>
           </select>
+        </div>
+        <div class="form-group full" id="gl-otro-wrap" style="display:none;">
+          <label>Especifica exactamente qué fue *</label>
+          <input type="text" id="gl-categoria-otro" placeholder="Ej. Reparación de impresora, regalo cliente...">
         </div>
         <div class="form-group"><label>Pagado con</label>
           <select id="gl-forma"><option>Efectivo caja</option><option>Transferencia</option><option>Tarjeta</option></select>
@@ -5290,7 +5294,16 @@ window.editarGastoLocal=function(id){
   document.getElementById('gl-fecha').value=g.fecha;
   document.getElementById('gl-monto').value=g.monto;
   document.getElementById('gl-concepto').value=g.concepto||'';
-  document.getElementById('gl-categoria').value=g.categoria||'Limpieza';
+  const catsPredefinidas=['Limpieza','Alimentos','Mensajería','Material oficina','Transporte'];
+  if(catsPredefinidas.includes(g.categoria)){
+    document.getElementById('gl-categoria').value=g.categoria;
+    document.getElementById('gl-categoria-otro').value='';
+    document.getElementById('gl-otro-wrap').style.display='none';
+  } else {
+    document.getElementById('gl-categoria').value='Otro';
+    document.getElementById('gl-categoria-otro').value=g.categoria||'';
+    document.getElementById('gl-otro-wrap').style.display='block';
+  }
   document.getElementById('gl-forma').value=g.forma||'Efectivo caja';
   openModal('modal-gasto-local');
 };
@@ -5301,8 +5314,16 @@ window.openGastoLocalModal=function(){
   document.getElementById('gl-monto').value='';
   document.getElementById('gl-concepto').value='';
   document.getElementById('gl-categoria').value='Limpieza';
+  document.getElementById('gl-categoria-otro').value='';
+  document.getElementById('gl-otro-wrap').style.display='none';
   document.getElementById('gl-forma').value='Efectivo caja';
   openModal('modal-gasto-local');
+};
+
+window.toggleGLCategoriaOtro=function(){
+  const wrap=document.getElementById('gl-otro-wrap');
+  wrap.style.display=document.getElementById('gl-categoria').value==='Otro'?'block':'none';
+  if(document.getElementById('gl-categoria').value==='Otro') document.getElementById('gl-categoria-otro').focus();
 };
 
 window.toggleCatPersonalizada = function() {
@@ -5320,8 +5341,14 @@ window.guardarGastoLocal=async function(){
   const concepto=document.getElementById('gl-concepto').value.trim();
   const monto=+document.getElementById('gl-monto').value;
   if(!concepto||!monto){toast('⚠️ Concepto y monto son obligatorios');return;}
+  let categoria=document.getElementById('gl-categoria').value;
+  if(categoria==='Otro'){
+    const otro=document.getElementById('gl-categoria-otro').value.trim();
+    if(!otro){toast('⚠️ Especifica qué fue exactamente');return;}
+    categoria=otro;
+  }
   const id=document.getElementById('gl-id').value||uid();
-  const data={id,fecha:document.getElementById('gl-fecha').value,concepto,monto,categoria:document.getElementById('gl-categoria').value,forma:document.getElementById('gl-forma').value,creado:new Date().toISOString()};
+  const data={id,fecha:document.getElementById('gl-fecha').value,concepto,monto,categoria,forma:document.getElementById('gl-forma').value,creado:new Date().toISOString()};
   await setDoc(doc(db,'pl_gastos_locales',id),data);
   closeModal('modal-gasto-local');
   toast('✅ Gasto guardado');
