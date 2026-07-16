@@ -131,6 +131,7 @@
     <button class="tab-btn activo" data-tab="captura">➕ Capturar pedido</button>
     <button class="tab-btn" data-tab="hoy">📋 Pedidos de hoy</button>
     <button class="tab-btn" data-tab="historico">🕘 Histórico</button>
+    <button class="tab-btn" data-tab="reportes">📊 Reportes</button>
   </div>
 
   <div id="msgGlobal" class="msg"></div>
@@ -138,12 +139,8 @@
   <!-- ===================== CAPTURA ===================== -->
   <div class="panel activo" id="panel-captura">
     <div class="card">
-      <h2>Datos del pedido</h2>
+      <h2>Datos generales de esta captura</h2>
       <div class="grid-form">
-        <div>
-          <label>Folio / N° de pedido</label>
-          <input type="text" id="fFolio" placeholder="Ej. ML-123456 o local">
-        </div>
         <div>
           <label>Canal</label>
           <select id="fCanal">
@@ -163,39 +160,41 @@
           </select>
         </div>
         <div>
-          <label>Nombre del cliente (opcional)</label>
-          <input type="text" id="fCliente" placeholder="Déjalo vacío si no aplica (ej. MercadoLibre)">
-        </div>
-        <div>
           <label>Fecha del pedido</label>
           <input type="date" id="fFecha">
         </div>
-        <div>
-          <label>¿Playeras en el mismo paquete? (opcional)</label>
-          <input type="number" id="fPaquete" min="2" placeholder="Ej. 2, 3... (déjalo vacío si es 1 sola)">
-        </div>
+      </div>
+      <div style="font-size:.78rem;color:#6b7280;margin:-6px 0 14px;">
+        📌 Cada prenda de la tabla de abajo es un <strong>pedido independiente</strong> (folio, cliente y ciudad propios) —
+        Canal, Tipo y Fecha son solo para agilizar la captura de todo lo que estás procesando en este momento.
       </div>
 
-      <h2>Prendas del pedido</h2>
+      <h2>Prendas / pedidos</h2>
+      <div style="overflow-x:auto;">
       <table class="items-tabla" id="tablaItems">
         <thead>
           <tr>
-            <th style="width:14%">Género</th>
-            <th style="width:12%">Talla</th>
-            <th style="width:14%">Color</th>
-            <th style="width:32%">Descripción</th>
-            <th style="width:10%">Cant.</th>
+            <th style="min-width:120px;">Folio</th>
+            <th style="min-width:130px;">Cliente</th>
+            <th style="min-width:110px;">Ciudad</th>
+            <th style="min-width:100px;">Género</th>
+            <th style="min-width:90px;">Talla</th>
+            <th style="min-width:110px;">Color</th>
+            <th style="min-width:160px;">Descripción</th>
+            <th style="min-width:60px;">Cant.</th>
+            <th style="min-width:90px;">Paquete</th>
             <th style="width:8%"></th>
           </tr>
         </thead>
         <tbody id="itemsBody"></tbody>
       </table>
+      </div>
       <div class="fila-acciones">
-        <button class="btn btn-secundario btn-chico" onclick="agregarFilaItem()">+ Agregar prenda</button>
+        <button class="btn btn-secundario btn-chico" onclick="agregarFilaItem()">+ Agregar prenda / pedido</button>
       </div>
 
       <div class="fila-acciones" style="margin-top:18px;">
-        <button class="btn btn-primario" onclick="guardarPedido()">Guardar pedido</button>
+        <button class="btn btn-primario" onclick="guardarPedido()">Guardar todo</button>
         <button class="btn btn-secundario" onclick="limpiarFormulario()">Limpiar</button>
       </div>
     </div>
@@ -253,6 +252,43 @@
     </div>
   </div>
 
+  <!-- ===================== REPORTES ===================== -->
+  <div class="panel" id="panel-reportes">
+    <div class="card">
+      <h2>📊 Reporte por Ciudad, Talla, Color y Género</h2>
+      <div class="filtros">
+        <div>
+          <label>Desde</label>
+          <input type="date" id="rDesde">
+        </div>
+        <div>
+          <label>Hasta</label>
+          <input type="date" id="rHasta">
+        </div>
+        <div>
+          <label>Canal</label>
+          <select id="rCanal">
+            <option value="">Todos</option>
+            <option value="Local">Local</option>
+            <option value="MercadoLibre">MercadoLibre</option>
+            <option value="Shopify">Shopify</option>
+            <option value="TiendaNube">Tienda Nube</option>
+            <option value="Foraneo">Foráneo</option>
+            <option value="Otro">Otro</option>
+          </select>
+        </div>
+        <div>
+          <button class="btn btn-primario" onclick="generarReporte()">Generar reporte</button>
+        </div>
+      </div>
+      <div id="reporteResumen" class="resumen-dia"></div>
+      <div id="reporteContenido"><div class="vacio">Elige un rango de fechas y presiona "Generar reporte".</div></div>
+      <div class="fila-acciones" id="accionesReporte" style="display:none;">
+        <button class="btn btn-verde" onclick="exportarReporteExcel()">⬇️ Exportar Excel del reporte</button>
+      </div>
+    </div>
+  </div>
+
 </div>
 
 <script>
@@ -276,6 +312,19 @@ const db = firebase.firestore();
 const COLECCION = "pedidosDiarios"; // colección independiente, no toca "ventas"
 
 let itemIdCounter = 0;
+
+// Tallas disponibles según el género (clic para elegir, sin teclear)
+const TALLAS_POR_GENERO = {
+  "Caballero": ["CH","M","G","XL","XXL","XXXL"],
+  "Dama": ["CH","M","G","XL","XXL"],
+  "Niño": ["CH","M","G","XL"],
+  "Niña": ["CH","M","G","XL"],
+  "Juvenil": ["CH","M","G","XL"],
+  "Unisex": ["CH","M","G","XL","XXL"]
+};
+// Colores comunes para elegir con un clic; "Otro" abre un campo de texto libre
+const COLORES_COMUNES = ["Negro","Blanco","Gris","Gris Jaspe","Rojo","Azul Marino","Royal","Celeste",
+  "Rosa","Fucsia","Verde","Verde Bandera","Amarillo","Naranja","Morado","Café","Beige","Turquesa","Vino","Multicolor","Otro"];
 
 /* ---------- utilidades de fecha ---------- */
 function hoyISO(){
@@ -305,13 +354,27 @@ document.querySelectorAll(".tab-btn").forEach(btn=>{
   });
 });
 
-/* ---------- filas dinámicas de prendas ---------- */
+/* ---------- filas dinámicas de prendas (cada una = un pedido independiente) ---------- */
+function opcionesTalla(genero, tallaActual){
+  const tallas = TALLAS_POR_GENERO[genero] || TALLAS_POR_GENERO["Unisex"];
+  return tallas.map(t=>`<option value="${t}"${t===tallaActual?' selected':''}>${t}</option>`).join("");
+}
+function opcionesColor(colorActual){
+  return COLORES_COMUNES.map(c=>`<option value="${c}"${c===colorActual?' selected':''}>${c}</option>`).join("");
+}
+
 function agregarFilaItem(valores){
   const id = "item_"+(itemIdCounter++);
   const tr = document.createElement("tr");
   tr.id = id;
+  const generoInicial = (valores && valores.genero) || "Caballero";
+  const colorInicial = (valores && valores.color) || "Negro";
+  const esColorOtro = colorInicial && !COLORES_COMUNES.includes(colorInicial);
   tr.innerHTML = `
-    <td><select class="it-genero">
+    <td><input type="text" class="it-folio" placeholder="Ej. ML-123456"></td>
+    <td><input type="text" class="it-cliente" placeholder="Nombre / opcional"></td>
+    <td><input type="text" class="it-ciudad" placeholder="Ciudad"></td>
+    <td><select class="it-genero" onchange="onGeneroFilaChange('${id}')">
           <option value="Caballero">Caballero</option>
           <option value="Dama">Dama</option>
           <option value="Niño">Niño</option>
@@ -319,44 +382,71 @@ function agregarFilaItem(valores){
           <option value="Juvenil">Juvenil</option>
           <option value="Unisex">Unisex</option>
         </select></td>
-    <td><input type="text" class="it-talla" placeholder="Ch/M/G/XL"></td>
-    <td><input type="text" class="it-color" placeholder="Color"></td>
+    <td><select class="it-talla">${opcionesTalla(generoInicial, valores?valores.talla:"")}</select></td>
+    <td>
+      <select class="it-color" onchange="onColorFilaChange('${id}')">
+        ${opcionesColor(esColorOtro ? "Otro" : colorInicial)}
+      </select>
+      <input type="text" class="it-color-otro" placeholder="Especifica el color" style="margin-top:4px;display:${esColorOtro?'block':'none'};" value="${esColorOtro?colorInicial:''}">
+    </td>
     <td><input type="text" class="it-desc" placeholder="Diseño / descripción"></td>
     <td><input type="number" class="it-cant" min="1" value="1"></td>
+    <td><input type="number" class="it-paquete" min="2" placeholder="Ej. 2, 3"></td>
     <td><button class="btn btn-rojo btn-chico" onclick="document.getElementById('${id}').remove()">✕</button></td>
   `;
   document.getElementById("itemsBody").appendChild(tr);
   if(valores){
-    tr.querySelector(".it-genero").value = valores.genero || "Caballero";
-    tr.querySelector(".it-talla").value = valores.talla || "";
-    tr.querySelector(".it-color").value = valores.color || "";
+    tr.querySelector(".it-folio").value = valores.folio || "";
+    tr.querySelector(".it-cliente").value = valores.cliente || "";
+    tr.querySelector(".it-ciudad").value = valores.ciudad || "";
+    tr.querySelector(".it-genero").value = generoInicial;
     tr.querySelector(".it-desc").value = valores.descripcion || "";
     tr.querySelector(".it-cant").value = valores.cantidad || 1;
+    tr.querySelector(".it-paquete").value = valores.piezasPaquete || "";
   }
+}
+
+function onGeneroFilaChange(id){
+  const tr = document.getElementById(id);
+  const genero = tr.querySelector(".it-genero").value;
+  const tallaSel = tr.querySelector(".it-talla");
+  const tallaActual = tallaSel.value;
+  tallaSel.innerHTML = opcionesTalla(genero, tallaActual);
+}
+
+function onColorFilaChange(id){
+  const tr = document.getElementById(id);
+  const esOtro = tr.querySelector(".it-color").value === "Otro";
+  const otroInput = tr.querySelector(".it-color-otro");
+  otroInput.style.display = esOtro ? "block" : "none";
+  if(esOtro) otroInput.focus();
 }
 
 function leerItems(){
   const filas = document.querySelectorAll("#itemsBody tr");
   const items = [];
   filas.forEach(tr=>{
+    const colorSel = tr.querySelector(".it-color").value;
+    const color = colorSel === "Otro" ? tr.querySelector(".it-color-otro").value.trim() : colorSel;
     items.push({
+      folio: tr.querySelector(".it-folio").value.trim(),
+      cliente: tr.querySelector(".it-cliente").value.trim(),
+      ciudad: tr.querySelector(".it-ciudad").value.trim(),
       genero: tr.querySelector(".it-genero").value,
       talla: tr.querySelector(".it-talla").value.trim(),
-      color: tr.querySelector(".it-color").value.trim(),
+      color: color,
       descripcion: tr.querySelector(".it-desc").value.trim(),
-      cantidad: parseInt(tr.querySelector(".it-cant").value) || 1
+      cantidad: parseInt(tr.querySelector(".it-cant").value) || 1,
+      piezasPaquete: parseInt(tr.querySelector(".it-paquete").value) || 0
     });
   });
   return items;
 }
 
 function limpiarFormulario(){
-  document.getElementById("fFolio").value = "";
-  document.getElementById("fCliente").value = "";
   document.getElementById("fCanal").value = "Local";
   document.getElementById("fTipoCliente").value = "Local";
   document.getElementById("fFecha").value = hoyISO();
-  document.getElementById("fPaquete").value = "";
   document.getElementById("itemsBody").innerHTML = "";
   agregarFilaItem();
 }
@@ -369,33 +459,33 @@ document.getElementById("fCanal").addEventListener("change", (e)=>{
   else tipoSel.value = "Foraneo";
 });
 
-/* ---------- guardar pedido ---------- */
+/* ---------- guardar pedido: cada prenda = un pedido independiente ---------- */
 async function guardarPedido(){
-  const folio = document.getElementById("fFolio").value.trim();
   const canal = document.getElementById("fCanal").value;
   const tipoCliente = document.getElementById("fTipoCliente").value;
-  const cliente = document.getElementById("fCliente").value.trim() || canal;
   const fecha = document.getElementById("fFecha").value || hoyISO();
-  const items = leerItems().filter(it => it.descripcion || it.talla || it.color);
-  const piezasPaquete = parseInt(document.getElementById("fPaquete").value) || 0;
+  const items = leerItems().filter(it => it.descripcion || it.talla || it.color || it.folio);
 
   if(items.length === 0){ mostrarMsg("Agrega al menos una prenda.", "error"); return; }
 
-  const totalPiezas = items.reduce((s,it)=> s + it.cantidad, 0);
-
   try{
-    await db.collection(COLECCION).add({
-      folio: folio || "(sin folio)",
-      canal,
-      tipoCliente,
-      cliente,
-      fecha,
-      items,
-      totalPiezas,
-      piezasPaquete,
-      creadoEn: firebase.firestore.FieldValue.serverTimestamp()
-    });
-    mostrarMsg("Pedido guardado ✔", "ok");
+    let guardados = 0;
+    for(const it of items){
+      await db.collection(COLECCION).add({
+        folio: it.folio || "(sin folio)",
+        canal,
+        tipoCliente,
+        cliente: it.cliente || canal,
+        ciudad: it.ciudad || "",
+        fecha,
+        items: [{genero:it.genero, talla:it.talla, color:it.color, descripcion:it.descripcion, cantidad:it.cantidad}],
+        totalPiezas: it.cantidad,
+        piezasPaquete: it.piezasPaquete || 0,
+        creadoEn: firebase.firestore.FieldValue.serverTimestamp()
+      });
+      guardados++;
+    }
+    mostrarMsg(`${guardados} pedido(s) guardado(s) ✔`, "ok");
     limpiarFormulario();
   }catch(err){
     console.error(err);
@@ -450,7 +540,7 @@ function pintarTablaPedidos(lista, contenedor){
     return;
   }
   let html = `<table><thead><tr>
-    <th>Folio</th><th>Canal</th><th>Cliente</th><th>Tipo</th><th>Piezas</th><th>Detalle</th>
+    <th>Folio</th><th>Canal</th><th>Cliente</th><th>Ciudad</th><th>Tipo</th><th>Piezas</th><th>Detalle</th>
   </tr></thead><tbody>`;
   lista.forEach(p=>{
     const detalle = (p.items||[]).map(it=>
@@ -463,6 +553,7 @@ function pintarTablaPedidos(lista, contenedor){
       <td>${p.folio}</td>
       <td>${badgeCanal(p.canal)}</td>
       <td>${p.cliente}</td>
+      <td>${p.ciudad||'—'}</td>
       <td>${p.tipoCliente}</td>
       <td>${p.totalPiezas}</td>
       <td style="font-size:.78rem;color:#6b7280;">${detalle}${notaPaquete}</td>
@@ -507,12 +598,12 @@ async function buscarHistorico(){
     }
 
     let html = `<table><thead><tr>
-      <th>Fecha</th><th>Folio</th><th>Canal</th><th>Cliente</th><th>Tipo</th><th>Piezas</th>
+      <th>Fecha</th><th>Folio</th><th>Canal</th><th>Cliente</th><th>Ciudad</th><th>Tipo</th><th>Piezas</th>
     </tr></thead><tbody>`;
     lista.forEach(p=>{
       html += `<tr>
         <td>${p.fecha}</td><td>${p.folio}</td><td>${badgeCanal(p.canal)}</td>
-        <td>${p.cliente}</td><td>${p.tipoCliente}</td><td>${p.totalPiezas}</td>
+        <td>${p.cliente}</td><td>${p.ciudad||'—'}</td><td>${p.tipoCliente}</td><td>${p.totalPiezas}</td>
       </tr>`;
     });
     html += "</tbody></table>";
@@ -542,6 +633,7 @@ function exportarExcel(origen){
         "Canal": p.canal,
         "Tipo Cliente": p.tipoCliente,
         "Cliente": p.cliente,
+        "Ciudad": p.ciudad||'',
         "Género": it.genero,
         "Talla": it.talla,
         "Color": it.color,
@@ -554,7 +646,7 @@ function exportarExcel(origen){
 
   const ws = XLSX.utils.json_to_sheet(filas);
   ws['!cols'] = [
-    {wch:12},{wch:16},{wch:14},{wch:12},{wch:22},
+    {wch:12},{wch:16},{wch:14},{wch:12},{wch:22},{wch:16},
     {wch:10},{wch:8},{wch:10},{wch:30},{wch:9},{wch:32}
   ];
   const wb = XLSX.utils.book_new();
@@ -565,6 +657,114 @@ function exportarExcel(origen){
     : `Pedidos_Historico_${document.getElementById("hDesde").value}_a_${document.getElementById("hHasta").value}.xlsx`;
 
   XLSX.writeFile(wb, nombreArchivo);
+}
+
+/* ---------- reportes por ciudad / talla / color / género ---------- */
+let reporteCache = [];
+
+async function generarReporte(){
+  const desde = document.getElementById("rDesde").value;
+  const hasta = document.getElementById("rHasta").value;
+  const canalFiltro = document.getElementById("rCanal").value;
+  const cont = document.getElementById("reporteContenido");
+  const resumenEl = document.getElementById("reporteResumen");
+
+  if(!desde || !hasta){
+    mostrarMsg("Elige fecha 'Desde' y 'Hasta'.", "error");
+    return;
+  }
+
+  cont.innerHTML = '<div class="vacio">Generando reporte...</div>';
+  resumenEl.innerHTML = "";
+  try{
+    const snap = await db.collection(COLECCION).where("fecha",">=",desde).where("fecha","<=",hasta).get();
+    let lista = [];
+    snap.forEach(doc=> lista.push({id:doc.id, ...doc.data()}));
+    if(canalFiltro) lista = lista.filter(p=> p.canal === canalFiltro);
+    reporteCache = lista;
+
+    if(lista.length === 0){
+      cont.innerHTML = '<div class="vacio">Sin datos para ese rango.</div>';
+      document.getElementById("accionesReporte").style.display = "none";
+      return;
+    }
+
+    // Aplanar: cada línea de item con los datos de su pedido
+    const lineas = [];
+    lista.forEach(p=>{
+      (p.items||[]).forEach(it=>{
+        lineas.push({ciudad: p.ciudad || "(sin ciudad)", talla: it.talla || "(sin talla)",
+          color: it.color || "(sin color)", genero: it.genero || "(sin género)", cantidad: it.cantidad || 0});
+      });
+    });
+
+    const totalPedidos = lista.length;
+    const totalPiezas = lineas.reduce((s,l)=> s + l.cantidad, 0);
+
+    resumenEl.innerHTML = `
+      <div class="stat"><div class="num">${totalPedidos}</div><div class="lbl">Pedidos</div></div>
+      <div class="stat"><div class="num">${totalPiezas}</div><div class="lbl">Piezas totales</div></div>
+    `;
+
+    function agrupar(campo){
+      const grupos = {};
+      lineas.forEach(l=>{
+        const k = l[campo];
+        if(!grupos[k]) grupos[k] = {pedidos:0, piezas:0};
+        grupos[k].pedidos++;
+        grupos[k].piezas += l.cantidad;
+      });
+      return Object.entries(grupos).sort((a,b)=> b[1].piezas - a[1].piezas);
+    }
+
+    function tablaGrupo(titulo, campo){
+      const grupos = agrupar(campo);
+      let filas = grupos.map(([nombre, g])=>
+        `<tr><td>${nombre}</td><td>${g.piezas}</td><td>${g.pedidos}</td></tr>`
+      ).join("");
+      return `
+        <div class="card" style="margin-bottom:14px;">
+          <h2 style="margin-bottom:8px;">${titulo}</h2>
+          <table><thead><tr><th>${titulo.replace('Por ','')}</th><th>Piezas</th><th>Líneas</th></tr></thead>
+          <tbody>${filas}</tbody></table>
+        </div>`;
+    }
+
+    cont.innerHTML = `
+      <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:14px;">
+        ${tablaGrupo("Por Ciudad","ciudad")}
+        ${tablaGrupo("Por Género","genero")}
+        ${tablaGrupo("Por Talla","talla")}
+        ${tablaGrupo("Por Color","color")}
+      </div>`;
+    document.getElementById("accionesReporte").style.display = "flex";
+  }catch(err){
+    cont.innerHTML = `<div class="vacio">Error: ${err.message}</div>`;
+  }
+}
+
+function exportarReporteExcel(){
+  if(!reporteCache || reporteCache.length === 0){
+    mostrarMsg("No hay datos para exportar.", "error");
+    return;
+  }
+  const filas = [];
+  reporteCache.forEach(p=>{
+    (p.items||[]).forEach(it=>{
+      filas.push({
+        "Fecha": p.fecha, "Folio": p.folio, "Canal": p.canal, "Cliente": p.cliente,
+        "Ciudad": p.ciudad||"", "Género": it.genero, "Talla": it.talla, "Color": it.color,
+        "Descripción": it.descripcion, "Cantidad": it.cantidad
+      });
+    });
+  });
+  const ws = XLSX.utils.json_to_sheet(filas);
+  ws['!cols'] = [{wch:12},{wch:16},{wch:14},{wch:22},{wch:16},{wch:10},{wch:8},{wch:10},{wch:30},{wch:9}];
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, ws, "Reporte");
+  const desde = document.getElementById("rDesde").value;
+  const hasta = document.getElementById("rHasta").value;
+  XLSX.writeFile(wb, `Reporte_Pedidos_${desde}_a_${hasta}.xlsx`);
 }
 
 /* ---------- init ---------- */
