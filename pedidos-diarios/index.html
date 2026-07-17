@@ -7,6 +7,7 @@
 
 <!-- Firebase -->
 <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-auth-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore-compat.js"></script>
 <!-- SheetJS para exportar Excel -->
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
@@ -120,9 +121,27 @@
 </head>
 <body>
 
+<!-- ===================== LOGIN ===================== -->
+<div id="pantallaLogin" style="min-height:100vh;display:flex;align-items:center;justify-content:center;background:var(--gris-fondo);">
+  <div style="background:#fff;border:1px solid var(--gris-borde);border-radius:14px;padding:32px;max-width:360px;width:90%;">
+    <h2 style="margin:0 0 6px;color:var(--azul);">📦 Pedidos Diarios</h2>
+    <p style="font-size:.85rem;color:#6b7280;margin:0 0 20px;">Inicia sesión con tu cuenta de adminbeloma</p>
+    <div id="loginMsg" class="msg error" style="display:none;"></div>
+    <label style="font-size:.78rem;font-weight:600;color:#6b7280;display:block;margin-bottom:4px;">Correo</label>
+    <input type="email" id="loginEmail" placeholder="tucorreo@gmail.com" style="width:100%;padding:9px 10px;border:1px solid var(--gris-borde);border-radius:7px;font-size:.9rem;margin-bottom:12px;">
+    <label style="font-size:.78rem;font-weight:600;color:#6b7280;display:block;margin-bottom:4px;">Contraseña</label>
+    <input type="password" id="loginPassword" placeholder="••••••••" style="width:100%;padding:9px 10px;border:1px solid var(--gris-borde);border-radius:7px;font-size:.9rem;margin-bottom:18px;">
+    <button class="btn btn-primario" style="width:100%;padding:11px;" onclick="iniciarSesion()">Entrar</button>
+  </div>
+</div>
+
+<!-- ===================== APP (oculta hasta iniciar sesión) ===================== -->
+<div id="appContenido" style="display:none;">
+
 <header>
   <h1>📦 Pedidos Diarios · Todos los Canales</h1>
   <div class="fecha-hoy" id="fechaHoyTxt"></div>
+  <button class="btn btn-secundario btn-chico" style="margin-left:auto;" onclick="cerrarSesion()">Cerrar sesión</button>
 </header>
 
 <div class="contenedor">
@@ -154,7 +173,7 @@
         </div>
         <div>
           <label>Tipo</label>
-          <select id="fTipoCliente">
+          <select id="fTipoCliente" onchange="onTipoClienteChange()">
             <option value="Local">Local</option>
             <option value="Foraneo">Foráneo</option>
           </select>
@@ -180,6 +199,7 @@
             <th style="min-width:100px;">Género</th>
             <th style="min-width:90px;">Talla</th>
             <th style="min-width:110px;">Color</th>
+            <th style="min-width:110px;">Marca</th>
             <th style="min-width:160px;">Descripción</th>
             <th style="min-width:60px;">Cant.</th>
             <th style="min-width:90px;">Paquete</th>
@@ -290,6 +310,7 @@
   </div>
 
 </div>
+</div><!-- cierre de #appContenido -->
 
 <script>
 /* =====================================================
@@ -309,7 +330,48 @@ const firebaseConfig = {
 
 firebase.initializeApp(firebaseConfig);
 const db = firebase.firestore();
+const auth = firebase.auth();
 const COLECCION = "pedidosDiarios"; // colección independiente, no toca "ventas"
+
+/* ---------- login (misma cuenta que adminbeloma) ---------- */
+window.iniciarSesion = async function(){
+  const email = document.getElementById("loginEmail").value.trim();
+  const password = document.getElementById("loginPassword").value;
+  const msg = document.getElementById("loginMsg");
+  msg.style.display = "none";
+  if(!email || !password){
+    msg.textContent = "Escribe tu correo y contraseña.";
+    msg.style.display = "block";
+    return;
+  }
+  try{
+    await auth.signInWithEmailAndPassword(email, password);
+  }catch(err){
+    msg.textContent = "No se pudo iniciar sesión: correo o contraseña incorrectos.";
+    msg.style.display = "block";
+  }
+};
+
+window.cerrarSesion = function(){
+  auth.signOut();
+};
+
+auth.onAuthStateChanged(user=>{
+  if(user){
+    document.getElementById("pantallaLogin").style.display = "none";
+    document.getElementById("appContenido").style.display = "block";
+    cargarPedidosHoy();
+  } else {
+    document.getElementById("pantallaLogin").style.display = "flex";
+    document.getElementById("appContenido").style.display = "none";
+  }
+});
+
+// Enter en el campo de contraseña también inicia sesión
+document.addEventListener("DOMContentLoaded", ()=>{
+  const pw = document.getElementById("loginPassword");
+  if(pw) pw.addEventListener("keydown", e=>{ if(e.key === "Enter") iniciarSesion(); });
+});
 
 let itemIdCounter = 0;
 
@@ -322,9 +384,12 @@ const TALLAS_POR_GENERO = {
   "Juvenil": ["CH","M","G","XL"],
   "Unisex": ["CH","M","G","XL","XXL"]
 };
-// Colores comunes para elegir con un clic; "Otro" abre un campo de texto libre
-const COLORES_COMUNES = ["Negro","Blanco","Gris","Gris Jaspe","Rojo","Azul Marino","Royal","Celeste",
-  "Rosa","Fucsia","Verde","Verde Bandera","Amarillo","Naranja","Morado","Café","Beige","Turquesa","Vino","Multicolor","Otro"];
+// Colores comunes para elegir con un clic (orden alfabético); "Otro" abre un campo de texto libre
+const COLORES_COMUNES = ["Amarillo","Azul Marino","Beige","Blanco","Celeste","Chocolate","Fucsia","Gris",
+  "Gris Jaspe","Morado","Multicolor","Naranja","Negro","Rojo","Rosa","Royal","Turquesa","Verde",
+  "Verde Bandera","Vino","Otro"];
+// Marcas de playera disponibles; "Otro" abre un campo de texto libre
+const MARCAS_DISPONIBLES = ["Euro Cotton","Yazbek","Gildan","PlayeryTees","Bones","Optima","Otro"];
 
 /* ---------- utilidades de fecha ---------- */
 function hoyISO(){
@@ -354,6 +419,14 @@ document.querySelectorAll(".tab-btn").forEach(btn=>{
   });
 });
 
+window.onTipoClienteChange = function(){
+  if(document.getElementById("fTipoCliente").value === "Local"){
+    document.querySelectorAll("#itemsBody .it-ciudad").forEach(inp=>{
+      if(!inp.value.trim()) inp.value = "Mazatlán, Sinaloa";
+    });
+  }
+};
+
 /* ---------- filas dinámicas de prendas (cada una = un pedido independiente) ---------- */
 function opcionesTalla(genero, tallaActual){
   const tallas = TALLAS_POR_GENERO[genero] || TALLAS_POR_GENERO["Unisex"];
@@ -361,6 +434,9 @@ function opcionesTalla(genero, tallaActual){
 }
 function opcionesColor(colorActual){
   return COLORES_COMUNES.map(c=>`<option value="${c}"${c===colorActual?' selected':''}>${c}</option>`).join("");
+}
+function opcionesMarca(marcaActual){
+  return MARCAS_DISPONIBLES.map(m=>`<option value="${m}"${m===marcaActual?' selected':''}>${m}</option>`).join("");
 }
 
 function agregarFilaItem(valores){
@@ -370,6 +446,8 @@ function agregarFilaItem(valores){
   const generoInicial = (valores && valores.genero) || "Caballero";
   const colorInicial = (valores && valores.color) || "Negro";
   const esColorOtro = colorInicial && !COLORES_COMUNES.includes(colorInicial);
+  const marcaInicial = (valores && valores.marca) || "";
+  const esMarcaOtro = marcaInicial && !MARCAS_DISPONIBLES.includes(marcaInicial);
   tr.innerHTML = `
     <td><input type="text" class="it-folio" placeholder="Ej. ML-123456"></td>
     <td><input type="text" class="it-cliente" placeholder="Nombre / opcional"></td>
@@ -389,6 +467,12 @@ function agregarFilaItem(valores){
       </select>
       <input type="text" class="it-color-otro" placeholder="Especifica el color" style="margin-top:4px;display:${esColorOtro?'block':'none'};" value="${esColorOtro?colorInicial:''}">
     </td>
+    <td>
+      <select class="it-marca" onchange="onMarcaFilaChange('${id}')">
+        ${opcionesMarca(esMarcaOtro ? "Otro" : marcaInicial)}
+      </select>
+      <input type="text" class="it-marca-otro" placeholder="Especifica la marca" style="margin-top:4px;display:${esMarcaOtro?'block':'none'};" value="${esMarcaOtro?marcaInicial:''}">
+    </td>
     <td><input type="text" class="it-desc" placeholder="Diseño / descripción"></td>
     <td><input type="number" class="it-cant" min="1" value="1"></td>
     <td><input type="number" class="it-paquete" min="2" placeholder="Ej. 2, 3"></td>
@@ -403,6 +487,8 @@ function agregarFilaItem(valores){
     tr.querySelector(".it-desc").value = valores.descripcion || "";
     tr.querySelector(".it-cant").value = valores.cantidad || 1;
     tr.querySelector(".it-paquete").value = valores.piezasPaquete || "";
+  } else if(document.getElementById("fTipoCliente").value === "Local"){
+    tr.querySelector(".it-ciudad").value = "Mazatlán, Sinaloa";
   }
 }
 
@@ -422,12 +508,22 @@ function onColorFilaChange(id){
   if(esOtro) otroInput.focus();
 }
 
+function onMarcaFilaChange(id){
+  const tr = document.getElementById(id);
+  const esOtro = tr.querySelector(".it-marca").value === "Otro";
+  const otroInput = tr.querySelector(".it-marca-otro");
+  otroInput.style.display = esOtro ? "block" : "none";
+  if(esOtro) otroInput.focus();
+}
+
 function leerItems(){
   const filas = document.querySelectorAll("#itemsBody tr");
   const items = [];
   filas.forEach(tr=>{
     const colorSel = tr.querySelector(".it-color").value;
     const color = colorSel === "Otro" ? tr.querySelector(".it-color-otro").value.trim() : colorSel;
+    const marcaSel = tr.querySelector(".it-marca").value;
+    const marca = marcaSel === "Otro" ? tr.querySelector(".it-marca-otro").value.trim() : marcaSel;
     items.push({
       folio: tr.querySelector(".it-folio").value.trim(),
       cliente: tr.querySelector(".it-cliente").value.trim(),
@@ -435,6 +531,7 @@ function leerItems(){
       genero: tr.querySelector(".it-genero").value,
       talla: tr.querySelector(".it-talla").value.trim(),
       color: color,
+      marca: marca,
       descripcion: tr.querySelector(".it-desc").value.trim(),
       cantidad: parseInt(tr.querySelector(".it-cant").value) || 1,
       piezasPaquete: parseInt(tr.querySelector(".it-paquete").value) || 0
@@ -457,6 +554,7 @@ document.getElementById("fCanal").addEventListener("change", (e)=>{
   const tipoSel = document.getElementById("fTipoCliente");
   if(canal === "Local") tipoSel.value = "Local";
   else tipoSel.value = "Foraneo";
+  onTipoClienteChange();
 });
 
 /* ---------- guardar pedido: cada prenda = un pedido independiente ---------- */
@@ -478,7 +576,7 @@ async function guardarPedido(){
         cliente: it.cliente || canal,
         ciudad: it.ciudad || "",
         fecha,
-        items: [{genero:it.genero, talla:it.talla, color:it.color, descripcion:it.descripcion, cantidad:it.cantidad}],
+        items: [{genero:it.genero, talla:it.talla, color:it.color, marca:it.marca, descripcion:it.descripcion, cantidad:it.cantidad}],
         totalPiezas: it.cantidad,
         piezasPaquete: it.piezasPaquete || 0,
         creadoEn: firebase.firestore.FieldValue.serverTimestamp()
@@ -544,7 +642,7 @@ function pintarTablaPedidos(lista, contenedor){
   </tr></thead><tbody>`;
   lista.forEach(p=>{
     const detalle = (p.items||[]).map(it=>
-      `${it.cantidad}× ${it.genero} ${it.talla} ${it.color} — ${it.descripcion}`
+      `${it.cantidad}× ${it.genero} ${it.talla} ${it.color}${it.marca?' ('+it.marca+')':''} — ${it.descripcion}`
     ).join("<br>");
     const notaPaquete = p.piezasPaquete>1
       ? `<br><span style="color:#b45309;font-weight:600;">📦 ${p.piezasPaquete} playeras en el mismo paquete</span>`
@@ -637,6 +735,7 @@ function exportarExcel(origen){
         "Género": it.genero,
         "Talla": it.talla,
         "Color": it.color,
+        "Marca": it.marca||'',
         "Descripción": it.descripcion,
         "Cantidad": it.cantidad,
         "Nota Paquete": notaPaquete
@@ -647,7 +746,7 @@ function exportarExcel(origen){
   const ws = XLSX.utils.json_to_sheet(filas);
   ws['!cols'] = [
     {wch:12},{wch:16},{wch:14},{wch:12},{wch:22},{wch:16},
-    {wch:10},{wch:8},{wch:10},{wch:30},{wch:9},{wch:32}
+    {wch:10},{wch:8},{wch:10},{wch:16},{wch:30},{wch:9},{wch:32}
   ];
   const wb = XLSX.utils.book_new();
   XLSX.utils.book_append_sheet(wb, ws, "Pedidos");
@@ -754,12 +853,12 @@ function exportarReporteExcel(){
       filas.push({
         "Fecha": p.fecha, "Folio": p.folio, "Canal": p.canal, "Cliente": p.cliente,
         "Ciudad": p.ciudad||"", "Género": it.genero, "Talla": it.talla, "Color": it.color,
-        "Descripción": it.descripcion, "Cantidad": it.cantidad
+        "Marca": it.marca||"", "Descripción": it.descripcion, "Cantidad": it.cantidad
       });
     });
   });
   const ws = XLSX.utils.json_to_sheet(filas);
-  ws['!cols'] = [{wch:12},{wch:16},{wch:14},{wch:22},{wch:16},{wch:10},{wch:8},{wch:10},{wch:30},{wch:9}];
+  ws['!cols'] = [{wch:12},{wch:16},{wch:14},{wch:22},{wch:16},{wch:10},{wch:8},{wch:10},{wch:16},{wch:30},{wch:9}];
   const wb = XLSX.utils.book_new();
   XLSX.utils.book_append_sheet(wb, ws, "Reporte");
   const desde = document.getElementById("rDesde").value;
@@ -770,7 +869,7 @@ function exportarReporteExcel(){
 /* ---------- init ---------- */
 mostrarFechaHoy();
 limpiarFormulario();
-cargarPedidosHoy();
+// (cargarPedidosHoy ahora se dispara tras iniciar sesión, ver arriba)
 </script>
 </body>
 </html>
