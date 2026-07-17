@@ -322,13 +322,13 @@ tbody td{padding:11px 14px;font-size:13.5px;vertical-align:middle;}
       <div style="display:flex;gap:8px;margin-bottom:14px;flex-wrap:wrap;align-items:center;">
         <span style="font-size:12px;color:var(--ink-soft);font-weight:600;">Rango rápido:</span>
         <button class="btn btn-ghost btn-sm" onclick="setRango('hoy')">Hoy</button>
-        <button class="btn btn-ghost btn-sm" onclick="setRango('semana')">Semana</button>
-        <button class="btn btn-ghost btn-sm" onclick="setRango('mes')">Mes</button>
-        <button class="btn btn-ghost btn-sm" onclick="setRango('trimestre')">Trimestre</button>
-        <button class="btn btn-ghost btn-sm" onclick="setRango('año')">Año</button>
-        <button class="btn btn-ghost btn-sm" onclick="setRango('todo')">Todo</button>
+        <button class="btn btn-ghost btn-sm admin-only" style="display:none;" onclick="setRango('semana')">Semana</button>
+        <button class="btn btn-ghost btn-sm admin-only" style="display:none;" onclick="setRango('mes')">Mes</button>
+        <button class="btn btn-ghost btn-sm admin-only" style="display:none;" onclick="setRango('trimestre')">Trimestre</button>
+        <button class="btn btn-ghost btn-sm admin-only" style="display:none;" onclick="setRango('año')">Año</button>
+        <button class="btn btn-ghost btn-sm admin-only" style="display:none;" onclick="setRango('todo')">Todo</button>
         <button class="btn btn-primary btn-sm" onclick="buscarVentasPorFecha()" style="margin-left:4px;">🔍 Buscar</button>
-        <button class="btn btn-ghost btn-sm" onclick="limpiarFiltrosVentas()">✕ Limpiar</button>
+        <button class="btn btn-ghost btn-sm admin-only" style="display:none;" onclick="limpiarFiltrosVentas()">✕ Limpiar</button>
       </div>
       <div style="display:flex;gap:14px;margin-bottom:16px;flex-wrap:wrap;">
         <div style="background:var(--bg-card);border:1px solid var(--border);border-radius:8px;padding:12px 16px;"><div style="font-size:11px;color:var(--ink-soft);font-weight:600;text-transform:uppercase;">Total período</div><div style="font-size:20px;font-weight:700;color:var(--green);" id="ventas-total-periodo">$0</div></div>
@@ -2561,6 +2561,8 @@ onSnapshot(query(collection(db,'pl_ventas'), orderBy('creado','desc'), limit(5))
   const recientes = s.docs.map(d=>d.data());
   // Actualizar ventas recientes en memoria sin recargar todo
   recientes.forEach(v=>{
+    // El operador solo debe ver ventas de hoy — no colar aquí las de otros días
+    if(!isAdmin && v.fecha !== hoy()) return;
     const idx = ventas.findIndex(x=>x.id===v.id);
     if(idx>=0) ventas[idx]=v;
     else if(ventas.length<50) ventas.unshift(v);
@@ -2616,7 +2618,6 @@ window.showSection=function(sec){
   document.querySelectorAll('nav a').forEach(a=>a.classList.remove('active'));
   document.getElementById('section-'+sec).classList.add('active');
   document.getElementById('nav-'+sec).classList.add('active');
-  if(sec==='ventas' && !isAdmin){ toast('⚠️ Acceso restringido'); return; }
   if(sec==='ventas') renderVentas();
   if(sec==='gastos') renderGastos();
   if(sec==='playeras') renderPlayeras();
@@ -3184,8 +3185,9 @@ window.cargarMasVentas = async function() {
 };
 
 window.buscarVentasPorFecha = async function() {
-  const desde = document.getElementById('filter-venta-desde').value;
-  const hasta = document.getElementById('filter-venta-hasta').value;
+  let desde = document.getElementById('filter-venta-desde').value;
+  let hasta = document.getElementById('filter-venta-hasta').value;
+  if(!isAdmin){ desde = hoy(); hasta = hoy(); document.getElementById('filter-venta-desde').value = desde; document.getElementById('filter-venta-hasta').value = hasta; }
   
   if(desde && hasta) {
     try {
@@ -3216,6 +3218,7 @@ window.limpiarFiltrosVentas=async function(){
 };
 
 window.setRango=async function(tipo){
+  if(!isAdmin) tipo = 'hoy'; // el operador solo puede ver el día en curso
   const r=getRango(tipo);
   document.getElementById('filter-venta-desde').value=r.desde;
   document.getElementById('filter-venta-hasta').value=r.hasta;
@@ -6244,6 +6247,15 @@ onAuthStateChanged(auth, user => {
     document.querySelectorAll('.admin-only').forEach(el => {
       el.style.display = isAdmin ? '' : 'none';
     });
+    // El operador solo puede ver Ventas del día en curso — bloquear los campos
+    // de fecha para que no pueda ampliar el rango escribiendo directo ahí
+    const ventaDesde = document.getElementById('filter-venta-desde');
+    const ventaHasta = document.getElementById('filter-venta-hasta');
+    if(ventaDesde && ventaHasta){
+      ventaDesde.disabled = !isAdmin;
+      ventaHasta.disabled = !isAdmin;
+      if(!isAdmin) setRango('hoy');
+    }
     // Agregar botón de cerrar sesión en sidebar
     const footer = document.querySelector('.sidebar-footer');
     if(footer) footer.innerHTML = `
