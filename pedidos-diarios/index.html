@@ -117,6 +117,14 @@
     header{flex-direction:column;align-items:flex-start;}
     .grid-form{grid-template-columns:1fr 1fr;}
   }
+  .modal-overlay{
+    display:none;position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:1000;
+    align-items:center;justify-content:center;padding:16px;
+  }
+  .modal-overlay.activo{display:flex;}
+  .modal-box{background:#fff;border-radius:12px;padding:22px 24px;max-width:560px;width:100%;max-height:90vh;overflow-y:auto;}
+  .modal-box h3{margin:0 0 16px;color:var(--azul);}
+  .modal-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:12px;}
 </style>
 </head>
 <body>
@@ -310,6 +318,91 @@
   </div>
 
 </div>
+<!-- ===================== MODAL EDITAR PEDIDO ===================== -->
+<div class="modal-overlay" id="modalEditar">
+  <div class="modal-box">
+    <h3>✏️ Editar pedido</h3>
+    <input type="hidden" id="ed-id">
+    <div class="modal-grid">
+      <div>
+        <label>Folio</label>
+        <input type="text" id="ed-folio">
+      </div>
+      <div>
+        <label>Cliente</label>
+        <input type="text" id="ed-cliente">
+      </div>
+      <div>
+        <label>Ciudad</label>
+        <input type="text" id="ed-ciudad">
+      </div>
+      <div>
+        <label>Canal</label>
+        <select id="ed-canal">
+          <option value="Local">Local</option>
+          <option value="MercadoLibre">MercadoLibre</option>
+          <option value="Shopify">Shopify</option>
+          <option value="TiendaNube">Tienda Nube</option>
+          <option value="Foraneo">Foráneo</option>
+          <option value="Otro">Otro</option>
+        </select>
+      </div>
+      <div>
+        <label>Tipo</label>
+        <select id="ed-tipo">
+          <option value="Local">Local</option>
+          <option value="Foraneo">Foráneo</option>
+        </select>
+      </div>
+      <div>
+        <label>Fecha</label>
+        <input type="date" id="ed-fecha">
+      </div>
+      <div>
+        <label>Género</label>
+        <select id="ed-genero" onchange="onEdGeneroChange()">
+          <option value="Caballero">Caballero</option>
+          <option value="Dama">Dama</option>
+          <option value="Niño">Niño</option>
+          <option value="Niña">Niña</option>
+          <option value="Juvenil">Juvenil</option>
+          <option value="Unisex">Unisex</option>
+        </select>
+      </div>
+      <div>
+        <label>Talla</label>
+        <select id="ed-talla"></select>
+      </div>
+      <div>
+        <label>Color</label>
+        <select id="ed-color" onchange="onEdColorChange()"></select>
+        <input type="text" id="ed-color-otro" placeholder="Especifica el color" style="display:none;margin-top:4px;">
+      </div>
+      <div>
+        <label>Marca</label>
+        <select id="ed-marca" onchange="onEdMarcaChange()"></select>
+        <input type="text" id="ed-marca-otro" placeholder="Especifica la marca" style="display:none;margin-top:4px;">
+      </div>
+      <div style="grid-column:1/-1;">
+        <label>Descripción</label>
+        <input type="text" id="ed-descripcion">
+      </div>
+      <div>
+        <label>Cantidad</label>
+        <input type="number" id="ed-cantidad" min="1">
+      </div>
+      <div>
+        <label>Piezas en el mismo paquete</label>
+        <input type="number" id="ed-paquete" min="2">
+      </div>
+    </div>
+    <div class="fila-acciones">
+      <button class="btn btn-primario" onclick="guardarEdicionPedido()">Guardar cambios</button>
+      <button class="btn btn-secundario" onclick="cerrarModalEditar()">Cancelar</button>
+    </div>
+  </div>
+</div>
+
 </div><!-- cierre de #appContenido -->
 
 <script>
@@ -384,10 +477,11 @@ const TALLAS_POR_GENERO = {
   "Juvenil": ["CH","M","G","XL"],
   "Unisex": ["CH","M","G","XL","XXL"]
 };
-// Colores comunes para elegir con un clic (orden alfabético); "Otro" abre un campo de texto libre
-const COLORES_COMUNES = ["Amarillo","Azul Marino","Beige","Blanco","Celeste","Chocolate","Fucsia","Gris",
-  "Gris Jaspe","Morado","Multicolor","Naranja","Negro","Rojo","Rosa","Royal","Turquesa","Verde",
-  "Verde Bandera","Vino","Otro"];
+// Colores comunes para elegir con un clic (mismos que usamos en Pedido a Yazbek, orden alfabético)
+const COLORES_COMUNES = ["Amarillo Neón","Aqua","Arena","Azul Claro","Beige","Blanco","Canario","Carbón",
+  "Caribe","Celeste","Chocolate","Coral","Delfín","Fucsia","Gris Jaspe","Jade","Ladrillo","Lavanda",
+  "Lima","Mango","Marino","Marrón","Morado","Naranja","Naranja Neón","Negro","Ocre","Olivo","Plata","Rojo",
+  "Rosa Pastel","Royal","Turquesa","Verde Bosque","Verde Neón","Otro"];
 // Marcas de playera disponibles; "Otro" abre un campo de texto libre
 const MARCAS_DISPONIBLES = ["Euro Cotton","Yazbek","Gildan","PlayeryTees","Bones","Optima","Otro"];
 
@@ -423,6 +517,11 @@ window.onTipoClienteChange = function(){
   if(document.getElementById("fTipoCliente").value === "Local"){
     document.querySelectorAll("#itemsBody .it-ciudad").forEach(inp=>{
       if(!inp.value.trim()) inp.value = "Mazatlán, Sinaloa";
+    });
+  } else {
+    // Foráneo: quitar el "Mazatlán, Sinaloa" que se haya puesto solo, para que la escriban a mano
+    document.querySelectorAll("#itemsBody .it-ciudad").forEach(inp=>{
+      if(inp.value.trim() === "Mazatlán, Sinaloa") inp.value = "";
     });
   }
 };
@@ -638,7 +737,7 @@ function pintarTablaPedidos(lista, contenedor){
     return;
   }
   let html = `<table><thead><tr>
-    <th>Folio</th><th>Canal</th><th>Cliente</th><th>Ciudad</th><th>Tipo</th><th>Piezas</th><th>Detalle</th>
+    <th>Folio</th><th>Canal</th><th>Cliente</th><th>Ciudad</th><th>Tipo</th><th>Piezas</th><th>Detalle</th><th>Acciones</th>
   </tr></thead><tbody>`;
   lista.forEach(p=>{
     const detalle = (p.items||[]).map(it=>
@@ -655,10 +754,123 @@ function pintarTablaPedidos(lista, contenedor){
       <td>${p.tipoCliente}</td>
       <td>${p.totalPiezas}</td>
       <td style="font-size:.78rem;color:#6b7280;">${detalle}${notaPaquete}</td>
+      <td style="white-space:nowrap;">
+        <button class="btn btn-secundario btn-chico" onclick="abrirEditarPedido('${p.id}','hoy')">✏️</button>
+        <button class="btn btn-rojo btn-chico" onclick="eliminarPedido('${p.id}','hoy')">🗑</button>
+      </td>
     </tr>`;
   });
   html += "</tbody></table>";
   contenedor.innerHTML = html;
+}
+
+/* ---------- editar / eliminar un pedido ya guardado ---------- */
+function abrirEditarPedido(id, origen){
+  const lista = origen === "hoy" ? pedidosHoyCache : historicoCache;
+  const p = lista.find(x=>x.id===id);
+  if(!p){ mostrarMsg("No se encontró el pedido.", "error"); return; }
+  const it = (p.items||[])[0] || {};
+
+  document.getElementById("ed-id").value = p.id;
+  document.getElementById("ed-id").dataset.origen = origen;
+  document.getElementById("ed-folio").value = p.folio || "";
+  document.getElementById("ed-cliente").value = p.cliente || "";
+  document.getElementById("ed-ciudad").value = p.ciudad || "";
+  document.getElementById("ed-canal").value = p.canal || "Local";
+  document.getElementById("ed-tipo").value = p.tipoCliente || "Local";
+  document.getElementById("ed-fecha").value = p.fecha || hoyISO();
+
+  const genero = it.genero || "Caballero";
+  document.getElementById("ed-genero").value = genero;
+  document.getElementById("ed-talla").innerHTML = opcionesTalla(genero, it.talla || "");
+
+  const colorEsOtro = it.color && !COLORES_COMUNES.includes(it.color);
+  document.getElementById("ed-color").innerHTML = opcionesColor(colorEsOtro ? "Otro" : (it.color||""));
+  document.getElementById("ed-color-otro").style.display = colorEsOtro ? "block" : "none";
+  document.getElementById("ed-color-otro").value = colorEsOtro ? it.color : "";
+
+  const marcaEsOtro = it.marca && !MARCAS_DISPONIBLES.includes(it.marca);
+  document.getElementById("ed-marca").innerHTML = opcionesMarca(marcaEsOtro ? "Otro" : (it.marca||""));
+  document.getElementById("ed-marca-otro").style.display = marcaEsOtro ? "block" : "none";
+  document.getElementById("ed-marca-otro").value = marcaEsOtro ? it.marca : "";
+
+  document.getElementById("ed-descripcion").value = it.descripcion || "";
+  document.getElementById("ed-cantidad").value = it.cantidad || 1;
+  document.getElementById("ed-paquete").value = p.piezasPaquete || "";
+
+  document.getElementById("modalEditar").classList.add("activo");
+}
+
+function cerrarModalEditar(){
+  document.getElementById("modalEditar").classList.remove("activo");
+}
+
+function onEdGeneroChange(){
+  const genero = document.getElementById("ed-genero").value;
+  const tallaSel = document.getElementById("ed-talla");
+  tallaSel.innerHTML = opcionesTalla(genero, tallaSel.value);
+}
+
+function onEdColorChange(){
+  const esOtro = document.getElementById("ed-color").value === "Otro";
+  const otroInput = document.getElementById("ed-color-otro");
+  otroInput.style.display = esOtro ? "block" : "none";
+  if(esOtro) otroInput.focus();
+}
+
+function onEdMarcaChange(){
+  const esOtro = document.getElementById("ed-marca").value === "Otro";
+  const otroInput = document.getElementById("ed-marca-otro");
+  otroInput.style.display = esOtro ? "block" : "none";
+  if(esOtro) otroInput.focus();
+}
+
+async function guardarEdicionPedido(){
+  const id = document.getElementById("ed-id").value;
+  const origen = document.getElementById("ed-id").dataset.origen;
+  const colorSel = document.getElementById("ed-color").value;
+  const color = colorSel === "Otro" ? document.getElementById("ed-color-otro").value.trim() : colorSel;
+  const marcaSel = document.getElementById("ed-marca").value;
+  const marca = marcaSel === "Otro" ? document.getElementById("ed-marca-otro").value.trim() : marcaSel;
+  const cantidad = parseInt(document.getElementById("ed-cantidad").value) || 1;
+
+  const data = {
+    folio: document.getElementById("ed-folio").value.trim() || "(sin folio)",
+    cliente: document.getElementById("ed-cliente").value.trim(),
+    ciudad: document.getElementById("ed-ciudad").value.trim(),
+    canal: document.getElementById("ed-canal").value,
+    tipoCliente: document.getElementById("ed-tipo").value,
+    fecha: document.getElementById("ed-fecha").value || hoyISO(),
+    items: [{
+      genero: document.getElementById("ed-genero").value,
+      talla: document.getElementById("ed-talla").value,
+      color, marca,
+      descripcion: document.getElementById("ed-descripcion").value.trim(),
+      cantidad
+    }],
+    totalPiezas: cantidad,
+    piezasPaquete: parseInt(document.getElementById("ed-paquete").value) || 0
+  };
+
+  try{
+    await db.collection(COLECCION).doc(id).update(data);
+    mostrarMsg("✅ Pedido actualizado", "ok");
+    cerrarModalEditar();
+    if(origen === "hoy") cargarPedidosHoy(); else buscarHistorico();
+  }catch(err){
+    mostrarMsg("Error al actualizar: " + err.message, "error");
+  }
+}
+
+async function eliminarPedido(id, origen){
+  if(!confirm("¿Eliminar este pedido? Esta acción no se puede deshacer.")) return;
+  try{
+    await db.collection(COLECCION).doc(id).delete();
+    mostrarMsg("🗑 Pedido eliminado", "ok");
+    if(origen === "hoy") cargarPedidosHoy(); else buscarHistorico();
+  }catch(err){
+    mostrarMsg("Error al eliminar: " + err.message, "error");
+  }
 }
 
 /* ---------- histórico ---------- */
@@ -696,12 +908,16 @@ async function buscarHistorico(){
     }
 
     let html = `<table><thead><tr>
-      <th>Fecha</th><th>Folio</th><th>Canal</th><th>Cliente</th><th>Ciudad</th><th>Tipo</th><th>Piezas</th>
+      <th>Fecha</th><th>Folio</th><th>Canal</th><th>Cliente</th><th>Ciudad</th><th>Tipo</th><th>Piezas</th><th>Acciones</th>
     </tr></thead><tbody>`;
     lista.forEach(p=>{
       html += `<tr>
         <td>${p.fecha}</td><td>${p.folio}</td><td>${badgeCanal(p.canal)}</td>
         <td>${p.cliente}</td><td>${p.ciudad||'—'}</td><td>${p.tipoCliente}</td><td>${p.totalPiezas}</td>
+        <td style="white-space:nowrap;">
+          <button class="btn btn-secundario btn-chico" onclick="abrirEditarPedido('${p.id}','historico')">✏️</button>
+          <button class="btn btn-rojo btn-chico" onclick="eliminarPedido('${p.id}','historico')">🗑</button>
+        </td>
       </tr>`;
     });
     html += "</tbody></table>";
