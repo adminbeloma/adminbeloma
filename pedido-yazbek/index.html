@@ -72,6 +72,7 @@
   <!-- ===== Agregar producto ===== -->
   <div class="card">
     <h2>Agregar producto al pedido</h2>
+    <div id="bannerEdicion" style="display:none;background:#fff7e6;border:1px solid #f5c56b;color:#8a5b00;padding:10px 14px;border-radius:8px;font-size:.85rem;font-weight:600;margin-bottom:12px;"></div>
     <div class="grid-form">
       <div>
         <label>Proveedor</label>
@@ -120,17 +121,23 @@
   <!-- ===== Historial ===== -->
   <div class="card">
     <h2>🕘 Historial de pedidos enviados</h2>
+    <p style="font-size:.8rem;color:#6b7280;margin-bottom:12px;">Cada pedido enviado se guarda por separado según el proveedor al que se le mandó (columna Proveedor). Usa el filtro de abajo para ver solo los de un proveedor en particular.</p>
     <div class="filtro-fecha">
       <div>
+        <label>Proveedor</label>
+        <select id="fHistProveedor"><option value="">Todos</option></select>
+      </div>
+      <div>
         <label>Desde</label>
-        <input type="date" id="fHistDesde" onchange="renderHistorial()">
+        <input type="date" id="fHistDesde">
       </div>
       <div>
         <label>Hasta</label>
-        <input type="date" id="fHistHasta" onchange="renderHistorial()">
+        <input type="date" id="fHistHasta">
       </div>
-      <div style="flex:0;">
-        <button class="btn btn-gris btn-chico" onclick="limpiarFiltroHistorial()">Limpiar filtro</button>
+      <div style="flex:0;display:flex;gap:8px;">
+        <button class="btn btn-primario btn-chico" onclick="renderHistorial()">🔍 Buscar</button>
+        <button class="btn btn-gris btn-chico" onclick="limpiarFiltroHistorial()">✖ Limpiar</button>
       </div>
     </div>
     <div id="tablaHistCont"><div class="vacio">Sin pedidos guardados todavía.</div></div>
@@ -216,7 +223,7 @@ function detectarGenero(e){
 
 function normalizarEstilo(e){
   const codigo = e.codigo || e.clave || e.ref || "";
-  const nombre = e.nombre || codigo;
+  const nombre = e.nombre || e.nombre_es || e.nombre_en || codigo;
 
   let tallas = [];
   if(Array.isArray(e.tallas)) tallas = e.tallas;
@@ -282,6 +289,7 @@ function llenarSelectorProveedores(){
   sel.innerHTML = slugsOrdenados.map(slug=>
     `<option value="${slug}">${PROVEEDORES[slug].nombre}</option>`
   ).join("");
+  poblarFiltroProveedorHistorial();
   onProveedorChange();
 }
 
@@ -386,6 +394,10 @@ function editarRenglon(idx){
   editandoIndex = idx;
   document.getElementById("btnAgregar").textContent = "💾 Guardar cambios";
   document.getElementById("btnCancelarEdicion").style.display = "inline-block";
+  const banner = document.getElementById("bannerEdicion");
+  banner.style.display = "block";
+  banner.textContent = `✏️ Editando renglón: ${r.proveedorNombre} — ${r.codigo} ${r.nombre} (${r.color}, talla ${r.talla}). Cambia lo que necesites abajo y da clic en "Guardar cambios".`;
+  renderPedido();
   window.scrollTo({top:0, behavior:"smooth"});
 }
 
@@ -393,10 +405,12 @@ function cancelarEdicion(limpiarCampos = true){
   editandoIndex = null;
   document.getElementById("btnAgregar").textContent = "+ Agregar al pedido";
   document.getElementById("btnCancelarEdicion").style.display = "none";
+  document.getElementById("bannerEdicion").style.display = "none";
   if(limpiarCampos){
     document.getElementById("fColor").value = "";
     document.getElementById("fCantidad").value = "1";
   }
+  renderPedido();
 }
 
 async function guardarColorNuevo(slug, color){
@@ -430,7 +444,8 @@ function renderPedido(){
   let totalPiezas = 0;
   pedidoActual.forEach((r,idx)=>{
     totalPiezas += r.cantidad;
-    html += `<tr>
+    const filaEstilo = idx === editandoIndex ? ' style="background:#fff7e6;"' : '';
+    html += `<tr${filaEstilo}>
       <td><span class="badge-proveedor">${r.proveedorNombre}</span></td>
       <td><strong>${r.codigo}</strong></td>
       <td style="font-size:.8rem;">${r.nombre}</td>
@@ -563,17 +578,32 @@ function limpiarPedido(){
 function limpiarFiltroHistorial(){
   document.getElementById("fHistDesde").value = "";
   document.getElementById("fHistHasta").value = "";
+  document.getElementById("fHistProveedor").value = "";
   renderHistorial();
 }
 
 function historialFiltrado(){
   const desde = document.getElementById("fHistDesde").value;
   const hasta = document.getElementById("fHistHasta").value;
+  const proveedor = document.getElementById("fHistProveedor").value;
   return historial.filter(p=>{
     if(desde && p.fecha < desde) return false;
     if(hasta && p.fecha > hasta) return false;
+    if(proveedor && p.proveedor !== proveedor) return false;
     return true;
   });
+}
+
+function poblarFiltroProveedorHistorial(){
+  const sel = document.getElementById("fHistProveedor");
+  const valActual = sel.value;
+  const slugsOrdenados = Object.keys(PROVEEDORES).sort((a,b)=>
+    PROVEEDORES[a].nombre.localeCompare(PROVEEDORES[b].nombre)
+  );
+  sel.innerHTML = '<option value="">Todos</option>' + slugsOrdenados.map(slug=>
+    `<option value="${slug}">${PROVEEDORES[slug].nombre}</option>`
+  ).join("");
+  sel.value = valActual;
 }
 
 function renderHistorial(){
