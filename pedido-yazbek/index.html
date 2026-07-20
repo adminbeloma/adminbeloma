@@ -719,10 +719,17 @@ firebase.auth().onAuthStateChanged(user=>{
     escucharHistorial();
   }
 });
-firebase.auth().signInAnonymously().catch(err=>{
-  console.error("Error de autenticación:", err);
-  mostrarMsg("⚠️ No se pudo conectar con la base de datos: " + err.message, "error");
-});
+// Sesión anónima aislada a esta pestaña (sessionStorage) en vez de compartida
+// entre pestañas (localStorage). Así evitamos que el panel principal de
+// Admin Beloma, que cierra automáticamente cualquier sesión anónima que
+// detecte, termine cerrando también la sesión que este módulo necesita
+// para guardar el historial en Firestore.
+firebase.auth().setPersistence(firebase.auth.Auth.Persistence.SESSION)
+  .then(() => firebase.auth().signInAnonymously())
+  .catch(err=>{
+    console.error("Error de autenticación:", err);
+    mostrarMsg("⚠️ No se pudo conectar con la base de datos: " + err.message, "error");
+  });
 </script>
 </body>
 </html>
