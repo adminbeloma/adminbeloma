@@ -7,6 +7,7 @@
 
 <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-auth-compat.js"></script>
 
 <style>
   :root{
@@ -361,7 +362,10 @@ async function enviarPedidoWhatsApp(){
       mensaje: msg,
       creado: new Date().toISOString()
     });
-  }catch(err){ console.error("Error guardando historial:", err); }
+  }catch(err){
+    console.error("Error guardando historial:", err);
+    mostrarMsg("⚠️ El pedido se envió por WhatsApp, pero no se guardó en el historial: " + err.message, "error");
+  }
 
   window.open(`https://wa.me/52${NUMERO_YAZBEK}?text=${encodeURIComponent(msg)}`, "_blank");
 }
@@ -415,8 +419,17 @@ function escucharHistorial(){
 
 /* ---------- init ---------- */
 llenarSelectorProductos();
-cargarColoresGuardados();
-escucharHistorial();
+
+firebase.auth().onAuthStateChanged(user=>{
+  if(user){
+    cargarColoresGuardados();
+    escucharHistorial();
+  }
+});
+firebase.auth().signInAnonymously().catch(err=>{
+  console.error("Error de autenticación:", err);
+  mostrarMsg("⚠️ No se pudo conectar con la base de datos: " + err.message, "error");
+});
 </script>
 </body>
 </html>
