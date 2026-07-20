@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Pedido a Yazbek · Playeras Beloma</title>
+<title>Pedido Multi-Proveedor · Playeras Beloma</title>
 
 <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore-compat.js"></script>
@@ -19,14 +19,14 @@
   header{background:var(--azul);color:#fff;padding:18px 24px;}
   header h1{margin:0;font-size:1.2rem;font-weight:600;}
   header p{margin:4px 0 0;font-size:.8rem;opacity:.9;}
-  .contenedor{max-width:1100px;margin:0 auto;padding:20px 16px 60px;}
+  .contenedor{max-width:1200px;margin:0 auto;padding:20px 16px 60px;}
   .card{background:#fff;border:1px solid var(--gris-borde);border-radius:var(--radio);padding:18px 20px;margin-bottom:18px;}
   .card h2{margin:0 0 14px;font-size:1rem;color:var(--azul);}
   label{font-size:.78rem;font-weight:600;color:#6b7280;display:block;margin-bottom:4px;}
   select, input, textarea{width:100%;padding:8px 10px;border:1px solid var(--gris-borde);border-radius:7px;font-size:.88rem;font-family:inherit;background:#fff;color:var(--gris-texto);}
   input:focus, select:focus, textarea:focus{outline:2px solid var(--azul);outline-offset:1px;}
-  .grid-form{display:grid;grid-template-columns:2fr 1fr 1fr 1fr;gap:10px;align-items:end;}
-  @media (max-width:700px){.grid-form{grid-template-columns:1fr 1fr;}}
+  .grid-form{display:grid;grid-template-columns:1fr 1.6fr 1fr 1fr 1fr;gap:10px;align-items:end;}
+  @media (max-width:900px){.grid-form{grid-template-columns:1fr 1fr;}}
   .linea-info{font-size:.72rem;color:#9aa4b5;margin-top:2px;}
   table{width:100%;border-collapse:collapse;font-size:.85rem;}
   th, td{padding:8px 10px;border-bottom:1px solid var(--gris-borde);text-align:left;}
@@ -37,6 +37,7 @@
   .btn-secundario{background:#fff;color:var(--azul);border:1px solid var(--azul);}
   .btn-verde{background:var(--verde);color:#fff;}
   .btn-rojo{background:#fde8e8;color:var(--rojo);}
+  .btn-gris{background:#eef1f6;color:#6b7280;}
   .btn-chico{padding:5px 10px;font-size:.78rem;}
   .fila-acciones{display:flex;gap:10px;margin-top:14px;flex-wrap:wrap;}
   .vacio{text-align:center;color:#94a3b8;padding:24px 10px;font-size:.9rem;}
@@ -44,14 +45,25 @@
   .msg.ok{background:#e7f8ee;color:#127a3d;display:block;}
   .msg.error{background:#fde8e8;color:var(--rojo);display:block;}
   .resumen{background:var(--azul-suave);border-radius:8px;padding:12px 14px;font-size:.85rem;margin-top:14px;}
-  datalist{}
+  .badge-proveedor{display:inline-block;background:var(--azul-suave);color:var(--azul);padding:2px 8px;border-radius:6px;font-size:.72rem;font-weight:600;white-space:nowrap;}
+  /* fix flechita nativa del datalist para que no se encime con el texto */
+  input[list]{padding-right:28px;}
+  input[list]::-webkit-calendar-picker-indicator{opacity:.65;cursor:pointer;}
+  .filtro-fecha{display:flex;gap:10px;align-items:end;flex-wrap:wrap;margin-bottom:14px;}
+  .filtro-fecha > div{flex:1;min-width:140px;}
+  .filtro-fecha label{margin-bottom:4px;}
+  .checkbox-linea{display:flex;align-items:center;gap:8px;font-size:.85rem;margin:10px 0;}
+  .checkbox-linea input{width:auto;}
+  .reporte-table td.num{text-align:right;font-weight:600;}
+  .reporte-total-row td{font-weight:700;background:var(--azul-suave);}
+  .fila-envio-btns{display:flex;gap:8px;flex-wrap:wrap;margin-top:10px;}
 </style>
 </head>
 <body>
 
 <header>
-  <h1>🛍️ Pedido a Yazbek</h1>
-  <p>Arma el pedido y mándalo directo por WhatsApp al proveedor</p>
+  <h1>🛍️ Pedido Multi-Proveedor</h1>
+  <p>Arma pedidos de cualquier proveedor y mándalos por WhatsApp</p>
 </header>
 
 <div class="contenedor">
@@ -61,6 +73,10 @@
   <div class="card">
     <h2>Agregar producto al pedido</h2>
     <div class="grid-form">
+      <div>
+        <label>Proveedor</label>
+        <select id="fProveedor" onchange="onProveedorChange()"></select>
+      </div>
       <div>
         <label>Producto</label>
         <select id="fProducto" onchange="onProductoChange()"></select>
@@ -81,7 +97,8 @@
       </div>
     </div>
     <div class="fila-acciones">
-      <button class="btn btn-primario" onclick="agregarRenglon()">+ Agregar al pedido</button>
+      <button class="btn btn-primario" id="btnAgregar" onclick="agregarRenglon()">+ Agregar al pedido</button>
+      <button class="btn btn-gris" id="btnCancelarEdicion" onclick="cancelarEdicion()" style="display:none;">✖ Cancelar edición</button>
     </div>
   </div>
 
@@ -91,19 +108,55 @@
     <div id="tablaPedidoCont"><div class="vacio">Aún no has agregado productos.</div></div>
     <div class="resumen" id="resumenPedido" style="display:none;"></div>
     <div class="fila-acciones">
-      <input type="text" id="fReferencia" placeholder="Referencia / notas para Yazbek (opcional)" style="max-width:400px;">
+      <input type="text" id="fReferencia" placeholder="Referencia / notas (opcional)" style="max-width:400px;">
     </div>
     <div class="fila-acciones">
-      <button class="btn btn-verde" onclick="enviarPedidoWhatsApp()">📱 Enviar pedido por WhatsApp</button>
-      <button class="btn btn-secundario" onclick="copiarPedido()">📋 Copiar texto</button>
+      <button class="btn btn-secundario" onclick="copiarPedidoCompleto()">📋 Copiar todo el pedido</button>
       <button class="btn btn-rojo" onclick="limpiarPedido()">🗑 Vaciar pedido</button>
     </div>
+    <div class="fila-envio-btns" id="contBotonesEnvio"></div>
   </div>
 
   <!-- ===== Historial ===== -->
   <div class="card">
     <h2>🕘 Historial de pedidos enviados</h2>
+    <div class="filtro-fecha">
+      <div>
+        <label>Desde</label>
+        <input type="date" id="fHistDesde" onchange="renderHistorial()">
+      </div>
+      <div>
+        <label>Hasta</label>
+        <input type="date" id="fHistHasta" onchange="renderHistorial()">
+      </div>
+      <div style="flex:0;">
+        <button class="btn btn-gris btn-chico" onclick="limpiarFiltroHistorial()">Limpiar filtro</button>
+      </div>
+    </div>
     <div id="tablaHistCont"><div class="vacio">Sin pedidos guardados todavía.</div></div>
+  </div>
+
+  <!-- ===== Reporte ===== -->
+  <div class="card">
+    <h2>📊 Reporte de piezas por proveedor / color / género / talla</h2>
+    <div class="filtro-fecha">
+      <div>
+        <label>Desde</label>
+        <input type="date" id="fRepDesde">
+      </div>
+      <div>
+        <label>Hasta</label>
+        <input type="date" id="fRepHasta">
+      </div>
+    </div>
+    <div class="checkbox-linea">
+      <input type="checkbox" id="fRepIncluirActual">
+      <label style="margin:0;">Incluir el pedido actual (aún no enviado)</label>
+    </div>
+    <div class="fila-acciones">
+      <button class="btn btn-primario" onclick="generarReporte()">📊 Generar reporte</button>
+    </div>
+    <div id="tablaReporteCont" style="margin-top:14px;"></div>
   </div>
 </div>
 
@@ -122,73 +175,17 @@ const firebaseConfig = {
 firebase.initializeApp(firebaseConfig);
 const db = firebase.firestore();
 
-const NUMERO_YAZBEK = "6682574817"; // 668 257 4817
+const NOMBRES_PROVEEDOR_DEFAULT = {
+  yazbek: "Yazbek", gildan: "Gildan", blue_white: "Blue & White", euro_cotton: "Euro Cotton",
+  playerytees: "Playerytees", bones: "Bones", mark_athletic: "Mark Athletic",
+  mayork: "Mayork", jhk: "JHK", mo: "M&O"
+};
 
-/* =====================================================
-   CATÁLOGO YAZBEK — códigos y colores oficiales
-   (colores = sugerencias; también puedes escribir uno nuevo y se guarda)
-===================================================== */
-// Tallas estándar por tipo de prenda (ajustadas a lo que Yazbek realmente maneja)
-const T_CAB = ['CH','MED','GDE','XL','XXL','XXXL'];       // Caballero manga corta (playera)
-const T_CAB_SIN_XXXL = ['CH','MED','GDE','XL','XXL'];       // Caballero: sudaderas y polos (no llegan a XXXL)
-const T_CAB_ML = ['CH','MED','GDE','XL','XXL'];            // Caballero manga larga (no llega a XXXL)
-const T_DAMA = ['CH','MED','GDE','XL','XXL'];              // Dama: solo D0200 y D1302/D1304 llegan a XXL
-const T_DAMA_SIN_XXL = ['CH','MED','GDE','XL'];             // Dama: D0300, D0306, D1502 no pasan de XL
-const T_DAMA_ML = ['CH','MED','GDE','XL'];                 // Dama manga larga (no pasa de XL)
-const T_NINO = ['CH','MED','GDE','XL'];                    // Niño (corta y larga)
-const T_JUVENIL = ['ECH','CH','MED','GDE','XL'];           // Juvenil: sí incluye Extra Chica
-const T_BEBE = ['Talla 1','Talla 2','Talla 3'];            // Bebé
-
-const CATALOGO_YAZBEK = [
-  {codigo:'C0200', nombre:'Playera Cuello Redondo Manga Corta Caballero', linea:'Mid Weight · 100% Algodón', categoria:'Caballero C. Redondo', tallas:T_CAB,
-    colores:['Negro','Carbón','Gris Jaspe','Blanco','Arena','Marrón','Rojo','Naranja','Canario','Jade','Marino','Royal','Turquesa','Caribe','Rosa Pastel','Salmón','Fucsia','Lavanda','Morado']},
-  {codigo:'D0200', nombre:'Playera Cuello Redondo Manga Corta Dama', linea:'Mid Weight · 100% Algodón', categoria:'Mujer C. Redondo', tallas:T_DAMA,
-    colores:['Negro','Gris Jaspe','Blanco','Arena','Rojo','Jade','Marino','Royal','Caribe','Salmón','Fucsia','Lavanda']},
-  {codigo:'C0306', nombre:'Playera Cuello V Manga Corta Caballero', linea:'Mid Weight · 100% Algodón', categoria:'Caballero Cuello V', tallas:T_CAB_SIN_XXXL,
-    colores:['Negro','Blanco','Marino','Royal']},
-  {codigo:'D0306', nombre:'Playera Cuello V Manga Corta con Silueta Dama', linea:'Mid Weight · 100% Algodón', categoria:'Mujer Cuello V', tallas:T_DAMA_SIN_XXL,
-    colores:['Negro','Blanco','Marino']},
-  {codigo:'C0310', nombre:'Playera Cuello Redondo Sin Mangas Caballero', linea:'Mid Weight · 100% Algodón', categoria:'Caballero Sin Mangas', tallas:T_CAB_SIN_XXXL,
-    colores:['Negro','Gris Jaspe','Blanco','Rojo','Marino','Royal']},
-  {codigo:'C0300', nombre:'Playera Peso Completo Cuello Redondo Manga Corta Caballero', linea:'Heavy Weight · 100% Algodón', categoria:'Caballero C. Redondo', tallas:T_CAB,
-    colores:['Negro','Carbón','Gris Jaspe','Plata','Blanco','Arena','Beige','Chocolate','Marrón','Ladrillo','Rojo','Ocre','Naranja','Mango','Canario','Lima','Jade','Olivo','Verde Bosque','Marino','Delfín','Royal','Turquesa','Celeste','Caribe','Azul Claro','Aqua','Rosa Pastel','Coral','Salmón','Fucsia','Lavanda','Morado']},
-  {codigo:'D0300', nombre:'Playera Peso Completo Cuello Redondo Manga Corta Dama', linea:'Heavy Weight · 100% Algodón', categoria:'Mujer C. Redondo', tallas:T_DAMA_SIN_XXL,
-    colores:['Negro','Carbón','Gris Jaspe','Blanco','Rojo','Naranja','Canario','Lima','Jade','Marino','Turquesa','Celeste','Azul Claro','Aqua','Rosa Pastel','Coral','Fucsia','Morado']},
-  {codigo:'J0300', nombre:'Playera Peso Completo Cuello Redondo Manga Corta Jóvenes (Juvenil)', linea:'Heavy Weight · 100% Algodón', categoria:'Juvenil C. Redondo', tallas:T_JUVENIL,
-    colores:['Negro','Carbón','Gris Jaspe','Blanco','Rojo','Naranja','Mango','Canario','Lima','Jade','Marino','Celeste','Rosa Pastel','Fucsia','Morado','Turquesa']},
-  {codigo:'N0300', nombre:'Playera Peso Completo Cuello Redondo Manga Corta Niños', linea:'Heavy Weight · 100% Algodón', categoria:'Niño C. Redondo', tallas:T_NINO,
-    colores:['Negro','Carbón','Gris Jaspe','Blanco','Rojo','Naranja','Mango','Canario','Lima','Jade','Marino','Celeste','Rosa Pastel','Fucsia','Morado','Turquesa']},
-  {codigo:'B0300', nombre:'Playera Peso Completo Cuello Redondo Manga Corta Bebés', linea:'Heavy Weight · 100% Algodón', categoria:'Bebé C. Redondo', tallas:T_BEBE,
-    colores:['Negro','Blanco','Rojo','Naranja','Canario','Lima','Marino','Celeste','Rosa Pastel','Fucsia','Turquesa']},
-  {codigo:'C0304', nombre:'Playera Peso Completo Cuello Redondo Manga Larga Caballero', linea:'Heavy Weight · 100% Algodón', categoria:'Caballero Manga Larga', tallas:T_CAB_ML,
-    colores:['Negro','Carbón','Gris Jaspe','Blanco','Arena','Marrón','Rojo','Naranja','Mango','Jade','Marino','Royal']},
-  {codigo:'D0304', nombre:'Playera Peso Completo Cuello Redondo Manga Larga Dama', linea:'Heavy Weight · 100% Algodón', categoria:'Mujer Manga Larga', tallas:T_DAMA_ML,
-    colores:['Negro','Gris Jaspe','Blanco','Marino','Turquesa','Fucsia']},
-  {codigo:'N0304', nombre:'Playera Peso Completo Cuello Redondo Manga Larga Niños', linea:'Heavy Weight · 100% Algodón', categoria:'Niño Manga Larga', tallas:T_NINO,
-    colores:['Negro','Gris Jaspe','Blanco','Rojo','Marino','Royal']},
-  {codigo:'C0501', nombre:'Playera Tipo Polo Manga Corta Caballero (Algodón)', linea:'Heavy Weight · 100% Algodón', categoria:'Caballero Polo Algodón', tallas:T_CAB_SIN_XXXL,
-    colores:['Negro','Gris Jaspe','Blanco','Rojo','Marino','Royal']},
-  {codigo:'N0501', nombre:'Playera Tipo Polo Manga Corta Niños (Algodón)', linea:'Heavy Weight · 100% Algodón', categoria:'Niño Polo Algodón', tallas:T_NINO,
-    colores:['Blanco','Rojo','Marino']},
-  {codigo:'C0700', nombre:'Sudadera Cuello Redondo Adultos', linea:'Poly-CottonFleece · 50% Algodón 50% Poliéster', categoria:'Sudadera C. Redondo', tallas:T_CAB_SIN_XXXL,
-    colores:['Negro','Gris Jaspe','Blanco','Rojo','Marino','Royal']},
-  {codigo:'C0701', nombre:'Sudadera con Capucha y Cangurera Adultos', linea:'Poly-CottonFleece · 50% Algodón 50% Poliéster', categoria:'Sudadera Gorro y Cangurera', tallas:T_CAB_SIN_XXXL,
-    colores:['Negro','Gris Jaspe','Blanco','Arena','Marrón','Rojo','Verde Bosque','Marino','Royal','Rosa Pastel','Lavanda']},
-  {codigo:'C0702', nombre:'Sudadera con Capucha, Cangurera y Cierre Adultos', linea:'Poly-CottonFleece · 50% Algodón 50% Poliéster', categoria:'Sudadera Gorro, Cangurera y Cierre', tallas:T_CAB_SIN_XXXL,
-    colores:['Negro','Gris Jaspe','Blanco','Rojo','Marino','Royal']},
-  {codigo:'C1302', nombre:'Playera Dry Fit (ActiviTee) Cuello Redondo Manga Corta Caballero', linea:'ActiviTee · Mesh 100% Poliéster', categoria:'Caballero Dry Fit C. Redondo', tallas:T_CAB_SIN_XXXL,
-    colores:['Negro','Gris','Blanco','Rojo','Jade','Marino','Royal','Amarillo Neón','Verde Neón','Naranja Neón']},
-  {codigo:'D1302', nombre:'Playera Dry Fit (ActiviTee) Cuello Redondo Manga Corta Dama', linea:'ActiviTee · Mesh 100% Poliéster', categoria:'Mujer Dry Fit C. Redondo', tallas:T_DAMA,
-    colores:['Negro','Gris','Blanco','Rojo','Jade','Marino','Royal','Amarillo Neón','Verde Neón','Naranja Neón']},
-  {codigo:'C1502', nombre:'Playera Tipo Polo Dry Fit (ActiviTee) Manga Corta Caballero', linea:'ActiviTee · Mesh 100% Poliéster', categoria:'Caballero Polo Dry Fit', tallas:T_CAB_SIN_XXXL,
-    colores:['Negro','Gris','Blanco','Rojo','Marino','Royal']},
-  {codigo:'D1502', nombre:'Playera Tipo Polo Dry Fit (ActiviTee) Manga Corta Dama', linea:'ActiviTee · Mesh 100% Poliéster', categoria:'Mujer Polo Dry Fit', tallas:T_DAMA_SIN_XXL,
-    colores:['Negro','Gris','Blanco','Rojo','Marino','Royal']},
-];
-
-let coloresGuardados = []; // colores extra que el usuario ha tecleado y guardado
-let pedidoActual = [];     // renglones del pedido en curso
+let PROVEEDORES = {};       // slug -> {nombre, contacto_whatsapp, estilos:[{codigo,nombre,categoria,genero,tallas,colores}]}
+let coloresGuardados = {};  // slug -> [colores extra guardados por el usuario]
+let pedidoActual = [];      // renglones del pedido en curso
 let historial = [];
+let editandoIndex = null;   // si no es null, agregarRenglon() edita ese renglón en vez de crear uno nuevo
 
 /* ---------- utilidades ---------- */
 function mostrarMsg(texto, tipo){
@@ -201,32 +198,128 @@ function hoyISO(){
   const d = new Date();
   return d.getFullYear()+"-"+String(d.getMonth()+1).padStart(2,"0")+"-"+String(d.getDate()).padStart(2,"0");
 }
-function uid(){ return Date.now().toString(36)+Math.random().toString(36).slice(2,8); }
 
-/* ---------- llenar selector de producto ---------- */
-function llenarSelectorProductos(){
+/* =====================================================
+   NORMALIZACIÓN DE CATÁLOGOS
+   Cada proveedor tiene su propia forma de nombrar campos
+   (clave/codigo, colores/colores_solidos/colores_jaspeados/
+   colores_combinaciones, tallas/tallas_adulto+tallas_nino, etc.)
+   Esta función homogeniza todo a: {codigo,nombre,categoria,genero,tallas,colores}
+===================================================== */
+function detectarGenero(e){
+  const texto = ((e.nombre||"") + " " + (e.categoria||"")).toLowerCase();
+  if(texto.includes("dama") || texto.includes("mujer") || texto.includes("lady") || texto.includes("woman")) return "Dama";
+  if(texto.includes("caballero") || texto.includes("hombre") || texto.includes("man")) return "Caballero";
+  if(texto.includes("niñ") || texto.includes("nino") || texto.includes("kid") || texto.includes("juvenil") || texto.includes("infantil") || texto.includes("pekes") || texto.includes("bebé") || texto.includes("bebe") || texto.includes("baby")) return "Niño";
+  return "Unisex";
+}
+
+function normalizarEstilo(e){
+  const codigo = e.codigo || e.clave || e.ref || "";
+  const nombre = e.nombre || codigo;
+
+  let tallas = [];
+  if(Array.isArray(e.tallas)) tallas = e.tallas;
+  else if(Array.isArray(e.tallas_adulto) || Array.isArray(e.tallas_nino)) tallas = [...new Set([...(e.tallas_adulto||[]), ...(e.tallas_nino||[])])];
+  else if(Array.isArray(e.tallas_caballero) || Array.isArray(e.tallas_dama)) tallas = [...new Set([...(e.tallas_caballero||[]), ...(e.tallas_dama||[])])];
+  if(!tallas.length) tallas = ["S","M","L","XL"];
+
+  let colores = [];
+  if(Array.isArray(e.colores)) colores = colores.concat(e.colores);
+  if(Array.isArray(e.colores_solidos)) colores = colores.concat(e.colores_solidos);
+  if(Array.isArray(e.colores_jaspeados)) colores = colores.concat(e.colores_jaspeados);
+  if(Array.isArray(e.colores_jaspe)) colores = colores.concat(e.colores_jaspe);
+  if(Array.isArray(e.colores_combinaciones)) colores = colores.concat(e.colores_combinaciones);
+  if(!colores.length && typeof e.colores === "string") colores = [e.colores];
+  colores = [...new Set(colores)];
+
+  const genero = e.genero || e.género || detectarGenero(e);
+  const categoria = e.categoria || e.linea || e.categoria_linea || "";
+
+  return {codigo, nombre, categoria, genero, tallas, colores};
+}
+
+function normalizarCatalogo(slug, raw){
+  let estilosRaw = [];
+  if(Array.isArray(raw.estilos)){
+    estilosRaw = raw.estilos;
+  }else if(Array.isArray(raw.lineas_principales)){
+    raw.lineas_principales.forEach(linea=>{
+      (linea.estilos||[]).forEach(e=> estilosRaw.push({...e, categoria_linea: linea.linea}));
+    });
+  }
+  const estilos = estilosRaw.map(normalizarEstilo).filter(e=>e.codigo);
+  return {
+    nombre: raw.proveedor || NOMBRES_PROVEEDOR_DEFAULT[slug] || slug,
+    contacto_whatsapp: raw.contacto_whatsapp || null,
+    estilos
+  };
+}
+
+/* ---------- carga de catálogos desde Firestore ---------- */
+async function cargarCatalogos(){
+  try{
+    const snap = await db.collection("catalogos_proveedores").get();
+    if(snap.empty){
+      mostrarMsg("⚠️ No se encontraron catálogos en catalogos_proveedores.", "error");
+      return;
+    }
+    snap.docs.forEach(doc=>{
+      PROVEEDORES[doc.id] = normalizarCatalogo(doc.id, doc.data());
+    });
+    llenarSelectorProveedores();
+  }catch(err){
+    console.error("Error cargando catálogos:", err);
+    mostrarMsg("⚠️ No se pudieron cargar los catálogos: " + err.message, "error");
+  }
+}
+
+function llenarSelectorProveedores(){
+  const sel = document.getElementById("fProveedor");
+  const slugsOrdenados = Object.keys(PROVEEDORES).sort((a,b)=>
+    PROVEEDORES[a].nombre.localeCompare(PROVEEDORES[b].nombre)
+  );
+  sel.innerHTML = slugsOrdenados.map(slug=>
+    `<option value="${slug}">${PROVEEDORES[slug].nombre}</option>`
+  ).join("");
+  onProveedorChange();
+}
+
+/* ---------- selects dependientes ---------- */
+function proveedorActualSlug(){
+  return document.getElementById("fProveedor").value;
+}
+function proveedorActual(){
+  return PROVEEDORES[proveedorActualSlug()];
+}
+
+function onProveedorChange(){
+  const prov = proveedorActual();
   const sel = document.getElementById("fProducto");
-  sel.innerHTML = CATALOGO_YAZBEK.map(p=>
-    `<option value="${p.codigo}">${p.codigo} — ${p.nombre}</option>`
+  if(!prov){ sel.innerHTML = ""; return; }
+  sel.innerHTML = prov.estilos.map(e=>
+    `<option value="${e.codigo}">${e.codigo} — ${e.nombre}</option>`
   ).join("");
   onProductoChange();
 }
 
 function productoActual(){
+  const prov = proveedorActual();
+  if(!prov) return null;
   const codigo = document.getElementById("fProducto").value;
-  return CATALOGO_YAZBEK.find(p=>p.codigo===codigo);
+  return prov.estilos.find(e=>e.codigo===codigo);
 }
 
 function onProductoChange(){
   const p = productoActual();
-  document.getElementById("fLineaInfo").textContent = p ? p.linea : "";
+  document.getElementById("fLineaInfo").textContent = p ? [p.categoria, p.genero].filter(Boolean).join(" · ") : "";
   actualizarListaColores();
   actualizarListaTallas();
 }
 
 function actualizarListaTallas(){
   const p = productoActual();
-  const tallas = p ? p.tallas : ['CH','MED','GDE','XL'];
+  const tallas = p ? p.tallas : ["S","M","L","XL"];
   const sel = document.getElementById("fTalla");
   const valActual = sel.value;
   sel.innerHTML = tallas.map(t=>`<option value="${t}">${t}</option>`).join("");
@@ -235,47 +328,89 @@ function actualizarListaTallas(){
 
 function actualizarListaColores(){
   const p = productoActual();
+  const slug = proveedorActualSlug();
   const oficiales = p ? p.colores : [];
-  const todos = [...new Set([...oficiales, ...coloresGuardados])].sort();
+  const guardados = coloresGuardados[slug] || [];
+  const todos = [...new Set([...oficiales, ...guardados])].sort();
   document.getElementById("listaColores").innerHTML =
     todos.map(c=>`<option value="${c}">`).join("");
 }
 
-/* ---------- agregar renglón al pedido ---------- */
+/* ---------- agregar / editar renglón ---------- */
 function agregarRenglon(){
+  const prov = proveedorActual();
   const p = productoActual();
   const color = document.getElementById("fColor").value.trim();
   const talla = document.getElementById("fTalla").value;
   const cantidad = parseInt(document.getElementById("fCantidad").value)||1;
 
+  if(!prov || !p){ mostrarMsg("Selecciona un proveedor y un producto.", "error"); return; }
   if(!color){ mostrarMsg("Escribe o elige un color.", "error"); return; }
 
-  pedidoActual.push({
-    codigo: p.codigo, nombre: p.nombre, categoria: p.categoria, color, talla, cantidad
-  });
+  const renglon = {
+    proveedor: proveedorActualSlug(),
+    proveedorNombre: prov.nombre,
+    codigo: p.codigo, nombre: p.nombre, categoria: p.categoria, genero: p.genero,
+    color, talla, cantidad
+  };
 
-  // Guardar color nuevo si no estaba ya sugerido en ningún lado
-  const yaExiste = [...p.colores, ...coloresGuardados].some(c=>c.toLowerCase()===color.toLowerCase());
+  if(editandoIndex !== null){
+    pedidoActual[editandoIndex] = renglon;
+    mostrarMsg("✅ Renglón actualizado", "ok");
+    cancelarEdicion(false);
+  }else{
+    pedidoActual.push(renglon);
+    mostrarMsg("✅ Producto agregado al pedido", "ok");
+  }
+
+  const yaExiste = [...p.colores, ...(coloresGuardados[renglon.proveedor]||[])].some(c=>c.toLowerCase()===color.toLowerCase());
   if(!yaExiste){
-    guardarColorNuevo(color);
+    guardarColorNuevo(renglon.proveedor, color);
   }
 
   document.getElementById("fColor").value = "";
   document.getElementById("fCantidad").value = "1";
   renderPedido();
-  mostrarMsg("✅ Producto agregado al pedido", "ok");
 }
 
-async function guardarColorNuevo(color){
+function editarRenglon(idx){
+  const r = pedidoActual[idx];
+  document.getElementById("fProveedor").value = r.proveedor;
+  onProveedorChange();
+  document.getElementById("fProducto").value = r.codigo;
+  onProductoChange();
+  document.getElementById("fColor").value = r.color;
+  document.getElementById("fTalla").value = r.talla;
+  document.getElementById("fCantidad").value = r.cantidad;
+
+  editandoIndex = idx;
+  document.getElementById("btnAgregar").textContent = "💾 Guardar cambios";
+  document.getElementById("btnCancelarEdicion").style.display = "inline-block";
+  window.scrollTo({top:0, behavior:"smooth"});
+}
+
+function cancelarEdicion(limpiarCampos = true){
+  editandoIndex = null;
+  document.getElementById("btnAgregar").textContent = "+ Agregar al pedido";
+  document.getElementById("btnCancelarEdicion").style.display = "none";
+  if(limpiarCampos){
+    document.getElementById("fColor").value = "";
+    document.getElementById("fCantidad").value = "1";
+  }
+}
+
+async function guardarColorNuevo(slug, color){
   try{
-    coloresGuardados.push(color);
-    await db.collection("yazbek_colores").add({nombre: color, creado: new Date().toISOString()});
+    if(!coloresGuardados[slug]) coloresGuardados[slug] = [];
+    coloresGuardados[slug].push(color);
+    await db.collection("colores_guardados_multi").add({proveedor: slug, nombre: color, creado: new Date().toISOString()});
     actualizarListaColores();
   }catch(err){ console.error("Error guardando color:", err); }
 }
 
 function eliminarRenglon(idx){
   pedidoActual.splice(idx,1);
+  if(editandoIndex === idx) cancelarEdicion();
   renderPedido();
 }
 
@@ -286,44 +421,53 @@ function renderPedido(){
   if(pedidoActual.length===0){
     cont.innerHTML = '<div class="vacio">Aún no has agregado productos.</div>';
     resumen.style.display = "none";
+    document.getElementById("contBotonesEnvio").innerHTML = "";
     return;
   }
   let html = `<table><thead><tr>
-    <th>Código</th><th>Producto</th><th>Color</th><th>Talla</th><th>Piezas</th><th></th>
+    <th>Proveedor</th><th>Código</th><th>Producto</th><th>Color</th><th>Talla</th><th>Piezas</th><th></th>
   </tr></thead><tbody>`;
   let totalPiezas = 0;
   pedidoActual.forEach((r,idx)=>{
     totalPiezas += r.cantidad;
     html += `<tr>
+      <td><span class="badge-proveedor">${r.proveedorNombre}</span></td>
       <td><strong>${r.codigo}</strong></td>
       <td style="font-size:.8rem;">${r.nombre}</td>
       <td>${r.color}</td>
       <td>${r.talla}</td>
       <td>${r.cantidad}</td>
-      <td><button class="btn btn-rojo btn-chico" onclick="eliminarRenglon(${idx})">✕</button></td>
+      <td style="white-space:nowrap;">
+        <button class="btn btn-secundario btn-chico" onclick="editarRenglon(${idx})">✏️</button>
+        <button class="btn btn-rojo btn-chico" onclick="eliminarRenglon(${idx})">✕</button>
+      </td>
     </tr>`;
   });
   html += "</tbody></table>";
   cont.innerHTML = html;
   resumen.style.display = "block";
-  resumen.innerHTML = `📦 <strong>${pedidoActual.length}</strong> renglón(es) · <strong>${totalPiezas}</strong> piezas en total`;
+  const proveedoresDistintos = [...new Set(pedidoActual.map(r=>r.proveedorNombre))];
+  resumen.innerHTML = `📦 <strong>${pedidoActual.length}</strong> renglón(es) · <strong>${totalPiezas}</strong> piezas en total · Proveedores: ${proveedoresDistintos.join(", ")}`;
+
+  renderBotonesEnvio();
 }
 
-/* ---------- construir mensaje ---------- */
-function construirMensajePedido(){
-  if(pedidoActual.length===0) return "";
+/* ---------- construir mensajes agrupados por proveedor ---------- */
+function construirMensajePorProveedor(slug){
+  const items = pedidoActual.filter(r=>r.proveedor===slug);
+  if(items.length===0) return "";
   const ref = document.getElementById("fReferencia").value.trim();
+  const proveedorNombre = PROVEEDORES[slug] ? PROVEEDORES[slug].nombre : slug;
 
-  // Agrupar renglones por código + categoría, respetando el orden en que se fueron agregando
   const categoriasOrden = [];
   const porCategoria = {};
-  pedidoActual.forEach(r=>{
+  items.forEach(r=>{
     const cat = `${r.codigo} ${r.categoria || r.nombre}`;
     if(!porCategoria[cat]){ porCategoria[cat]=[]; categoriasOrden.push(cat); }
     porCategoria[cat].push(r);
   });
 
-  let msg = "";
+  let msg = `*Pedido — ${proveedorNombre}*\n\n`;
   categoriasOrden.forEach(cat=>{
     msg += `*${cat}*\n`;
     porCategoria[cat].forEach(r=>{
@@ -332,32 +476,69 @@ function construirMensajePedido(){
     msg += `\n`;
   });
 
-  const totalPiezas = pedidoActual.reduce((s,r)=>s+r.cantidad,0);
-  msg += `Total: ${totalPiezas} piezas`;
+  const totalPiezas = items.reduce((s,r)=>s+r.cantidad,0);
+  msg += `Total ${proveedorNombre}: ${totalPiezas} piezas`;
   if(ref) msg += `\nNotas: ${ref}`;
   return msg;
 }
 
-/* ---------- acciones ---------- */
-function copiarPedido(){
-  const msg = construirMensajePedido();
-  if(!msg){ mostrarMsg("Agrega al menos un producto.", "error"); return; }
+function construirMensajeCompleto(){
+  const slugsPresentes = [...new Set(pedidoActual.map(r=>r.proveedor))];
+  return slugsPresentes.map(slug=>construirMensajePorProveedor(slug)).join("\n\n—————\n\n");
+}
+
+/* ---------- botones de envío dinámicos por proveedor presente ---------- */
+function renderBotonesEnvio(){
+  const cont = document.getElementById("contBotonesEnvio");
+  const slugsPresentes = [...new Set(pedidoActual.map(r=>r.proveedor))];
+  if(slugsPresentes.length===0){ cont.innerHTML = ""; return; }
+
+  cont.innerHTML = slugsPresentes.map(slug=>{
+    const prov = PROVEEDORES[slug];
+    const nombre = prov ? prov.nombre : slug;
+    if(prov && prov.contacto_whatsapp){
+      return `<button class="btn btn-verde" onclick="enviarPedidoWhatsApp('${slug}')">📱 Enviar a ${nombre}</button>`;
+    }
+    return `<button class="btn btn-secundario" onclick="copiarPedidoProveedor('${slug}')">📋 Copiar para ${nombre}</button>`;
+  }).join("");
+}
+
+/* ---------- acciones de copiar / enviar ---------- */
+function copiarPedidoProveedor(slug){
+  const msg = construirMensajePorProveedor(slug);
+  if(!msg){ mostrarMsg("No hay productos de este proveedor en el pedido.", "error"); return; }
   navigator.clipboard.writeText(msg).then(()=>{
-    mostrarMsg("📋 Pedido copiado al portapapeles", "ok");
+    mostrarMsg("📋 Pedido de " + (PROVEEDORES[slug]?PROVEEDORES[slug].nombre:slug) + " copiado", "ok");
   }).catch(()=>{
     mostrarMsg("No se pudo copiar, selecciona el texto manualmente.", "error");
   });
 }
 
-async function enviarPedidoWhatsApp(){
-  const msg = construirMensajePedido();
-  if(!msg){ mostrarMsg("Agrega al menos un producto antes de enviar.", "error"); return; }
+function copiarPedidoCompleto(){
+  const msg = construirMensajeCompleto();
+  if(!msg){ mostrarMsg("Agrega al menos un producto.", "error"); return; }
+  navigator.clipboard.writeText(msg).then(()=>{
+    mostrarMsg("📋 Pedido completo copiado al portapapeles", "ok");
+  }).catch(()=>{
+    mostrarMsg("No se pudo copiar, selecciona el texto manualmente.", "error");
+  });
+}
 
-  // Guardar en historial
+async function enviarPedidoWhatsApp(slug){
+  const msg = construirMensajePorProveedor(slug);
+  if(!msg){ mostrarMsg("No hay productos de este proveedor en el pedido.", "error"); return; }
+  const prov = PROVEEDORES[slug];
+  if(!prov || !prov.contacto_whatsapp){
+    mostrarMsg("Este proveedor no tiene número de WhatsApp registrado. Usa copiar texto.", "error");
+    return;
+  }
+
   try{
-    await db.collection("yazbek_pedidos").add({
+    await db.collection("pedidos_multiproveedor").add({
       fecha: hoyISO(),
-      items: pedidoActual,
+      proveedor: slug,
+      proveedorNombre: prov.nombre,
+      items: pedidoActual.filter(r=>r.proveedor===slug),
       referencia: document.getElementById("fReferencia").value.trim(),
       mensaje: msg,
       creado: new Date().toISOString()
@@ -367,31 +548,49 @@ async function enviarPedidoWhatsApp(){
     mostrarMsg("⚠️ El pedido se envió por WhatsApp, pero no se guardó en el historial: " + err.message, "error");
   }
 
-  window.open(`https://wa.me/52${NUMERO_YAZBEK}?text=${encodeURIComponent(msg)}`, "_blank");
+  window.open(`https://wa.me/52${prov.contacto_whatsapp}?text=${encodeURIComponent(msg)}`, "_blank");
 }
 
 function limpiarPedido(){
   if(pedidoActual.length>0 && !confirm("¿Vaciar el pedido actual?")) return;
   pedidoActual = [];
   document.getElementById("fReferencia").value = "";
+  cancelarEdicion();
   renderPedido();
 }
 
-/* ---------- historial ---------- */
+/* ---------- historial (con filtro de fecha) ---------- */
+function limpiarFiltroHistorial(){
+  document.getElementById("fHistDesde").value = "";
+  document.getElementById("fHistHasta").value = "";
+  renderHistorial();
+}
+
+function historialFiltrado(){
+  const desde = document.getElementById("fHistDesde").value;
+  const hasta = document.getElementById("fHistHasta").value;
+  return historial.filter(p=>{
+    if(desde && p.fecha < desde) return false;
+    if(hasta && p.fecha > hasta) return false;
+    return true;
+  });
+}
+
 function renderHistorial(){
   const cont = document.getElementById("tablaHistCont");
-  if(historial.length===0){
-    cont.innerHTML = '<div class="vacio">Sin pedidos guardados todavía.</div>';
+  const lista = [...historialFiltrado()].sort((a,b)=> a.fecha < b.fecha ? 1 : -1);
+  if(lista.length===0){
+    cont.innerHTML = '<div class="vacio">Sin pedidos guardados en este rango.</div>';
     return;
   }
-  const lista = [...historial].sort((a,b)=> a.fecha < b.fecha ? 1 : -1);
   let html = `<table><thead><tr>
-    <th>Fecha</th><th>Renglones</th><th>Piezas</th><th>Notas</th>
+    <th>Fecha</th><th>Proveedor</th><th>Renglones</th><th>Piezas</th><th>Notas</th>
   </tr></thead><tbody>`;
   lista.forEach(p=>{
     const piezas = (p.items||[]).reduce((s,r)=>s+(r.cantidad||0),0);
     html += `<tr>
       <td>${p.fecha}</td>
+      <td><span class="badge-proveedor">${p.proveedorNombre||p.proveedor||'—'}</span></td>
       <td>${(p.items||[]).length}</td>
       <td>${piezas}</td>
       <td style="font-size:.8rem;color:#6b7280;">${p.referencia||'—'}</td>
@@ -401,24 +600,88 @@ function renderHistorial(){
   cont.innerHTML = html;
 }
 
+/* ---------- reporte de piezas por proveedor/color/género/talla ---------- */
+function generarReporte(){
+  const desde = document.getElementById("fRepDesde").value;
+  const hasta = document.getElementById("fRepHasta").value;
+  const incluirActual = document.getElementById("fRepIncluirActual").checked;
+
+  const pedidosEnRango = historial.filter(p=>{
+    if(desde && p.fecha < desde) return false;
+    if(hasta && p.fecha > hasta) return false;
+    return true;
+  });
+
+  let itemsTotales = [];
+  pedidosEnRango.forEach(p=>{ itemsTotales = itemsTotales.concat(p.items||[]); });
+  if(incluirActual) itemsTotales = itemsTotales.concat(pedidoActual);
+
+  if(itemsTotales.length===0){
+    document.getElementById("tablaReporteCont").innerHTML = '<div class="vacio">No hay datos para el rango seleccionado.</div>';
+    return;
+  }
+
+  const acumulado = {};
+  itemsTotales.forEach(r=>{
+    const proveedorNombre = r.proveedorNombre || (PROVEEDORES[r.proveedor]?PROVEEDORES[r.proveedor].nombre:r.proveedor) || "—";
+    const color = r.color || "—";
+    const genero = r.genero || "—";
+    const talla = r.talla || "—";
+    const key = [proveedorNombre, color, genero, talla].join("|");
+    if(!acumulado[key]) acumulado[key] = {proveedorNombre, color, genero, talla, piezas:0};
+    acumulado[key].piezas += (r.cantidad||0);
+  });
+
+  const filas = Object.values(acumulado).sort((a,b)=>{
+    return a.proveedorNombre.localeCompare(b.proveedorNombre)
+      || a.color.localeCompare(b.color)
+      || a.genero.localeCompare(b.genero)
+      || a.talla.localeCompare(b.talla);
+  });
+
+  const totalGeneral = filas.reduce((s,f)=>s+f.piezas,0);
+
+  let html = `<table class="reporte-table"><thead><tr>
+    <th>Proveedor</th><th>Color</th><th>Género</th><th>Talla</th><th>Piezas</th>
+  </tr></thead><tbody>`;
+  filas.forEach(f=>{
+    html += `<tr>
+      <td><span class="badge-proveedor">${f.proveedorNombre}</span></td>
+      <td>${f.color}</td>
+      <td>${f.genero}</td>
+      <td>${f.talla}</td>
+      <td class="num">${f.piezas}</td>
+    </tr>`;
+  });
+  html += `<tr class="reporte-total-row"><td colspan="4">Total general</td><td class="num">${totalGeneral}</td></tr>`;
+  html += "</tbody></table>";
+  document.getElementById("tablaReporteCont").innerHTML = html;
+}
+
 /* ---------- carga inicial desde Firestore ---------- */
 async function cargarColoresGuardados(){
   try{
-    const snap = await db.collection("yazbek_colores").get();
-    coloresGuardados = snap.docs.map(d=>d.data().nombre).filter(Boolean);
+    const snap = await db.collection("colores_guardados_multi").get();
+    coloresGuardados = {};
+    snap.docs.forEach(d=>{
+      const data = d.data();
+      if(!data.proveedor || !data.nombre) return;
+      if(!coloresGuardados[data.proveedor]) coloresGuardados[data.proveedor] = [];
+      coloresGuardados[data.proveedor].push(data.nombre);
+    });
     actualizarListaColores();
   }catch(err){ console.error("Error cargando colores:", err); }
 }
 
 function escucharHistorial(){
-  db.collection("yazbek_pedidos").onSnapshot(snap=>{
+  db.collection("pedidos_multiproveedor").onSnapshot(snap=>{
     historial = snap.docs.map(d=>d.data());
     renderHistorial();
   }, err=>console.error("Error en historial:", err));
 }
 
 /* ---------- init ---------- */
-llenarSelectorProductos();
+cargarCatalogos();
 
 firebase.auth().onAuthStateChanged(user=>{
   if(user){
