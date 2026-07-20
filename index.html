@@ -6239,6 +6239,15 @@ const sidebarLogoEl = document.querySelector('.sidebar-logo img');
 if(logoEl && sidebarLogoEl) logoEl.src = sidebarLogoEl.src;
 
 onAuthStateChanged(auth, user => {
+  // Si otra herramienta (Pedido a Yazbek, subir_catalogos.html, etc.) dejó
+  // una sesión anónima activa en este mismo proyecto de Firebase, esa sesión
+  // "cuela" aquí antes de que puedas loguearte con tu correo real, y te
+  // trata como si fueras un usuario sin permisos (Operador). La cerramos
+  // automáticamente para forzar la pantalla de login con correo/contraseña.
+  if(user && (user.isAnonymous || !user.email)) {
+    signOut(auth);
+    return;
+  }
   if(user) {
     currentUser = user;
     isAdmin = user.email === ADMIN_EMAIL;
