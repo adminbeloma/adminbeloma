@@ -502,7 +502,7 @@ function construirMensajeCompleto(){
   return slugsPresentes.map(slug=>construirMensajePorProveedor(slug)).join("\n\n—————\n\n");
 }
 
-/* ---------- botones de envío dinámicos por proveedor presente ---------- */
+/* ---------- botones dinámicos por proveedor presente ---------- */
 function renderBotonesEnvio(){
   const cont = document.getElementById("contBotonesEnvio");
   const slugsPresentes = [...new Set(pedidoActual.map(r=>r.proveedor))];
@@ -511,14 +511,17 @@ function renderBotonesEnvio(){
   cont.innerHTML = slugsPresentes.map(slug=>{
     const prov = PROVEEDORES[slug];
     const nombre = prov ? prov.nombre : slug;
+    const botones = [];
+    botones.push(`<button class="btn btn-secundario" onclick="guardarPedidoProveedor('${slug}', false)">💾 Guardar ${nombre}</button>`);
     if(prov && prov.contacto_whatsapp){
-      return `<button class="btn btn-verde" onclick="enviarPedidoWhatsApp('${slug}')">📱 Enviar a ${nombre}</button>`;
+      botones.push(`<button class="btn btn-verde" onclick="guardarPedidoProveedor('${slug}', true)">📱 Enviar a ${nombre}</button>`);
     }
-    return `<button class="btn btn-secundario" onclick="copiarPedidoProveedor('${slug}')">📋 Copiar para ${nombre}</button>`;
+    botones.push(`<button class="btn btn-gris btn-chico" onclick="configurarWhatsApp('${slug}')">📞 ${prov && prov.contacto_whatsapp ? 'Cambiar' : 'Configurar'} WhatsApp</button>`);
+    return botones.join("");
   }).join("");
 }
 
-/* ---------- acciones de copiar / enviar ---------- */
+/* ---------- acciones de copiar ---------- */
 function copiarPedidoProveedor(slug){
   const msg = construirMensajePorProveedor(slug);
   if(!msg){ mostrarMsg("No hay productos de este proveedor en el pedido.", "error"); return; }
@@ -539,31 +542,89 @@ function copiarPedidoCompleto(){
   });
 }
 
-async function enviarPedidoWhatsApp(slug){
+/* ---------- folio consecutivo (transacción en Firestore) ---------- */
+async function generarFolio(){
+  const ref = db.collection("contadores_multiproveedor").doc("folio");
+  return await db.runTransaction(async (t)=>{
+    const doc = await t.get(ref);
+    const actual = doc.exists ? (doc.data().ultimo || 0) : 0;
+    const nuevo = actual + 1;
+    t.set(ref, {ultimo: nuevo}, {merge:true});
+    return nuevo;
+  });
+}
+
+/* ---------- guardar pedido en historial (con o sin enviar por WhatsApp) ---------- */
+async function guardarPedidoProveedor(slug, enviarWhatsApp){
   const msg = construirMensajePorProveedor(slug);
   if(!msg){ mostrarMsg("No hay productos de este proveedor en el pedido.", "error"); return; }
   const prov = PROVEEDORES[slug];
-  if(!prov || !prov.contacto_whatsapp){
-    mostrarMsg("Este proveedor no tiene número de WhatsApp registrado. Usa copiar texto.", "error");
+
+  if(enviarWhatsApp && (!prov || !prov.contacto_whatsapp)){
+    mostrarMsg("Este proveedor no tiene número de WhatsApp configurado todavía.", "error");
     return;
   }
 
+  let folio = null;
   try{
+    folio = await generarFolio();
     await db.collection("pedidos_multiproveedor").add({
+      folio,
       fecha: hoyISO(),
       proveedor: slug,
-      proveedorNombre: prov.nombre,
+      proveedorNombre: prov ? prov.nombre : slug,
       items: pedidoActual.filter(r=>r.proveedor===slug),
       referencia: document.getElementById("fReferencia").value.trim(),
       mensaje: msg,
+      estado: enviarWhatsApp ? "enviado_whatsapp" : "guardado",
       creado: new Date().toISOString()
     });
+    mostrarMsg(`✅ Pedido guardado (folio #${folio})` + (enviarWhatsApp ? " y enviado por WhatsApp" : ""), "ok");
   }catch(err){
-    console.error("Error guardando historial:", err);
-    mostrarMsg("⚠️ El pedido se envió por WhatsApp, pero no se guardó en el historial: " + err.message, "error");
+    console.error("Error guardando pedido:", err);
+    mostrarMsg("⚠️ No se pudo guardar el pedido: " + err.message, "error");
+    return;
   }
 
-  window.open(`https://wa.me/52${prov.contacto_whatsapp}?text=${encodeURIComponent(msg)}`, "_blank");
+  if(enviarWhatsApp){
+    window.open(`https://wa.me/52${prov.contacto_whatsapp}?text=${encodeURIComponent(msg)}`, "_blank");
+  }
+}
+
+/* ---------- configurar / cambiar número de WhatsApp de un proveedor ---------- */
+async function configurarWhatsApp(slug){
+  const prov = PROVEEDORES[slug];
+  const nombre = prov ? prov.nombre : slug;
+  const actual = prov && prov.contacto_whatsapp ? prov.contacto_whatsapp : "";
+  const numero = window.prompt(`Número de WhatsApp de ${nombre} (10 dígitos, sin espacios ni +52):`, actual);
+  if(numero === null) return; // canceló
+  const limpio = numero.replace(/\D/g, "");
+  if(limpio.length !== 10){
+    mostrarMsg("El número debe tener 10 dígitos (sin lada +52).", "error");
+    return;
+  }
+  try{
+    await db.collection("proveedores_config").doc(slug).set({contacto_whatsapp: limpio}, {merge:true});
+    if(PROVEEDORES[slug]) PROVEEDORES[slug].contacto_whatsapp = limpio;
+    mostrarMsg(`✅ Número de WhatsApp guardado para ${nombre}`, "ok");
+    renderBotonesEnvio();
+  }catch(err){
+    console.error("Error guardando número de WhatsApp:", err);
+    mostrarMsg("⚠️ No se pudo guardar el número: " + err.message, "error");
+  }
+}
+
+async function cargarConfigProveedores(){
+  try{
+    const snap = await db.collection("proveedores_config").get();
+    snap.docs.forEach(doc=>{
+      const data = doc.data();
+      if(PROVEEDORES[doc.id] && data.contacto_whatsapp){
+        PROVEEDORES[doc.id].contacto_whatsapp = data.contacto_whatsapp;
+      }
+    });
+    renderBotonesEnvio();
+  }catch(err){ console.error("Error cargando config de proveedores:", err); }
 }
 
 function limpiarPedido(){
@@ -614,20 +675,35 @@ function renderHistorial(){
     return;
   }
   let html = `<table><thead><tr>
-    <th>Fecha</th><th>Proveedor</th><th>Renglones</th><th>Piezas</th><th>Notas</th>
+    <th>Folio</th><th>Fecha</th><th>Proveedor</th><th>Estado</th><th>Renglones</th><th>Piezas</th><th>Notas</th><th></th>
   </tr></thead><tbody>`;
   lista.forEach(p=>{
     const piezas = (p.items||[]).reduce((s,r)=>s+(r.cantidad||0),0);
+    const estadoTxt = p.estado === "enviado_whatsapp" ? "📱 Enviado" : "💾 Guardado";
     html += `<tr>
+      <td>${p.folio ? '#'+p.folio : '—'}</td>
       <td>${p.fecha}</td>
       <td><span class="badge-proveedor">${p.proveedorNombre||p.proveedor||'—'}</span></td>
+      <td>${estadoTxt}</td>
       <td>${(p.items||[]).length}</td>
       <td>${piezas}</td>
       <td style="font-size:.8rem;color:#6b7280;">${p.referencia||'—'}</td>
+      <td><button class="btn btn-rojo btn-chico" onclick="eliminarPedidoHistorial('${p._id}')">🗑</button></td>
     </tr>`;
   });
   html += "</tbody></table>";
   cont.innerHTML = html;
+}
+
+async function eliminarPedidoHistorial(id){
+  if(!confirm("¿Eliminar este pedido del historial? Esta acción no se puede deshacer.")) return;
+  try{
+    await db.collection("pedidos_multiproveedor").doc(id).delete();
+    mostrarMsg("🗑 Pedido eliminado del historial", "ok");
+  }catch(err){
+    console.error("Error eliminando pedido:", err);
+    mostrarMsg("⚠️ No se pudo eliminar: " + err.message, "error");
+  }
 }
 
 /* ---------- reporte de piezas por proveedor/color/género/talla ---------- */
@@ -705,18 +781,19 @@ async function cargarColoresGuardados(){
 
 function escucharHistorial(){
   db.collection("pedidos_multiproveedor").onSnapshot(snap=>{
-    historial = snap.docs.map(d=>d.data());
+    historial = snap.docs.map(d=>({...d.data(), _id: d.id}));
     renderHistorial();
   }, err=>console.error("Error en historial:", err));
 }
 
 /* ---------- init ---------- */
-cargarCatalogos();
+const catalogosListos = cargarCatalogos();
 
 firebase.auth().onAuthStateChanged(user=>{
   if(user){
     cargarColoresGuardados();
     escucharHistorial();
+    catalogosListos.then(()=>cargarConfigProveedores());
   }
 });
 // Sesión anónima aislada a esta pestaña (sessionStorage) en vez de compartida
