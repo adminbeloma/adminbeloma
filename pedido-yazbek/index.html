@@ -237,7 +237,10 @@ function normalizarEstilo(e){
   if(Array.isArray(e.colores_jaspeados)) colores = colores.concat(e.colores_jaspeados);
   if(Array.isArray(e.colores_jaspe)) colores = colores.concat(e.colores_jaspe);
   if(Array.isArray(e.colores_combinaciones)) colores = colores.concat(e.colores_combinaciones);
+  if(Array.isArray(e.colores_basica)) colores = colores.concat(e.colores_basica);
+  if(Array.isArray(e.colores_combinada)) colores = colores.concat(e.colores_combinada);
   if(!colores.length && typeof e.colores === "string") colores = [e.colores];
+  colores = colores.filter(c => c && !/ver paleta|no especificado/i.test(c));
   colores = [...new Set(colores)];
 
   const genero = e.genero || e.género || detectarGenero(e);
