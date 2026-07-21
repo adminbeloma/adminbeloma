@@ -11,6 +11,8 @@
 <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore-compat.js"></script>
 <!-- SheetJS para exportar Excel -->
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<!-- ExcelJS para exportar Excel con formato (fuentes, combinaciones, bordes) -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/exceljs/4.4.0/exceljs.min.js"></script>
 
 <style>
   :root{
@@ -928,50 +930,174 @@ async function buscarHistorico(){
   }
 }
 
-/* ---------- exportar a Excel ---------- */
-function exportarExcel(origen){
+/* ---------- exportar a Excel (formato "lista de producción" con encabezado combinado) ---------- */
+
+// Talla/Género de captura → texto que se usa en la lista de producción
+const TALLA_EXPORT = {"CH":"CHICA","M":"MEDIANA","G":"GRANDE","XL":"XL","XXL":"XXL","XXXL":"XXXL"};
+const GENERO_EXPORT = {"Caballero":"HOMBRE","Dama":"MUJER","Niño":"NIÑO","Niña":"NIÑA","Juvenil":"JUVENIL","Unisex":"UNISEX"};
+
+async function exportarExcel(origen){
   const lista = origen === "hoy" ? pedidosHoyCache : historicoCache;
   if(!lista || lista.length === 0){
     mostrarMsg("No hay datos para exportar.", "error");
     return;
   }
 
-  // Una fila por CADA PRENDA (línea de item), con datos del pedido repetidos
-  const filas = [];
-  lista.forEach(p=>{
-    const notaPaquete = p.piezasPaquete>1 ? `${p.piezasPaquete} PLAYERAS EN EL MISMO PAQUETE` : "";
+  // Agrupar por folio para que las prendas del mismo pedido/paquete queden juntas
+  const listaOrdenada = [...lista].sort((a,b)=>{
+    const fa = (a.folio||"").toString();
+    const fb = (b.folio||"").toString();
+    return fa.localeCompare(fb, 'es');
+  });
+
+  // Aplanar a líneas (una por prenda), conservando el folio para agrupar
+  const lineas = [];
+  listaOrdenada.forEach(p=>{
     (p.items||[]).forEach(it=>{
-      filas.push({
-        "Fecha": p.fecha,
-        "Folio": p.folio,
-        "Canal": p.canal,
-        "Tipo Cliente": p.tipoCliente,
-        "Cliente": p.cliente,
-        "Ciudad": p.ciudad||'',
-        "Género": it.genero,
-        "Talla": it.talla,
-        "Color": it.color,
-        "Marca": it.marca||'',
-        "Descripción": it.descripcion,
-        "Cantidad": it.cantidad,
-        "Nota Paquete": notaPaquete
+      lineas.push({
+        folio: p.folio || "(sin folio)",
+        talla: TALLA_EXPORT[it.talla] || (it.talla||"").toUpperCase(),
+        color: (it.color||"").toUpperCase(),
+        genero: GENERO_EXPORT[it.genero] || (it.genero||"").toUpperCase(),
+        descripcion: (it.descripcion||"").toUpperCase(),
+        cliente: p.cliente || p.canal || "",
+        piezasPaquete: p.piezasPaquete || 0
       });
     });
   });
 
-  const ws = XLSX.utils.json_to_sheet(filas);
-  ws['!cols'] = [
-    {wch:12},{wch:16},{wch:14},{wch:12},{wch:22},{wch:16},
-    {wch:10},{wch:8},{wch:10},{wch:16},{wch:30},{wch:9},{wch:32}
-  ];
-  const wb = XLSX.utils.book_new();
-  XLSX.utils.book_append_sheet(wb, ws, "Pedidos");
+  if(lineas.length === 0){
+    mostrarMsg("No hay prendas para exportar.", "error");
+    return;
+  }
 
+  // Detectar grupos consecutivos con el mismo folio válido → se combina su celda de CLIENTE
+  const grupos = [];
+  let i = 0;
+  while(i < lineas.length){
+    let j = i;
+    const folioActual = lineas[i].folio;
+    while(j+1 < lineas.length && lineas[j+1].folio === folioActual && folioActual !== "(sin folio)"){
+      j++;
+    }
+    grupos.push({inicio:i, fin:j});
+    i = j+1;
+  }
+
+  const workbook = new ExcelJS.Workbook();
+  const ws = workbook.addWorksheet("Pedidos");
+
+  // Columna A vacía (separador), B..G con los anchos del formato de referencia
+  ws.columns = [
+    {width:5}, {width:7.57}, {width:22.71}, {width:26.57}, {width:22}, {width:65.86}, {width:57.14}
+  ];
+
+  const FUENTE = "Calibri";
+  const bordeMedio = {style:"medium", color:{argb:"FF000000"}};
+  const bordeFino = {style:"thin", color:{argb:"FF000000"}};
+
+  // ---- Fila 1: fecha ----
+  ws.mergeCells("B1:G1");
+  const celdaFecha = ws.getCell("B1");
+  const fechasDistintas = [...new Set(listaOrdenada.map(p=>p.fecha))].filter(Boolean).sort();
+  if(fechasDistintas.length === 1){
+    const [y,m,d] = fechasDistintas[0].split("-").map(Number);
+    celdaFecha.value = new Date(y, m-1, d);
+    celdaFecha.numFmt = "mm-dd-yy";
+  } else if(fechasDistintas.length > 1){
+    celdaFecha.value = `${fechasDistintas[0]}  a  ${fechasDistintas[fechasDistintas.length-1]}`;
+  } else {
+    celdaFecha.value = hoyISO();
+  }
+  celdaFecha.font = {name:FUENTE, size:14, bold:true};
+  celdaFecha.alignment = {horizontal:"center", vertical:"center"};
+  celdaFecha.border = {bottom:bordeMedio};
+  ws.getRow(1).height = 19.5;
+
+  // ---- Filas 2-3: encabezados combinados ----
+  const encabezados = [
+    {col:"B", texto:"#"}, {col:"C", texto:"TALLA"}, {col:"D", texto:"COLOR"},
+    {col:"E", texto:"GENERO"}, {col:"F", texto:"DESCRIPCION"}, {col:"G", texto:"CLIENTE"}
+  ];
+  encabezados.forEach(h=>{
+    ws.mergeCells(`${h.col}2:${h.col}3`);
+    const celda = ws.getCell(`${h.col}2`);
+    celda.value = h.texto;
+    celda.font = {name:FUENTE, size:20, bold:true};
+    celda.alignment = {horizontal:"center", vertical:"center"};
+  });
+  ws.getRow(2).height = 26.25;
+  ws.getRow(3).height = 15.75;
+
+  // ---- Filas de datos ----
+  const filaInicio = 4;
+  lineas.forEach((l, idx)=>{
+    const fila = filaInicio + idx;
+    ws.getRow(fila).height = 30.75;
+    ws.getCell(`B${fila}`).value = idx + 1;
+    ws.getCell(`C${fila}`).value = l.talla;
+    ws.getCell(`D${fila}`).value = l.color;
+    ws.getCell(`E${fila}`).value = l.genero;
+    ws.getCell(`F${fila}`).value = l.descripcion;
+    ["B","C","D","E","F"].forEach(col=>{
+      const c = ws.getCell(`${col}${fila}`);
+      c.font = {name:FUENTE, size:20, bold: col==="B"};
+      c.alignment = {horizontal:"center", vertical:"center", wrapText: col==="F"};
+    });
+  });
+  const filaFin = filaInicio + lineas.length - 1;
+
+  // ---- Columna CLIENTE: combinada cuando varias prendas comparten folio/paquete ----
+  grupos.forEach(g=>{
+    const filaTop = filaInicio + g.inicio;
+    const filaBottom = filaInicio + g.fin;
+    const l0 = lineas[g.inicio];
+    let texto = l0.cliente;
+    const numPiezas = g.fin - g.inicio + 1;
+    if(l0.piezasPaquete > 1 || numPiezas > 1){
+      const n = Math.max(l0.piezasPaquete || 0, numPiezas);
+      texto += ` LAS ${n} PLAYERAS EN EL MISMO PAQUETE`;
+    }
+    if(filaBottom > filaTop) ws.mergeCells(`G${filaTop}:G${filaBottom}`);
+    const celda = ws.getCell(`G${filaTop}`);
+    celda.value = texto;
+    celda.font = {name:FUENTE, size:20};
+    celda.alignment = {horizontal:"center", vertical:"center", wrapText:true};
+  });
+
+  // ---- Bordes: fino entre celdas, medio en el perímetro de toda la tabla (B2:G filaFin) ----
+  for(let f = 2; f <= filaFin; f++){
+    ["B","C","D","E","F","G"].forEach(col=>{
+      const c = ws.getCell(`${col}${f}`);
+      c.border = {
+        top: bordeFino, bottom: bordeFino, left: bordeFino, right: bordeFino
+      };
+    });
+  }
+  ["B","C","D","E","F","G"].forEach(col=>{
+    const cTop = ws.getCell(`${col}2`);
+    cTop.border = {...cTop.border, top: bordeMedio};
+    const cBottom = ws.getCell(`${col}${filaFin}`);
+    cBottom.border = {...cBottom.border, bottom: bordeMedio};
+  });
+  for(let f = 2; f <= filaFin; f++){
+    const cLeft = ws.getCell(`B${f}`);
+    cLeft.border = {...cLeft.border, left: bordeMedio};
+    const cRight = ws.getCell(`G${f}`);
+    cRight.border = {...cRight.border, right: bordeMedio};
+  }
+
+  // ---- Descargar ----
+  const buffer = await workbook.xlsx.writeBuffer();
+  const blob = new Blob([buffer], {type:"application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"});
   const nombreArchivo = origen === "hoy"
     ? `Pedidos_${hoyISO()}.xlsx`
     : `Pedidos_Historico_${document.getElementById("hDesde").value}_a_${document.getElementById("hHasta").value}.xlsx`;
-
-  XLSX.writeFile(wb, nombreArchivo);
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url; a.download = nombreArchivo;
+  document.body.appendChild(a); a.click(); document.body.removeChild(a);
+  URL.revokeObjectURL(url);
 }
 
 /* ---------- reportes por ciudad / talla / color / género ---------- */
