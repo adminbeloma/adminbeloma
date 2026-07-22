@@ -3223,6 +3223,26 @@ function actualizarBotonCargarMasVentas(){
   if(label) label.textContent = `${ventas.length} venta${ventas.length===1?'':'s'} cargadas`;
 }
 
+// Trae TODAS las ventas de un rango de fechas directo de Firestore (en lotes
+// de 500 hasta agotarlas) — para usar en Reportes, que necesitan el dato
+// completo del período, no nada más lo que ya esté cargado en memoria.
+async function obtenerVentasEnRango(desde, hasta){
+  let todas=[];
+  let ultimoDoc=null;
+  while(true){
+    const partes = (desde && hasta)
+      ? [collection(db,'pl_ventas'), where('fecha','>=',desde), where('fecha','<=',hasta), orderBy('fecha','desc'), orderBy('creado','desc'), limit(500)]
+      : [collection(db,'pl_ventas'), orderBy('fecha','desc'), orderBy('creado','desc'), limit(500)];
+    if(ultimoDoc) partes.push(startAfter(ultimoDoc));
+    const snap = await getDocs(query(...partes));
+    const docs = snap.docs;
+    todas = todas.concat(docs.map(d=>d.data()));
+    if(docs.length < 500) break;
+    ultimoDoc = docs[docs.length-1];
+  }
+  return todas;
+}
+
 window.cargarMasVentas = async function() {
   toast('Cargando más...');
   if(rangoVentasActivo){
@@ -6784,12 +6804,14 @@ function _agrupar(lista,key){const m={};lista.forEach(x=>{const k=x[key]||'—';
 function _agruparMonto(lista,key){const m={};lista.forEach(x=>{const k=x[key]||'—';if(!m[k])m[k]={cnt:0,total:0};m[k].cnt++;m[k].total+=+x.total||0;});return Object.entries(m).map(([k,v])=>({key:k,...v})).sort((a,b)=>b.total-a.total);}
 
 // VENTAS
-window.generarReporte=function(){
+window.generarReporte=async function(){
   const{desde,hasta}=_repFechas();
   const canal=document.getElementById('rep-v-canal')?.value||'';
   const metodo=document.getElementById('rep-v-metodo')?.value||'';
   const cont=document.getElementById('reporte-contenido');if(!cont)return;
-  let f=ventas.filter(v=>{
+  cont.innerHTML='<div class="empty-state"><div class="icon">⏳</div><p>Generando reporte...</p></div>';
+  const ventasDelRango = await obtenerVentasEnRango(desde, hasta);
+  let f=ventasDelRango.filter(v=>{
     const md=!desde||v.fecha>=desde,mh=!hasta||v.fecha<=hasta;
     return md&&mh&&(!canal||v.canal===canal)&&(!metodo||v.metodoPago===metodo);
   });
@@ -6855,12 +6877,14 @@ window.generarReporte=function(){
 };
 
 // PRENDAS
-function generarReportePrendas(){
+async function generarReportePrendas(){
   const cont=document.getElementById('reporte-prendas-contenido');if(!cont)return;
   const fg=document.getElementById('rep-p-genero')?.value||'';
   const ft=document.getElementById('rep-p-tecnica')?.value||'';
   const fm=document.getElementById('rep-p-material')?.value||'';
-  const ventasPer=_filtrarFechas(ventas);
+  cont.innerHTML='<div class="empty-state"><div class="icon">⏳</div><p>Generando reporte...</p></div>';
+  const{desde,hasta}=_repFechas();
+  const ventasPer=await obtenerVentasEnRango(desde,hasta);
   const items=[];
   ventasPer.forEach(v=>{
     if(Array.isArray(v.items)&&v.items.length>0){
@@ -6889,13 +6913,15 @@ function generarReportePrendas(){
 }
 
 // CLIENTES
-window.generarReporteClientes=function(){
+window.generarReporteClientes=async function(){
   const q=(document.getElementById('reporte-cli-buscar')?.value||'').toLowerCase();
   const canal=document.getElementById('reporte-cli-canal')?.value||'';
   const cont=document.getElementById('reporte-clientes-contenido');if(!cont)return;
+  cont.innerHTML='<div class="empty-state"><div class="icon">⏳</div><p>Generando reporte...</p></div>';
   const{desde,hasta}=_repFechas();
+  const ventasRango=await obtenerVentasEnRango(desde,hasta);
   const mapa={};
-  ventas.filter(v=>{
+  ventasRango.filter(v=>{
     const md=!desde||v.fecha>=desde,mh=!hasta||v.fecha<=hasta;
     return md&&mh&&(!canal||v.canal===canal);
   }).forEach(v=>{
@@ -6927,10 +6953,12 @@ window.generarReporteClientes=function(){
 };
 
 // INVENTARIO
-function generarReporteInventario(){
+async function generarReporteInventario(){
   const cont=document.getElementById('reporte-inventario-contenido');if(!cont)return;
   if(!insumos.length){cont.innerHTML='<div class="empty-state"><div class="icon">📦</div><p>Sin insumos.</p></div>';return;}
-  const ventasPer=_filtrarFechas(ventas);
+  cont.innerHTML='<div class="empty-state"><div class="icon">⏳</div><p>Generando reporte...</p></div>';
+  const{desde,hasta}=_repFechas();
+  const ventasPer=await obtenerVentasEnRango(desde,hasta);
   const totalTintaB=ventasPer.reduce((s,v)=>s+(+v.tintaBlanca||0),0);
   const totalTintaC=ventasPer.reduce((s,v)=>s+(+v.tintaColor||0),0);
   const totalCostoTinta=ventasPer.reduce((s,v)=>s+(+v.costoTinta||0),0);
@@ -7101,11 +7129,14 @@ function generarReportePedidos(){
 }
 
 // CORTES DE CAJA
-window.generarReporteCortes=function(){
+window.generarReporteCortes=async function(){
   const cont=document.getElementById('reporte-cortes-contenido');if(!cont)return;
   let f=_filtrarFechas(cortesCaja);
+  cont.innerHTML='<div class="empty-state"><div class="icon">⏳</div><p>Generando reporte...</p></div>';
+  const{desde,hasta}=_repFechas();
+  const ventasRango=await obtenerVentasEnRango(desde,hasta);
   const ventasPorFecha={};
-  ventas.forEach(v=>{
+  ventasRango.forEach(v=>{
     if(!ventasPorFecha[v.fecha])ventasPorFecha[v.fecha]={local:0,plataforma:0};
     const esLocal=['Local','Foráneo'].includes(v.canal);
     if(esLocal)ventasPorFecha[v.fecha].local+=+v.total||0;
