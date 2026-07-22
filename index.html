@@ -2820,6 +2820,10 @@ const PROCESOS_POR_TIPO={
   'Gorra':['Vinil','Sublimado','Bordado','DTF','Otro'],
 };
 const ITEM_TALLAS=['XS','S','M','L','XL','2XL','3XL','4XL','2','4','6','8','10','12','14','Única'];
+const ITEM_COLORES=["Amarillo Neón","Aqua","Arena","Azul Claro","Beige","Blanco","Canario","Carbón",
+  "Caribe","Celeste","Chocolate","Coral","Delfín","Fucsia","Gris Jaspe","Jade","Ladrillo","Lavanda",
+  "Lima","Mango","Marino","Marrón","Morado","Naranja","Naranja Neón","Negro","Ocre","Olivo","Plata","Rojo",
+  "Rosa Pastel","Royal","Turquesa","Verde Bosque","Verde Neón","Otro"];
 const ITEM_MATERIALES=['Algodón','Algodón Peinado','Dry Fit','Jaspeado','Otro'];
 const ITEM_TIPOS_PRENDA=[
   'Playera básica','Polo','Oversize','Tank Top','Sin mangas',
@@ -2871,7 +2875,12 @@ window.renderItemsVenta=function(){
         </div>
         <div>
           ${_LABEL('Color')}
-          <input type="text" value="${it.color||''}" placeholder="Ej. Negro, Blanco..." oninput="window._ventaItems[${idx}].color=this.value" style="${_ESTILO}">
+          ${(()=>{const colorEsOtro=it._colorModoOtro||(it.color&&!ITEM_COLORES.includes(it.color));return `
+          <select onchange="window._ventaItems[${idx}]._colorModoOtro=(this.value==='Otro');window._ventaItems[${idx}].color=(this.value==='Otro'?'':this.value);renderItemsVenta()" style="${_ESTILO}">
+            <option value="">— Color —</option>
+            ${ITEM_COLORES.map(c=>`<option value="${c}"${(c==='Otro'?colorEsOtro:it.color===c)?' selected':''}>${c}</option>`).join('')}
+          </select>
+          ${colorEsOtro?`<input type="text" value="${it.color||''}" placeholder="Especifica el color" oninput="window._ventaItems[${idx}].color=this.value" style="${_ESTILO}margin-top:4px;">`:''}`;})()}
         </div>
         <div>
           ${_LABEL('Cant.')}
