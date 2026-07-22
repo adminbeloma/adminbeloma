@@ -2795,7 +2795,11 @@ window.openVentaModal=function(tipo, ventaId){
     document.getElementById('v-folio-hint').textContent='Ingresa el folio de Mercado Libre';
   }
   document.getElementById('v-canal').onchange=function(){onCanalChange();};
-  onCanalChange();
+  if(tipo!=='edit'){
+    onCanalChange(); // solo para venta nueva — en edición ya se restauró folio/envío arriba
+  } else {
+    toggleEnvioFields(); // por si acaso, sin tocar el folio ya restaurado
+  }
   openModal('modal-venta');
 };
 
