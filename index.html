@@ -1422,10 +1422,12 @@ tbody td{padding:11px 14px;font-size:13.5px;vertical-align:middle;}
           <div id="v-items-container" style="display:flex;flex-direction:column;gap:8px;margin-top:6px;"></div>
           <button type="button" class="btn btn-ghost btn-sm" style="margin-top:8px;" onclick="agregarItemVenta()">+ Agregar producto</button>
         </div>
-        <div class="form-group"><label>Descuento ($)</label><input type="number" id="v-descuento" placeholder="0" value="0" step="0.01" oninput="recalcTotalVenta()"></div>
+        <div class="form-group"><label>Descuento ($)</label><input type="number" id="v-descuento" placeholder="0" value="0" step="0.01" oninput="recalcTotalVenta()" onfocus="if(this.value==='0')this.value='';"></div>
         <div class="form-group"><label>Total</label><input type="text" id="v-total" readonly style="background:var(--accent-light);font-weight:700;"></div>
         <!-- Anticipo en ventas -->
-        <div class="form-group"><label>Anticipo ($)</label><input type="number" id="v-anticipo" placeholder="0.00" step="0.01" value="0" oninput="recalcTotalVenta()"></div>
+        <div class="form-group"><label>Anticipo ($)</label><input type="number" id="v-anticipo" placeholder="0.00" step="0.01" value="0" oninput="recalcTotalVenta()" onfocus="if(this.value==='0')this.value='';">
+          <div id="v-anticipo-aviso" style="display:none;color:var(--red);font-size:11px;font-weight:600;margin-top:3px;"></div>
+        </div>
         <div class="form-group"><label>Saldo pendiente ($)</label><input type="text" id="v-saldo" readonly style="background:var(--bg);font-weight:700;"></div>
         <!-- campos legacy ocultos para compatibilidad -->
         <input type="hidden" id="v-producto"><input type="hidden" id="v-cantidad" value="1"><input type="hidden" id="v-precio" value="0">
@@ -2761,7 +2763,7 @@ window.openVentaModal=function(tipo, ventaId){
         window._ventaItems=JSON.parse(JSON.stringify(v.items));
         // Asegurar que items viejos tengan los nuevos campos
         window._ventaItems=window._ventaItems.map(it=>({
-          genero:'',talla:'',color:'',material:'',tipoPrenda:'',tipoPrendaOtro:'',tipoGorra:'',tipoGorraOtro:'',tintaBlanca:0,tintaColor:0,
+          genero:'',talla:'',color:'',material:'',tipoPrenda:'',tipoPrendaOtro:'',tipoGorra:'',tipoGorraOtro:'',marca:'',tintaBlanca:0,tintaColor:0,
           ...it
         }));
       } else {
@@ -2858,13 +2860,15 @@ const ITEM_TIPOS_PRENDA=[
   'Otro'
 ];
 const ITEM_TIPOS_GORRA=['Trucker','De malla','Gabardina','De acrílico','Dry Fit','Otro'];
+// Marcas de playera disponibles por producto (igual que en Pedidos Diarios)
+const ITEM_MARCAS=['Euro Cotton','Yazbek','Gildan','PlayeryTees','Bones','Optima','Otro'];
 const _ESTILO=`width:100%;border:1.5px solid var(--border);border-radius:8px;padding:7px 8px;font-size:12px;background:var(--bg-card);color:var(--ink);`;
 const _LABEL=(txt,req)=>`<label style="font-size:11px;font-weight:600;color:var(--ink-soft);">${txt}${req?' <span style="color:var(--red)">*</span>':''}</label>`;
 
 window._ventaItems=[];
 
 window.agregarItemVenta=function(item){
-  const it=item||{tipo:'Hombre',genero:'',talla:'',color:'',material:'',tipoPrenda:'',tipoPrendaOtro:'',tipoGorra:'',tipoGorraOtro:'',descripcion:'',proceso:'DTG',cantidad:1,precio:0,tintaBlanca:0,tintaColor:0};
+  const it=item||{tipo:'Hombre',genero:'',talla:'',color:'',material:'',tipoPrenda:'',tipoPrendaOtro:'',tipoGorra:'',tipoGorraOtro:'',marca:'',descripcion:'',proceso:'DTG',cantidad:1,precio:0,tintaBlanca:0,tintaColor:0};
   window._ventaItems.push(it);
   renderItemsVenta();
 };
@@ -2954,6 +2958,15 @@ window.renderItemsVenta=function(){
           </select>
         </div>
         <div>
+          ${_LABEL('Marca')}
+          ${(()=>{const marcaEsOtro=it._marcaModoOtro||(it.marca&&!ITEM_MARCAS.includes(it.marca));return `
+          <select onchange="window._ventaItems[${idx}]._marcaModoOtro=(this.value==='Otro');window._ventaItems[${idx}].marca=(this.value==='Otro'?'':this.value);renderItemsVenta()" style="${_ESTILO}">
+            <option value="">— Marca —</option>
+            ${ITEM_MARCAS.map(m=>`<option value="${m}"${(m==='Otro'?marcaEsOtro:it.marca===m)?' selected':''}>${m}</option>`).join('')}
+          </select>
+          ${marcaEsOtro?`<input type="text" value="${it.marca||''}" placeholder="Especifica la marca" oninput="window._ventaItems[${idx}].marca=this.value" style="${_ESTILO}margin-top:4px;">`:''}`;})()}
+        </div>
+        <div>
           ${_LABEL('Tipo de prenda')}
           <select onchange="window._ventaItems[${idx}].tipoPrenda=this.value;renderItemsVenta()" style="${_ESTILO}">
             <option value="">— Tipo —</option>
@@ -3010,6 +3023,18 @@ window.recalcTotalVenta=function(){
   const saldo=Math.max(0,total-anticipo);
   if(document.getElementById('v-total')) document.getElementById('v-total').value=fmtMoney(total);
   if(document.getElementById('v-saldo')) document.getElementById('v-saldo').value=fmtMoney(saldo);
+  const anticipoEl=document.getElementById('v-anticipo');
+  const avisoEl=document.getElementById('v-anticipo-aviso');
+  if(anticipoEl && avisoEl){
+    if(anticipo>total && total>0){
+      anticipoEl.style.borderColor='var(--red)';
+      avisoEl.style.display='block';
+      avisoEl.textContent=`⚠️ El anticipo es mayor al total (revisa que no sobren ceros)`;
+    } else {
+      anticipoEl.style.borderColor='';
+      avisoEl.style.display='none';
+    }
+  }
 };
 
 // compat alias
@@ -3135,12 +3160,16 @@ window.guardarVenta=async function(){
   const METODOS_CONTADO=['efectivo','transferencia','deposito','tarjeta'];
   const esContado=METODOS_CONTADO.includes(metodoPago)&&anticipo===0;
   const saldo=esContado?0:Math.max(0,total-anticipo);
+  if(anticipo>total){
+    const continuar=confirm(`⚠️ El anticipo ($${anticipo.toFixed(2)}) es MAYOR al total de la venta ($${total.toFixed(2)}).\n\n¿Es correcto? (revisa que no le hayas puesto ceros de más)`);
+    if(!continuar) return;
+  }
   const idExistente=document.getElementById('venta-id').value;
   const id=idExistente||uid();
   const folioVal=document.getElementById('v-folio').value||generarFolio(canal2);
   // Descripción resumida para registros legacy
   const productoResumen=window._ventaItems.map(it=>
-    `${it.cantidad}x ${it.genero||''} ${it.tipo}${it.talla?' Talla '+it.talla:''}${it.color?' '+it.color:''}${it.descripcion?' ('+it.descripcion+')':''}`.replace(/\s+/g,' ').trim()
+    `${it.cantidad}x ${it.genero||''} ${it.tipo}${it.talla?' Talla '+it.talla:''}${it.color?' '+it.color:''}${it.marca?' ['+it.marca+']':''}${it.descripcion?' ('+it.descripcion+')':''}`.replace(/\s+/g,' ').trim()
   ).join(', ');
   // Preservar fecha de creación si es edición
   const ventaOriginal=idExistente?ventas.find(v=>v.id===idExistente):null;
@@ -6133,13 +6162,13 @@ window.exportarReporteExcel=function(){
     const rows=[];
     ventasPer.forEach(v=>{
       if(Array.isArray(v.items)&&v.items.length>0){
-        v.items.forEach(it=>rows.push([v.fecha,v.cliente||'—',it.tipo,it.genero||'—',it.talla||'—',it.color||'—',it.material||'—',it.tipoPrenda||'—',(it.tipoGorra==='Otro'?it.tipoGorraOtro:it.tipoGorra)||'—',it.proceso||'—',it.cantidad,it.precio]));
+        v.items.forEach(it=>rows.push([v.fecha,v.cliente||'—',it.tipo,it.genero||'—',it.talla||'—',it.color||'—',it.material||'—',it.marca||'—',it.tipoPrenda||'—',(it.tipoGorra==='Otro'?it.tipoGorraOtro:it.tipoGorra)||'—',it.proceso||'—',it.cantidad,it.precio]));
       } else {
-        rows.push([v.fecha,v.cliente||'—',v.genero||'—',v.genero||'—',v.talla||'—',v.color||'—','—','—','—',v.tipoProceso||'—',v.cantidad,v.precio]);
+        rows.push([v.fecha,v.cliente||'—',v.genero||'—',v.genero||'—',v.talla||'—',v.color||'—','—','—','—','—',v.tipoProceso||'—',v.cantidad,v.precio]);
       }
     });
     const ws=XLSX.utils.aoa_to_sheet([
-      ['Fecha','Cliente','Tipo','Género','Talla','Color','Material','Tipo Prenda','Tipo Gorra','Técnica','Cantidad','Precio'],
+      ['Fecha','Cliente','Tipo','Género','Talla','Color','Material','Marca','Tipo Prenda','Tipo Gorra','Técnica','Cantidad','Precio'],
       ...rows
     ]);
     XLSX.utils.book_append_sheet(wb,ws,'Prendas');
