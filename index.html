@@ -26,7 +26,7 @@
 body{font-family:'Inter',sans-serif;background:var(--bg);color:var(--ink);min-height:100vh;display:flex;}
 
 /* SIDEBAR */
-#sidebar{width:var(--sidebar-w);background:var(--bg-dark);height:100vh;display:flex;flex-direction:column;position:fixed;top:0;left:0;z-index:100;}
+#sidebar{width:var(--sidebar-w);background:var(--bg-dark);min-height:100vh;display:flex;flex-direction:column;position:fixed;top:0;left:0;z-index:100;}
 .sidebar-logo{padding:22px 20px 18px;border-bottom:1px solid rgba(255,255,255,0.08);}
 .sidebar-logo .brand{font-family:'DM Serif Display',serif;color:#fff;font-size:17px;line-height:1.2;}
 .sidebar-logo .brand span{display:block;color:var(--accent);font-family:'Inter',sans-serif;font-size:10px;font-weight:600;letter-spacing:0.12em;text-transform:uppercase;margin-top:3px;}
@@ -322,18 +322,19 @@ tbody td{padding:11px 14px;font-size:13.5px;vertical-align:middle;}
       <div style="display:flex;gap:8px;margin-bottom:14px;flex-wrap:wrap;align-items:center;">
         <span style="font-size:12px;color:var(--ink-soft);font-weight:600;">Rango rápido:</span>
         <button class="btn btn-ghost btn-sm" onclick="setRango('hoy')">Hoy</button>
-        <button class="btn btn-ghost btn-sm admin-only" style="display:none;" onclick="setRango('semana')">Semana</button>
-        <button class="btn btn-ghost btn-sm admin-only" style="display:none;" onclick="setRango('mes')">Mes</button>
-        <button class="btn btn-ghost btn-sm admin-only" style="display:none;" onclick="setRango('trimestre')">Trimestre</button>
-        <button class="btn btn-ghost btn-sm admin-only" style="display:none;" onclick="setRango('año')">Año</button>
-        <button class="btn btn-ghost btn-sm admin-only" style="display:none;" onclick="setRango('todo')">Todo</button>
+        <button class="btn btn-ghost btn-sm" onclick="setRango('semana')">Semana</button>
+        <button class="btn btn-ghost btn-sm" onclick="setRango('mes')">Mes</button>
+        <button class="btn btn-ghost btn-sm" onclick="setRango('bimestre')">Bimestral</button>
+        <button class="btn btn-ghost btn-sm" onclick="setRango('trimestre')">Trimestre</button>
+        <button class="btn btn-ghost btn-sm" onclick="setRango('año')">Año</button>
+        <button class="btn btn-ghost btn-sm" onclick="setRango('todo')">Todo</button>
         <button class="btn btn-primary btn-sm" onclick="buscarVentasPorFecha()" style="margin-left:4px;">🔍 Buscar</button>
-        <button class="btn btn-ghost btn-sm admin-only" style="display:none;" onclick="limpiarFiltrosVentas()">✕ Limpiar</button>
+        <button class="btn btn-ghost btn-sm" onclick="limpiarFiltrosVentas()">✕ Limpiar</button>
       </div>
       <div style="display:flex;gap:14px;margin-bottom:16px;flex-wrap:wrap;">
-        <div style="background:var(--bg-card);border:1px solid var(--border);border-radius:8px;padding:12px 16px;"><div style="font-size:11px;color:var(--ink-soft);font-weight:600;text-transform:uppercase;">Total período</div><div style="font-size:20px;font-weight:700;color:var(--green);" id="ventas-total-periodo">$0</div></div>
-        <div style="background:var(--bg-card);border:1px solid var(--border);border-radius:8px;padding:12px 16px;"><div style="font-size:11px;color:var(--ink-soft);font-weight:600;text-transform:uppercase;">Unidades</div><div style="font-size:20px;font-weight:700;" id="ventas-unidades-periodo">0</div></div>
-        <div style="background:var(--bg-card);border:1px solid var(--border);border-radius:8px;padding:12px 16px;"><div style="font-size:11px;color:var(--ink-soft);font-weight:600;text-transform:uppercase;">Ticket promedio</div><div style="font-size:20px;font-weight:700;" id="ventas-ticket-periodo">$0</div></div>
+        <div style="background:var(--bg-card);border:1px solid var(--border);border-radius:8px;padding:12px 16px;"><div id="ventas-total-periodo-label" style="font-size:11px;color:var(--ink-soft);font-weight:600;text-transform:uppercase;">Total período</div><div style="font-size:20px;font-weight:700;color:var(--green);" id="ventas-total-periodo">$0</div></div>
+        <div style="background:var(--bg-card);border:1px solid var(--border);border-radius:8px;padding:12px 16px;"><div id="ventas-unidades-periodo-label" style="font-size:11px;color:var(--ink-soft);font-weight:600;text-transform:uppercase;">Unidades</div><div style="font-size:20px;font-weight:700;" id="ventas-unidades-periodo">0</div></div>
+        <div style="background:var(--bg-card);border:1px solid var(--border);border-radius:8px;padding:12px 16px;"><div id="ventas-ticket-periodo-label" style="font-size:11px;color:var(--ink-soft);font-weight:600;text-transform:uppercase;">Ticket promedio</div><div style="font-size:20px;font-weight:700;" id="ventas-ticket-periodo">$0</div></div>
       </div>
       <div class="table-wrap">
         <table>
@@ -2505,30 +2506,6 @@ let gastosFiltro='todos';
 let cargados=0;
 const TOTAL_COLECCIONES=6;
 
-// Suscripción con reintento automático. Un onSnapshot normal, si el canal en
-// tiempo real se cae (wifi inestable/intermitente, VPN, red restringida, un
-// error transitorio de permisos, etc.), simplemente deja de recibir cambios
-// SIN avisar — por eso hasta ahora "no se guardaba" nada hasta refrescar a
-// mano la página, cuando en realidad sí se guardaba, solo que el listener de
-// quien lo veía se había quedado congelado. Con esto, en vez de morir en
-// silencio, se ve un aviso y se reconecta solo.
-function suscribirConReintento(refFirestore, nombre, callback){
-  let intento = 0;
-  function conectar(){
-    return onSnapshot(refFirestore, s=>{
-      intento = 0;
-      callback(s);
-    }, err=>{
-      console.error(`Error de sincronización en ${nombre}:`, err);
-      intento++;
-      const espera = Math.min(3000 * intento, 20000);
-      toast(`⚠️ Se perdió la conexión (${nombre}), reconectando...`);
-      setTimeout(conectar, espera);
-    });
-  }
-  return conectar();
-}
-
 function checkLoaded(){
   cargados++;
   if(cargados>=TOTAL_COLECCIONES){
@@ -2546,6 +2523,7 @@ try {
 // Ventas: paginación en lugar de cargar todo
 let ultimoDocVenta = null;
 let hayMasVentas = false;
+let rangoVentasActivo = null; // {desde, hasta} si hay un filtro de fecha activo; null = vista por defecto
 let cargandoVentas = false;
 let ventasTotalCount = 0;
 
@@ -2566,7 +2544,8 @@ async function cargarVentas(reset=false) {
   ultimoDocVenta = snap.docs[snap.docs.length-1] || null;
   hayMasVentas = snap.docs.length === 50;
   cargandoVentas = false;
-  
+  if(typeof actualizarBotonCargarMasVentas==='function') actualizarBotonCargarMasVentas();
+
   checkLoaded();
   renderDashboard();
   renderVentas();
@@ -2585,8 +2564,6 @@ onSnapshot(query(collection(db,'pl_ventas'), orderBy('creado','desc'), limit(5))
   const recientes = s.docs.map(d=>d.data());
   // Actualizar ventas recientes en memoria sin recargar todo
   recientes.forEach(v=>{
-    // El operador solo debe ver ventas de hoy — no colar aquí las de otros días
-    if(!isAdmin && v.fecha !== hoy()) return;
     const idx = ventas.findIndex(x=>x.id===v.id);
     if(idx>=0) ventas[idx]=v;
     else if(ventas.length<50) ventas.unshift(v);
@@ -2594,11 +2571,11 @@ onSnapshot(query(collection(db,'pl_ventas'), orderBy('creado','desc'), limit(5))
   renderVentas();
   renderDashboard();
 });
-suscribirConReintento(collection(db,'pl_gastos'), 'Gastos', s=>{gastos=s.docs.map(d=>d.data());checkLoaded();renderDashboard();renderGastos();});
+onSnapshot(collection(db,'pl_gastos'),s=>{gastos=s.docs.map(d=>d.data());checkLoaded();renderDashboard();renderGastos();});
 onSnapshot(collection(db,'pl_playeras'),s=>{playeras=s.docs.map(d=>d.data());checkLoaded();renderPlayeras();});
 onSnapshot(collection(db,'pl_insumos'),s=>{insumos=s.docs.map(d=>d.data());checkLoaded();renderInsumos();renderDashboard();});
 onSnapshot(collection(db,'pl_consumos'),s=>{consumos=s.docs.map(d=>d.data());checkLoaded();});
-suscribirConReintento(collection(db,'pl_clientes'), 'Clientes', s=>{clientes=s.docs.map(d=>d.data());window.clientes=clientes;checkLoaded();renderClientes();});
+onSnapshot(collection(db,'pl_clientes'),s=>{clientes=s.docs.map(d=>d.data());window.clientes=clientes;checkLoaded();renderClientes();});
 
 setTimeout(()=>{document.getElementById('loading-overlay').style.display='none';},8000);
 
@@ -3023,6 +3000,7 @@ async function sincronizarPedidoDesdeVenta(ventaData, telefonoCliente){
   }
   const pedidoData={
     id:pedidoId, origen:'venta', ventaId:ventaData.id,
+    folio:ventaData.folio||'',
     fecha:ventaData.fecha||'', entrega:existente?.entrega||'',
     cliente:ventaData.cliente||'Público en general', telefono:telefonoCliente||existente?.telefono||'',
     descripcion:ventaData.producto||'',
@@ -3117,7 +3095,9 @@ window.guardarVenta=async function(){
   const id=idExistente||uid();
   const folioVal=document.getElementById('v-folio').value||generarFolio(canal2);
   // Descripción resumida para registros legacy
-  const productoResumen=window._ventaItems.map(it=>`${it.cantidad}x ${it.tipo}${it.descripcion?' ('+it.descripcion+')':''}`).join(', ');
+  const productoResumen=window._ventaItems.map(it=>
+    `${it.cantidad}x ${it.genero||''} ${it.tipo}${it.talla?' Talla '+it.talla:''}${it.color?' '+it.color:''}${it.descripcion?' ('+it.descripcion+')':''}`.replace(/\s+/g,' ').trim()
+  ).join(', ');
   // Preservar fecha de creación si es edición
   const ventaOriginal=idExistente?ventas.find(v=>v.id===idExistente):null;
   const data={id,fecha:document.getElementById('v-fecha').value,canal:canal2,
@@ -3148,7 +3128,13 @@ window.guardarVenta=async function(){
   await ajustarStockInsumoAuto('cmyk', totalCcColor-prevTotalCcColor);
   closeModal('modal-venta');
   toast('✅ Venta guardada — Folio: '+folioVal);
-  await cargarVentas(true);
+  // No recargamos "las 50 más recientes" (eso borraría de la vista una venta
+  // con fecha pasada si ya hay 50+ ventas más recientes) — solo actualizamos
+  // esta venta en memoria, respetando el filtro de fecha que se esté viendo.
+  const idxVentaGuardada=ventas.findIndex(v=>v.id===id);
+  if(idxVentaGuardada>=0) ventas[idxVentaGuardada]=data; else ventas.unshift(data);
+  renderVentas();
+  renderDashboard();
 };
 
 // 6) TICKET WHATSAPP
@@ -3204,30 +3190,64 @@ window.enviarTicketWA=function(){
   window.open(url,'_blank');
 };
 
+// Trae un "lote" de ventas — con filtro de fecha (paginado de 200 en 200) o
+// sin filtro (las últimas 50, paginado igual que antes). `continuar=true`
+// pide el siguiente lote a partir de donde se quedó la búsqueda anterior.
+async function traerLoteVentas(desde, hasta, continuar){
+  const conFiltro = !!(desde && hasta);
+  const tamañoLote = conFiltro ? 200 : 50;
+  let q;
+  if(conFiltro){
+    q = (continuar && ultimoDocVenta)
+      ? query(collection(db,'pl_ventas'), where('fecha','>=',desde), where('fecha','<=',hasta), orderBy('fecha','desc'), orderBy('creado','desc'), startAfter(ultimoDocVenta), limit(tamañoLote))
+      : query(collection(db,'pl_ventas'), where('fecha','>=',desde), where('fecha','<=',hasta), orderBy('fecha','desc'), orderBy('creado','desc'), limit(tamañoLote));
+  } else {
+    q = (continuar && ultimoDocVenta)
+      ? query(collection(db,'pl_ventas'), orderBy('fecha','desc'), orderBy('creado','desc'), startAfter(ultimoDocVenta), limit(tamañoLote))
+      : query(collection(db,'pl_ventas'), orderBy('fecha','desc'), orderBy('creado','desc'), limit(tamañoLote));
+  }
+  const snap = await getDocs(q);
+  const nuevas = snap.docs.map(d=>d.data());
+  ventas = continuar ? [...ventas, ...nuevas] : nuevas;
+  ultimoDocVenta = snap.docs[snap.docs.length-1] || null;
+  hayMasVentas = snap.docs.length === tamañoLote;
+  rangoVentasActivo = conFiltro ? {desde,hasta} : null;
+  actualizarBotonCargarMasVentas();
+}
+
+function actualizarBotonCargarMasVentas(){
+  const cont=document.getElementById('ventas-cargar-mas');
+  const label=document.getElementById('ventas-count-label');
+  if(!cont) return;
+  cont.style.display = hayMasVentas ? 'block' : 'none';
+  if(label) label.textContent = `${ventas.length} venta${ventas.length===1?'':'s'} cargadas`;
+}
+
 window.cargarMasVentas = async function() {
-  await cargarVentas(false);
+  toast('Cargando más...');
+  if(rangoVentasActivo){
+    await traerLoteVentas(rangoVentasActivo.desde, rangoVentasActivo.hasta, true);
+  } else {
+    await cargarVentas(false);
+    actualizarBotonCargarMasVentas();
+  }
+  renderVentas();
 };
 
 window.buscarVentasPorFecha = async function() {
-  let desde = document.getElementById('filter-venta-desde').value;
-  let hasta = document.getElementById('filter-venta-hasta').value;
-  if(!isAdmin){ desde = hoy(); hasta = hoy(); document.getElementById('filter-venta-desde').value = desde; document.getElementById('filter-venta-hasta').value = hasta; }
-  
+  const desde = document.getElementById('filter-venta-desde').value;
+  const hasta = document.getElementById('filter-venta-hasta').value;
+
   if(desde && hasta) {
     try {
       toast('🔍 Buscando...');
-      const q = query(collection(db,'pl_ventas'),
-        where('fecha','>=',desde),
-        where('fecha','<=',hasta),
-        orderBy('fecha','desc'),
-        limit(500));
-      const snap = await getDocs(q);
-      ventas = snap.docs.map(d=>d.data());
-      hayMasVentas = false;
+      await traerLoteVentas(desde, hasta, false);
     } catch(e) { console.log('Error búsqueda:', e); }
   } else {
     // Sin fechas, recargar las últimas 50
+    rangoVentasActivo = null;
     await cargarVentas(true);
+    actualizarBotonCargarMasVentas();
   }
   renderVentas();
 };
@@ -3237,30 +3257,26 @@ window.limpiarFiltrosVentas=async function(){
   document.getElementById('filter-canal').value='';
   document.getElementById('filter-venta-desde').value='';
   document.getElementById('filter-venta-hasta').value='';
+  rangoVentasActivo = null;
   await cargarVentas(true);
+  actualizarBotonCargarMasVentas();
   renderVentas();
 };
 
 window.setRango=async function(tipo){
-  if(!isAdmin) tipo = 'hoy'; // el operador solo puede ver el día en curso
   const r=getRango(tipo);
   document.getElementById('filter-venta-desde').value=r.desde;
   document.getElementById('filter-venta-hasta').value=r.hasta;
-  
-  // Si hay rango de fechas, hacer query específica a Firebase
+
+  // Si hay rango de fechas, hacer query específica a Firebase (paginada)
   if(r.desde && r.hasta && tipo !== 'todo'){
     try{
-      const q = query(collection(db,'pl_ventas'), 
-        where('fecha','>=',r.desde), 
-        where('fecha','<=',r.hasta),
-        orderBy('fecha','desc'),
-        limit(500));
-      const snap = await getDocs(q);
-      ventas = snap.docs.map(d=>d.data());
-      hayMasVentas = false;
+      await traerLoteVentas(r.desde, r.hasta, false);
     } catch(e){ console.log('Query error:', e); }
   } else if(tipo === 'todo'){
+    rangoVentasActivo = null;
     await cargarVentas(true);
+    actualizarBotonCargarMasVentas();
   }
   renderVentas();
 };
@@ -3286,11 +3302,21 @@ window.renderVentas=function renderVentas(){
   }).sort((a,b)=>b.fecha>a.fecha?1:-1);
   const tbody=document.getElementById('tabla-ventas');
   const empty=document.getElementById('ventas-empty');
-  const totalPer=lista.reduce((s,v)=>s+(+v.total||0),0);
-  const unidadesPer=lista.reduce((s,v)=>s+(+v.cantidad||0),0);
+  // El operador puede CONSULTAR cualquier rango en la tabla, pero el monto
+  // acumulado (Total período/Unidades/Ticket) siempre debe reflejar SOLO
+  // el día de hoy, nunca el acumulado del rango que esté viendo.
+  const listaParaTotales = isAdmin ? lista : lista.filter(v=>v.fecha===hoy());
+  const totalPer=listaParaTotales.reduce((s,v)=>s+(+v.total||0),0);
+  const unidadesPer=listaParaTotales.reduce((s,v)=>s+(+v.cantidad||0),0);
   document.getElementById('ventas-total-periodo').textContent=fmtMoney(totalPer);
   document.getElementById('ventas-unidades-periodo').textContent=unidadesPer;
-  document.getElementById('ventas-ticket-periodo').textContent=lista.length>0?fmtMoney(totalPer/lista.length):'$0';
+  document.getElementById('ventas-ticket-periodo').textContent=listaParaTotales.length>0?fmtMoney(totalPer/listaParaTotales.length):'$0';
+  const labelTotal=document.getElementById('ventas-total-periodo-label');
+  if(labelTotal) labelTotal.textContent = isAdmin ? 'Total período' : 'Total de hoy';
+  const labelUnidades=document.getElementById('ventas-unidades-periodo-label');
+  if(labelUnidades) labelUnidades.textContent = isAdmin ? 'Unidades' : 'Unidades de hoy';
+  const labelTicket=document.getElementById('ventas-ticket-periodo-label');
+  if(labelTicket) labelTicket.textContent = isAdmin ? 'Ticket promedio' : 'Ticket promedio de hoy';
   if(!tbody)return;
   if(lista.length===0){tbody.innerHTML='';empty.style.display='block';return;}
   empty.style.display='none';
@@ -5131,7 +5157,7 @@ onSnapshot(doc(db,'pl_config','repartidor'),s=>{
 });
 let pedidosFechaFiltro = 'todos'; // 'todos' | 'hoy' | 'ayer' | 'semana' | 'mes' | 'rango'
 onSnapshot(collection(db,'pl_pedidos'),s=>{pedidos=s.docs.map(d=>d.data());renderPedidos();renderCaja();});
-suscribirConReintento(collection(db,'pl_gastos_locales'), 'Gastos de Caja', s=>{gastosLocales=s.docs.map(d=>d.data());renderCaja();renderDashboard();renderGastos();});
+onSnapshot(collection(db,'pl_gastos_locales'),s=>{gastosLocales=s.docs.map(d=>d.data());renderCaja();renderDashboard();renderGastos();});
 
 window.openPedidoModal=function(id){
   if(!id){
@@ -6263,15 +6289,6 @@ const sidebarLogoEl = document.querySelector('.sidebar-logo img');
 if(logoEl && sidebarLogoEl) logoEl.src = sidebarLogoEl.src;
 
 onAuthStateChanged(auth, user => {
-  // Si otra herramienta (Pedido a Yazbek, subir_catalogos.html, etc.) dejó
-  // una sesión anónima activa en este mismo proyecto de Firebase, esa sesión
-  // "cuela" aquí antes de que puedas loguearte con tu correo real, y te
-  // trata como si fueras un usuario sin permisos (Operador). La cerramos
-  // automáticamente para forzar la pantalla de login con correo/contraseña.
-  if(user && (user.isAnonymous || !user.email)) {
-    signOut(auth);
-    return;
-  }
   if(user) {
     currentUser = user;
     isAdmin = user.email === ADMIN_EMAIL;
@@ -6280,15 +6297,6 @@ onAuthStateChanged(auth, user => {
     document.querySelectorAll('.admin-only').forEach(el => {
       el.style.display = isAdmin ? '' : 'none';
     });
-    // El operador solo puede ver Ventas del día en curso — bloquear los campos
-    // de fecha para que no pueda ampliar el rango escribiendo directo ahí
-    const ventaDesde = document.getElementById('filter-venta-desde');
-    const ventaHasta = document.getElementById('filter-venta-hasta');
-    if(ventaDesde && ventaHasta){
-      ventaDesde.disabled = !isAdmin;
-      ventaHasta.disabled = !isAdmin;
-      if(!isAdmin) setRango('hoy');
-    }
     // Agregar botón de cerrar sesión en sidebar
     const footer = document.querySelector('.sidebar-footer');
     if(footer) footer.innerHTML = `
