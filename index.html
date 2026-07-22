@@ -2812,7 +2812,7 @@ const ITEM_TIPOS=[
   {label:'🧢 Gorra',value:'Gorra'},
   {label:'Otro',value:'Otro'},
 ];
-const ITEM_PROCESOS=['DTG','DTF','Serigrafía','Vinil','Bordado','Sublimado','Otro'];
+const ITEM_PROCESOS=['DTG','DTF','Serigrafía','Vinil','Bordado','Sublimado','Sin Estampado','Otro'];
 // Qué técnicas de impresión tiene sentido ofrecer según el tipo de producto.
 // Si el tipo no aparece aquí (Playera, Sudadera, Otro), se muestran TODAS.
 const PROCESOS_POR_TIPO={
@@ -2820,13 +2820,40 @@ const PROCESOS_POR_TIPO={
   'Gorra':['Vinil','Sublimado','Bordado','DTF','Otro'],
 };
 const ITEM_TALLAS=['XS','S','M','L','XL','2XL','3XL','4XL','2','4','6','8','10','12','14','Única'];
+// Tallas según género (Mujer + Tipo de Prenda "Polo" es la única excepción que llega a 2XL)
+const TALLAS_POR_GENERO_VENTA={
+  'Hombre':['S','M','L','XL','2XL','3XL'],
+  'Mujer':['S','M','L','XL'],
+  'Niño / Niña':['S','M','L','XL'],
+  'Juvenil':['S','M','L','XL'],
+  'Bebé':['Talla 1','Talla 2','Talla 3'],
+  'Unisex':['S','M','L','XL','2XL'],
+};
+const TALLA_MUJER_POLO=['S','M','L','XL','2XL'];
+function opcionesTallaVenta(genero,tipoPrenda,tallaActual){
+  let tallas=TALLAS_POR_GENERO_VENTA[genero]||ITEM_TALLAS;
+  if(genero==='Mujer'&&tipoPrenda==='Polo') tallas=TALLA_MUJER_POLO;
+  return tallas.map(t=>`<option value="${t}"${t===tallaActual?' selected':''}>${t}</option>`).join('');
+}
 const ITEM_COLORES=["Amarillo Neón","Aqua","Arena","Azul Claro","Beige","Blanco","Canario","Carbón",
   "Caribe","Celeste","Chocolate","Coral","Delfín","Fucsia","Gris Jaspe","Jade","Ladrillo","Lavanda",
   "Lima","Mango","Marino","Marrón","Morado","Naranja","Naranja Neón","Negro","Ocre","Olivo","Plata","Rojo",
   "Rosa Pastel","Royal","Turquesa","Verde Bosque","Verde Neón","Otro"];
+// Paleta de colores real según género (igual que en Pedido a Yazbek, por prenda)
+const COLORES_POR_GENERO_VENTA={
+  'Hombre':["Negro","Carbón","Gris Jaspe","Plata","Blanco","Arena","Beige","Chocolate","Marrón","Ladrillo","Rojo","Ocre","Naranja","Mango","Canario","Lima","Jade","Olivo","Verde Bosque","Marino","Delfín","Royal","Turquesa","Celeste","Caribe","Azul Claro","Aqua","Rosa Pastel","Coral","Fucsia","Lavanda","Morado","Otro"],
+  'Mujer':["Negro","Carbón","Gris Jaspe","Blanco","Arena","Rojo","Naranja","Canario","Lima","Jade","Marino","Royal","Turquesa","Celeste","Azul Claro","Aqua","Rosa Pastel","Coral","Fucsia","Lavanda","Morado","Caribe","Otro"],
+  'Niño / Niña':["Negro","Carbón","Gris Jaspe","Blanco","Rojo","Naranja","Mango","Canario","Lima","Jade","Marino","Celeste","Rosa Pastel","Fucsia","Morado","Turquesa","Otro"],
+  'Juvenil':["Negro","Carbón","Gris Jaspe","Blanco","Rojo","Naranja","Mango","Canario","Lima","Jade","Marino","Celeste","Rosa Pastel","Fucsia","Morado","Turquesa","Otro"],
+  'Bebé':["Negro","Blanco","Rojo","Naranja","Canario","Lima","Marino","Celeste","Rosa Pastel","Fucsia","Turquesa","Otro"],
+  'Unisex':ITEM_COLORES,
+};
+function coloresParaGenero(genero){
+  return COLORES_POR_GENERO_VENTA[genero]||ITEM_COLORES;
+}
 const ITEM_MATERIALES=['Algodón','Algodón Peinado','Dry Fit','Jaspeado','Otro'];
 const ITEM_TIPOS_PRENDA=[
-  'Playera básica','Polo','Oversize','Tank Top','Sin mangas',
+  'Playera básica','Peso Medio','Polo','Oversize','Tank Top','Sin mangas',
   'Sudadera cuello redondo','Sudadera con gorro y canguro','Sudadera con cierre',
   'Otro'
 ];
@@ -2861,7 +2888,7 @@ window.renderItemsVenta=function(){
         </div>
         <div>
           ${_LABEL('Género *')}
-          <select onchange="window._ventaItems[${idx}].genero=this.value" style="${_ESTILO}">
+          <select onchange="window._ventaItems[${idx}].genero=this.value;renderItemsVenta()" style="${_ESTILO}">
             <option value="">— Género —</option>
             ${['Hombre','Mujer','Niño / Niña','Juvenil','Bebé','Unisex'].map(g=>`<option value="${g}"${it.genero===g?' selected':''}>${g}</option>`).join('')}
           </select>
@@ -2870,15 +2897,15 @@ window.renderItemsVenta=function(){
           ${_LABEL('Talla *')}
           <select onchange="window._ventaItems[${idx}].talla=this.value" style="${_ESTILO}">
             <option value="">— Talla —</option>
-            ${ITEM_TALLAS.map(t=>`<option value="${t}"${it.talla===t?' selected':''}>${t}</option>`).join('')}
+            ${opcionesTallaVenta(it.genero,it.tipoPrenda,it.talla)}
           </select>
         </div>
         <div>
           ${_LABEL('Color')}
-          ${(()=>{const colorEsOtro=it._colorModoOtro||(it.color&&!ITEM_COLORES.includes(it.color));return `
+          ${(()=>{const listaColoresGenero=coloresParaGenero(it.genero);const colorEsOtro=it._colorModoOtro||(it.color&&!listaColoresGenero.includes(it.color));return `
           <select onchange="window._ventaItems[${idx}]._colorModoOtro=(this.value==='Otro');window._ventaItems[${idx}].color=(this.value==='Otro'?'':this.value);renderItemsVenta()" style="${_ESTILO}">
             <option value="">— Color —</option>
-            ${ITEM_COLORES.map(c=>`<option value="${c}"${(c==='Otro'?colorEsOtro:it.color===c)?' selected':''}>${c}</option>`).join('')}
+            ${listaColoresGenero.map(c=>`<option value="${c}"${(c==='Otro'?colorEsOtro:it.color===c)?' selected':''}>${c}</option>`).join('')}
           </select>
           ${colorEsOtro?`<input type="text" value="${it.color||''}" placeholder="Especifica el color" oninput="window._ventaItems[${idx}].color=this.value" style="${_ESTILO}margin-top:4px;">`:''}`;})()}
         </div>
