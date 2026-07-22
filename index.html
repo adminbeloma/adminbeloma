@@ -2505,6 +2505,30 @@ let gastosFiltro='todos';
 let cargados=0;
 const TOTAL_COLECCIONES=6;
 
+// Suscripción con reintento automático. Un onSnapshot normal, si el canal en
+// tiempo real se cae (wifi inestable/intermitente, VPN, red restringida, un
+// error transitorio de permisos, etc.), simplemente deja de recibir cambios
+// SIN avisar — por eso hasta ahora "no se guardaba" nada hasta refrescar a
+// mano la página, cuando en realidad sí se guardaba, solo que el listener de
+// quien lo veía se había quedado congelado. Con esto, en vez de morir en
+// silencio, se ve un aviso y se reconecta solo.
+function suscribirConReintento(refFirestore, nombre, callback){
+  let intento = 0;
+  function conectar(){
+    return onSnapshot(refFirestore, s=>{
+      intento = 0;
+      callback(s);
+    }, err=>{
+      console.error(`Error de sincronización en ${nombre}:`, err);
+      intento++;
+      const espera = Math.min(3000 * intento, 20000);
+      toast(`⚠️ Se perdió la conexión (${nombre}), reconectando...`);
+      setTimeout(conectar, espera);
+    });
+  }
+  return conectar();
+}
+
 function checkLoaded(){
   cargados++;
   if(cargados>=TOTAL_COLECCIONES){
@@ -2570,11 +2594,11 @@ onSnapshot(query(collection(db,'pl_ventas'), orderBy('creado','desc'), limit(5))
   renderVentas();
   renderDashboard();
 });
-onSnapshot(collection(db,'pl_gastos'),s=>{gastos=s.docs.map(d=>d.data());checkLoaded();renderDashboard();renderGastos();});
+suscribirConReintento(collection(db,'pl_gastos'), 'Gastos', s=>{gastos=s.docs.map(d=>d.data());checkLoaded();renderDashboard();renderGastos();});
 onSnapshot(collection(db,'pl_playeras'),s=>{playeras=s.docs.map(d=>d.data());checkLoaded();renderPlayeras();});
 onSnapshot(collection(db,'pl_insumos'),s=>{insumos=s.docs.map(d=>d.data());checkLoaded();renderInsumos();renderDashboard();});
 onSnapshot(collection(db,'pl_consumos'),s=>{consumos=s.docs.map(d=>d.data());checkLoaded();});
-onSnapshot(collection(db,'pl_clientes'),s=>{clientes=s.docs.map(d=>d.data());window.clientes=clientes;checkLoaded();renderClientes();});
+suscribirConReintento(collection(db,'pl_clientes'), 'Clientes', s=>{clientes=s.docs.map(d=>d.data());window.clientes=clientes;checkLoaded();renderClientes();});
 
 setTimeout(()=>{document.getElementById('loading-overlay').style.display='none';},8000);
 
@@ -5107,7 +5131,7 @@ onSnapshot(doc(db,'pl_config','repartidor'),s=>{
 });
 let pedidosFechaFiltro = 'todos'; // 'todos' | 'hoy' | 'ayer' | 'semana' | 'mes' | 'rango'
 onSnapshot(collection(db,'pl_pedidos'),s=>{pedidos=s.docs.map(d=>d.data());renderPedidos();renderCaja();});
-onSnapshot(collection(db,'pl_gastos_locales'),s=>{gastosLocales=s.docs.map(d=>d.data());renderCaja();renderDashboard();renderGastos();});
+suscribirConReintento(collection(db,'pl_gastos_locales'), 'Gastos de Caja', s=>{gastosLocales=s.docs.map(d=>d.data());renderCaja();renderDashboard();renderGastos();});
 
 window.openPedidoModal=function(id){
   if(!id){
