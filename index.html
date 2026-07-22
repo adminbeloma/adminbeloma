@@ -2859,7 +2859,7 @@ window.renderItemsVenta=function(){
           ${_LABEL('Género *')}
           <select onchange="window._ventaItems[${idx}].genero=this.value" style="${_ESTILO}">
             <option value="">— Género —</option>
-            ${['Hombre','Mujer','Niño','Bebé','Unisex'].map(g=>`<option value="${g}"${it.genero===g?' selected':''}>${g}</option>`).join('')}
+            ${['Hombre','Mujer','Niño / Niña','Juvenil','Bebé','Unisex'].map(g=>`<option value="${g}"${it.genero===g?' selected':''}>${g}</option>`).join('')}
           </select>
         </div>
         <div>
