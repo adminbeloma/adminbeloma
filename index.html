@@ -3026,7 +3026,7 @@ window.recalcTotalVenta=function(){
   const anticipoEl=document.getElementById('v-anticipo');
   const avisoEl=document.getElementById('v-anticipo-aviso');
   if(anticipoEl && avisoEl){
-    if(anticipo>total && total>0){
+    if(Math.round(anticipo*100)>Math.round(total*100) && total>0){
       anticipoEl.style.borderColor='var(--red)';
       avisoEl.style.display='block';
       avisoEl.textContent=`⚠️ El anticipo es mayor al total (revisa que no sobren ceros)`;
@@ -3160,7 +3160,7 @@ window.guardarVenta=async function(){
   const METODOS_CONTADO=['efectivo','transferencia','deposito','tarjeta'];
   const esContado=METODOS_CONTADO.includes(metodoPago)&&anticipo===0;
   const saldo=esContado?0:Math.max(0,total-anticipo);
-  if(anticipo>total){
+  if(Math.round(anticipo*100)>Math.round(total*100)){
     const continuar=confirm(`⚠️ El anticipo ($${anticipo.toFixed(2)}) es MAYOR al total de la venta ($${total.toFixed(2)}).\n\n¿Es correcto? (revisa que no le hayas puesto ceros de más)`);
     if(!continuar) return;
   }
