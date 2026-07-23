@@ -6417,8 +6417,17 @@ const logoEl = document.getElementById('login-logo');
 const sidebarLogoEl = document.querySelector('.sidebar-logo img');
 if(logoEl && sidebarLogoEl) logoEl.src = sidebarLogoEl.src;
 
+// Al volver de segundo plano (ej. abrir WhatsApp y regresar), Firebase puede
+// disparar onAuthStateChanged con user=null por una fracción de segundo
+// mientras relee la sesión persistida desde IndexedDB. Si reaccionamos al
+// instante mostrando el login, expulsamos a usuarios que en realidad siguen
+// con sesión válida. Por eso, antes de dar por hecho el logout, esperamos un
+// momento y confirmamos que auth.currentUser siga sin sesión.
+let logoutGraceTimer = null;
+
 onAuthStateChanged(auth, user => {
   if(user) {
+    if(logoutGraceTimer){ clearTimeout(logoutGraceTimer); logoutGraceTimer = null; }
     currentUser = user;
     isAdmin = user.email === ADMIN_EMAIL;
     document.getElementById('login-screen').style.display = 'none';
@@ -6434,10 +6443,21 @@ onAuthStateChanged(auth, user => {
       <button onclick="cerrarSesion()" style="margin-top:8px;background:rgba(255,255,255,0.08);border:none;color:rgba(255,255,255,0.5);padding:5px 10px;border-radius:6px;font-size:11px;cursor:pointer;width:100%;">Cerrar sesión</button>
     `;
   } else {
-    currentUser = null;
-    isAdmin = false;
-    document.getElementById('login-screen').style.display = 'flex';
-    document.getElementById('loading-overlay').style.display = 'none';
+    // No mostramos login de inmediato: esperamos a confirmar que de verdad
+    // no hay sesión (evita el falso logout al volver de WhatsApp).
+    if(logoutGraceTimer) clearTimeout(logoutGraceTimer);
+    logoutGraceTimer = setTimeout(() => {
+      if(auth.currentUser){
+        // La sesión se recuperó dentro del periodo de gracia; no hacer nada.
+        logoutGraceTimer = null;
+        return;
+      }
+      currentUser = null;
+      isAdmin = false;
+      document.getElementById('login-screen').style.display = 'flex';
+      document.getElementById('loading-overlay').style.display = 'none';
+      logoutGraceTimer = null;
+    }, 1500);
   }
 });
 
