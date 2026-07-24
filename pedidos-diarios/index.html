@@ -4,101 +4,47 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Pedidos Diarios · Playeras Beloma</title>
-
-<!-- Firebase -->
 <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-auth-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore-compat.js"></script>
-<!-- SheetJS para exportar Excel -->
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
-<!-- ExcelJS para exportar Excel con formato (fuentes, combinaciones, bordes) -->
 <script src="https://cdnjs.cloudflare.com/ajax/libs/exceljs/4.4.0/exceljs.min.js"></script>
-
 <style>
-  :root{
-    --azul:#1d4ed8;
-    --azul-suave:#eef3ff;
-    --gris-borde:#dde3ee;
-    --gris-texto:#3a4356;
-    --gris-fondo:#f6f8fc;
-    --verde:#16a34a;
-    --rojo:#dc2626;
-    --naranja:#d97706;
-    --blanco:#ffffff;
-    --radio:10px;
-  }
+  :root{--azul:#1d4ed8;--azul-suave:#eef3ff;--gris-borde:#dde3ee;--gris-texto:#3a4356;--gris-fondo:#f6f8fc;--verde:#16a34a;--rojo:#dc2626;--naranja:#d97706;--blanco:#ffffff;--radio:10px;}
   *{box-sizing:border-box;}
-  body{
-    margin:0;
-    font-family:'Segoe UI', system-ui, -apple-system, sans-serif;
-    background:var(--gris-fondo);
-    color:var(--gris-texto);
-  }
-  header{
-    background:var(--azul);
-    color:#fff;
-    padding:18px 24px;
-    display:flex;
-    justify-content:space-between;
-    align-items:center;
-    flex-wrap:wrap;
-    gap:10px;
-  }
+  body{margin:0;font-family:'Segoe UI', system-ui, -apple-system, sans-serif;background:var(--gris-fondo);color:var(--gris-texto);}
+  header{background:var(--azul);color:#fff;padding:18px 24px;display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px;}
   header h1{margin:0;font-size:1.25rem;font-weight:600;}
   header .fecha-hoy{font-size:.85rem;opacity:.9;}
-
   .contenedor{max-width:1200px;margin:0 auto;padding:20px 16px 60px;}
-
   .tabs{display:flex;gap:8px;margin-bottom:18px;flex-wrap:wrap;}
-  .tab-btn{
-    padding:9px 16px;border-radius:8px;border:1px solid var(--gris-borde);
-    background:#fff;cursor:pointer;font-size:.9rem;font-weight:500;color:var(--gris-texto);
-  }
+  .tab-btn{padding:9px 16px;border-radius:8px;border:1px solid var(--gris-borde);background:#fff;cursor:pointer;font-size:.9rem;font-weight:500;color:var(--gris-texto);}
   .tab-btn.activo{background:var(--azul);color:#fff;border-color:var(--azul);}
-
   .panel{display:none;}
   .panel.activo{display:block;}
-
-  .card{
-    background:#fff;border:1px solid var(--gris-borde);border-radius:var(--radio);
-    padding:18px 20px;margin-bottom:18px;
-  }
+  .card{background:#fff;border:1px solid var(--gris-borde);border-radius:var(--radio);padding:18px 20px;margin-bottom:18px;}
   .card h2{margin:0 0 14px;font-size:1rem;color:var(--azul);}
-
   .grid-form{display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:12px;margin-bottom:14px;}
   label{font-size:.78rem;font-weight:600;color:#6b7280;display:block;margin-bottom:4px;}
-  input, select, textarea{
-    width:100%;padding:8px 10px;border:1px solid var(--gris-borde);border-radius:7px;
-    font-size:.88rem;font-family:inherit;background:#fff;color:var(--gris-texto);
-  }
+  input, select, textarea{width:100%;padding:8px 10px;border:1px solid var(--gris-borde);border-radius:7px;font-size:.88rem;font-family:inherit;background:#fff;color:var(--gris-texto);}
   input:focus, select:focus, textarea:focus{outline:2px solid var(--azul);outline-offset:1px;}
-
   table{width:100%;border-collapse:collapse;font-size:.85rem;}
   th, td{padding:8px 10px;border-bottom:1px solid var(--gris-borde);text-align:left;}
   th{background:var(--azul-suave);color:var(--azul);font-weight:600;font-size:.78rem;text-transform:uppercase;}
   tr:hover td{background:#fafbff;}
-
   .items-tabla th, .items-tabla td{padding:6px 8px;}
-  .btn{
-    padding:9px 16px;border:none;border-radius:8px;cursor:pointer;font-size:.86rem;font-weight:600;
-  }
+  .btn{padding:9px 16px;border:none;border-radius:8px;cursor:pointer;font-size:.86rem;font-weight:600;}
   .btn-primario{background:var(--azul);color:#fff;}
   .btn-primario:hover{background:#1a3fc0;}
   .btn-secundario{background:#fff;color:var(--azul);border:1px solid var(--azul);}
   .btn-verde{background:var(--verde);color:#fff;}
   .btn-rojo{background:#fde8e8;color:var(--rojo);}
   .btn-chico{padding:5px 10px;font-size:.78rem;}
-
   .fila-acciones{display:flex;gap:10px;margin-top:8px;flex-wrap:wrap;}
-
   .resumen-dia{display:flex;gap:14px;flex-wrap:wrap;margin-bottom:16px;}
-  .stat{
-    background:#fff;border:1px solid var(--gris-borde);border-radius:var(--radio);
-    padding:14px 18px;min-width:130px;
-  }
+  .stat{background:#fff;border:1px solid var(--gris-borde);border-radius:var(--radio);padding:14px 18px;min-width:130px;}
   .stat .num{font-size:1.5rem;font-weight:700;color:var(--azul);}
   .stat .lbl{font-size:.75rem;color:#6b7280;text-transform:uppercase;}
-
   .badge{padding:2px 9px;border-radius:20px;font-size:.72rem;font-weight:600;}
   .badge-local{background:#e0f2fe;color:#0369a1;}
   .badge-foraneo{background:#fef3c7;color:#b45309;}
@@ -106,23 +52,14 @@
   .badge-shopify{background:#e6f4ea;color:#1e7e34;}
   .badge-tn{background:#f3e8ff;color:#7e22ce;}
   .badge-otro{background:#eef2f7;color:#475569;}
-
   .vacio{text-align:center;color:#94a3b8;padding:30px 10px;font-size:.9rem;}
   .msg{padding:10px 14px;border-radius:8px;font-size:.85rem;margin-bottom:12px;display:none;}
   .msg.ok{background:#e7f8ee;color:#127a3d;display:block;}
   .msg.error{background:#fde8e8;color:var(--rojo);display:block;}
-
   .filtros{display:flex;gap:10px;flex-wrap:wrap;align-items:flex-end;margin-bottom:14px;}
   .filtros > div{min-width:150px;}
-
-  @media (max-width:640px){
-    header{flex-direction:column;align-items:flex-start;}
-    .grid-form{grid-template-columns:1fr 1fr;}
-  }
-  .modal-overlay{
-    display:none;position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:1000;
-    align-items:center;justify-content:center;padding:16px;
-  }
+  @media (max-width:640px){header{flex-direction:column;align-items:flex-start;}.grid-form{grid-template-columns:1fr 1fr;}}
+  .modal-overlay{display:none;position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:1000;align-items:center;justify-content:center;padding:16px;}
   .modal-overlay.activo{display:flex;}
   .modal-box{background:#fff;border-radius:12px;padding:22px 24px;max-width:560px;width:100%;max-height:90vh;overflow-y:auto;}
   .modal-box h3{margin:0 0 16px;color:var(--azul);}
@@ -130,8 +67,6 @@
 </style>
 </head>
 <body>
-
-<!-- ===================== LOGIN ===================== -->
 <div id="pantallaLogin" style="min-height:100vh;display:flex;align-items:center;justify-content:center;background:var(--gris-fondo);">
   <div style="background:#fff;border:1px solid var(--gris-borde);border-radius:14px;padding:32px;max-width:360px;width:90%;">
     <h2 style="margin:0 0 6px;color:var(--azul);">📦 Pedidos Diarios</h2>
@@ -144,28 +79,20 @@
     <button class="btn btn-primario" style="width:100%;padding:11px;" onclick="iniciarSesion()">Entrar</button>
   </div>
 </div>
-
-<!-- ===================== APP (oculta hasta iniciar sesión) ===================== -->
 <div id="appContenido" style="display:none;">
-
 <header>
   <h1>📦 Pedidos Diarios · Todos los Canales</h1>
   <div class="fecha-hoy" id="fechaHoyTxt"></div>
   <button class="btn btn-secundario btn-chico" style="margin-left:auto;" onclick="cerrarSesion()">Cerrar sesión</button>
 </header>
-
 <div class="contenedor">
-
   <div class="tabs">
     <button class="tab-btn activo" data-tab="captura">➕ Capturar pedido</button>
     <button class="tab-btn" data-tab="hoy">📋 Pedidos de hoy</button>
     <button class="tab-btn" data-tab="historico">🕘 Histórico</button>
     <button class="tab-btn" data-tab="reportes">📊 Reportes</button>
   </div>
-
   <div id="msgGlobal" class="msg"></div>
-
-  <!-- ===================== CAPTURA ===================== -->
   <div class="panel activo" id="panel-captura">
     <div class="card">
       <h2>Datos generales de esta captura</h2>
@@ -198,6 +125,19 @@
         Canal, Tipo y Fecha son solo para agilizar la captura de todo lo que estás procesando en este momento.
       </div>
 
+      <div style="border:1px dashed var(--gris-borde);border-radius:8px;padding:12px 14px;margin-bottom:16px;">
+        <label style="margin-bottom:6px;">¿Ya existe el pedido y quieres agregarle más prendas?</label>
+        <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:flex-end;">
+          <div style="min-width:200px;flex:1;">
+            <input type="text" id="buscarFolioExistente" placeholder="Escribe el folio, ej. LOC-240724-01">
+          </div>
+          <button class="btn btn-secundario btn-chico" onclick="buscarPedidoExistente()">Buscar pedido</button>
+        </div>
+        <div id="infoPedidoExistente" style="display:none;margin-top:10px;padding:10px 14px;background:#eef3ff;border-radius:8px;font-size:.85rem;">
+          <span id="infoPedidoExistenteTexto"></span>
+          <button class="btn btn-rojo btn-chico" style="margin-left:10px;" onclick="cancelarPedidoExistente()">Cancelar</button>
+        </div>
+      </div>
       <h2>Prendas / pedidos</h2>
       <div style="overflow-x:auto;">
       <table class="items-tabla" id="tablaItems">
@@ -222,15 +162,12 @@
       <div class="fila-acciones">
         <button class="btn btn-secundario btn-chico" onclick="agregarFilaItem()">+ Agregar prenda / pedido</button>
       </div>
-
       <div class="fila-acciones" style="margin-top:18px;">
         <button class="btn btn-primario" onclick="guardarPedido()">Guardar todo</button>
         <button class="btn btn-secundario" onclick="limpiarFormulario()">Limpiar</button>
       </div>
     </div>
   </div>
-
-  <!-- ===================== HOY ===================== -->
   <div class="panel" id="panel-hoy">
     <div class="resumen-dia" id="resumenHoy"></div>
     <div class="card">
@@ -241,24 +178,13 @@
       </div>
     </div>
   </div>
-
-  <!-- ===================== HISTORICO ===================== -->
   <div class="panel" id="panel-historico">
     <div class="card">
       <h2>Buscar en histórico</h2>
       <div class="filtros">
-        <div>
-          <label>Desde</label>
-          <input type="date" id="hDesde">
-        </div>
-        <div>
-          <label>Hasta</label>
-          <input type="date" id="hHasta">
-        </div>
-        <div>
-          <label>Cliente (contiene)</label>
-          <input type="text" id="hCliente" placeholder="Ej. Pérez">
-        </div>
+        <div><label>Desde</label><input type="date" id="hDesde"></div>
+        <div><label>Hasta</label><input type="date" id="hHasta"></div>
+        <div><label>Cliente (contiene)</label><input type="text" id="hCliente" placeholder="Ej. Pérez"></div>
         <div>
           <label>Canal</label>
           <select id="hCanal">
@@ -271,9 +197,7 @@
             <option value="Otro">Otro</option>
           </select>
         </div>
-        <div>
-          <button class="btn btn-primario" onclick="buscarHistorico()">Buscar</button>
-        </div>
+        <div><button class="btn btn-primario" onclick="buscarHistorico()">Buscar</button></div>
       </div>
       <div id="tablaHistCont"><div class="vacio">Elige un rango de fechas y presiona Buscar.</div></div>
       <div class="fila-acciones" id="accionesHist" style="display:none;">
@@ -281,20 +205,12 @@
       </div>
     </div>
   </div>
-
-  <!-- ===================== REPORTES ===================== -->
   <div class="panel" id="panel-reportes">
     <div class="card">
       <h2>📊 Reporte por Ciudad, Talla, Color y Género</h2>
       <div class="filtros">
-        <div>
-          <label>Desde</label>
-          <input type="date" id="rDesde">
-        </div>
-        <div>
-          <label>Hasta</label>
-          <input type="date" id="rHasta">
-        </div>
+        <div><label>Desde</label><input type="date" id="rDesde"></div>
+        <div><label>Hasta</label><input type="date" id="rHasta"></div>
         <div>
           <label>Canal</label>
           <select id="rCanal">
@@ -307,9 +223,7 @@
             <option value="Otro">Otro</option>
           </select>
         </div>
-        <div>
-          <button class="btn btn-primario" onclick="generarReporte()">Generar reporte</button>
-        </div>
+        <div><button class="btn btn-primario" onclick="generarReporte()">Generar reporte</button></div>
       </div>
       <div id="reporteResumen" class="resumen-dia"></div>
       <div id="reporteContenido"><div class="vacio">Elige un rango de fechas y presiona "Generar reporte".</div></div>
@@ -318,26 +232,15 @@
       </div>
     </div>
   </div>
-
 </div>
-<!-- ===================== MODAL EDITAR PEDIDO ===================== -->
 <div class="modal-overlay" id="modalEditar">
   <div class="modal-box">
     <h3>✏️ Editar pedido</h3>
     <input type="hidden" id="ed-id">
     <div class="modal-grid">
-      <div>
-        <label>Folio</label>
-        <input type="text" id="ed-folio">
-      </div>
-      <div>
-        <label>Cliente</label>
-        <input type="text" id="ed-cliente">
-      </div>
-      <div>
-        <label>Ciudad</label>
-        <input type="text" id="ed-ciudad">
-      </div>
+      <div><label>Folio</label><input type="text" id="ed-folio"></div>
+      <div><label>Cliente</label><input type="text" id="ed-cliente"></div>
+      <div><label>Ciudad</label><input type="text" id="ed-ciudad"></div>
       <div>
         <label>Canal</label>
         <select id="ed-canal">
@@ -356,10 +259,7 @@
           <option value="Foraneo">Foráneo</option>
         </select>
       </div>
-      <div>
-        <label>Fecha</label>
-        <input type="date" id="ed-fecha">
-      </div>
+      <div><label>Fecha</label><input type="date" id="ed-fecha"></div>
       <div>
         <label>Género</label>
         <select id="ed-genero" onchange="onEdGeneroChange()">
@@ -371,10 +271,7 @@
           <option value="Unisex">Unisex</option>
         </select>
       </div>
-      <div>
-        <label>Talla</label>
-        <select id="ed-talla"></select>
-      </div>
+      <div><label>Talla</label><select id="ed-talla"></select></div>
       <div>
         <label>Color</label>
         <select id="ed-color" onchange="onEdColorChange()"></select>
@@ -385,18 +282,9 @@
         <select id="ed-marca" onchange="onEdMarcaChange()"></select>
         <input type="text" id="ed-marca-otro" placeholder="Especifica la marca" style="display:none;margin-top:4px;">
       </div>
-      <div style="grid-column:1/-1;">
-        <label>Descripción</label>
-        <input type="text" id="ed-descripcion">
-      </div>
-      <div>
-        <label>Cantidad</label>
-        <input type="number" id="ed-cantidad" min="1">
-      </div>
-      <div>
-        <label>Piezas en el mismo paquete</label>
-        <input type="number" id="ed-paquete" min="2">
-      </div>
+      <div style="grid-column:1/-1;"><label>Descripción</label><input type="text" id="ed-descripcion"></div>
+      <div><label>Cantidad</label><input type="number" id="ed-cantidad" min="1"></div>
+      <div><label>Piezas en el mismo paquete</label><input type="number" id="ed-paquete" min="2"></div>
     </div>
     <div class="fila-acciones">
       <button class="btn btn-primario" onclick="guardarEdicionPedido()">Guardar cambios</button>
@@ -404,16 +292,8 @@
     </div>
   </div>
 </div>
-
-</div><!-- cierre de #appContenido -->
-
+</div>
 <script>
-/* =====================================================
-   CONFIGURACIÓN FIREBASE
-   Reemplaza esto con la MISMA config que usas en
-   adminbeloma / kiosco / mayoreo (proyecto "adminbeloma").
-   Firestore: northamerica-south1
-===================================================== */
 const firebaseConfig = {
   apiKey: "AIzaSyAvhG8RuytIv9rjsILWF8twyZeqTwfJ10I",
   authDomain: "adminbeloma.firebaseapp.com",
@@ -422,35 +302,21 @@ const firebaseConfig = {
   messagingSenderId: "542305826307",
   appId: "1:542305826307:web:4d97b65719bf534eff0036"
 };
-
 firebase.initializeApp(firebaseConfig);
 const db = firebase.firestore();
 const auth = firebase.auth();
-const COLECCION = "pedidosDiarios"; // colección independiente, no toca "ventas"
+const COLECCION = "pedidosDiarios";
 
-/* ---------- login (misma cuenta que adminbeloma) ---------- */
 window.iniciarSesion = async function(){
   const email = document.getElementById("loginEmail").value.trim();
   const password = document.getElementById("loginPassword").value;
   const msg = document.getElementById("loginMsg");
   msg.style.display = "none";
-  if(!email || !password){
-    msg.textContent = "Escribe tu correo y contraseña.";
-    msg.style.display = "block";
-    return;
-  }
-  try{
-    await auth.signInWithEmailAndPassword(email, password);
-  }catch(err){
-    msg.textContent = "No se pudo iniciar sesión: correo o contraseña incorrectos.";
-    msg.style.display = "block";
-  }
+  if(!email || !password){ msg.textContent = "Escribe tu correo y contraseña."; msg.style.display = "block"; return; }
+  try{ await auth.signInWithEmailAndPassword(email, password); }
+  catch(err){ msg.textContent = "No se pudo iniciar sesión: correo o contraseña incorrectos."; msg.style.display = "block"; }
 };
-
-window.cerrarSesion = function(){
-  auth.signOut();
-};
-
+window.cerrarSesion = function(){ auth.signOut(); };
 auth.onAuthStateChanged(user=>{
   if(user){
     document.getElementById("pantallaLogin").style.display = "none";
@@ -461,50 +327,20 @@ auth.onAuthStateChanged(user=>{
     document.getElementById("appContenido").style.display = "none";
   }
 });
-
-// Enter en el campo de contraseña también inicia sesión
 document.addEventListener("DOMContentLoaded", ()=>{
   const pw = document.getElementById("loginPassword");
   if(pw) pw.addEventListener("keydown", e=>{ if(e.key === "Enter") iniciarSesion(); });
 });
 
 let itemIdCounter = 0;
-
-// Tallas disponibles según el género (clic para elegir, sin teclear)
-const TALLAS_POR_GENERO = {
-  "Caballero": ["CH","M","G","XL","XXL","XXXL"],
-  "Dama": ["CH","M","G","XL","XXL"],
-  "Niño": ["CH","M","G","XL"],
-  "Niña": ["CH","M","G","XL"],
-  "Juvenil": ["CH","M","G","XL"],
-  "Unisex": ["CH","M","G","XL","XXL"]
-};
-// Colores comunes para elegir con un clic (mismos que usamos en Pedido a Yazbek, orden alfabético)
-const COLORES_COMUNES = ["Amarillo Neón","Aqua","Arena","Azul Claro","Beige","Blanco","Canario","Carbón",
-  "Caribe","Celeste","Chocolate","Coral","Delfín","Fucsia","Gris Jaspe","Jade","Ladrillo","Lavanda",
-  "Lima","Mango","Marino","Marrón","Morado","Naranja","Naranja Neón","Negro","Ocre","Olivo","Plata","Rojo",
-  "Rosa Pastel","Royal","Turquesa","Verde Bosque","Verde Neón","Otro"];
-// Marcas de playera disponibles; "Otro" abre un campo de texto libre
+const TALLAS_POR_GENERO = {"Caballero": ["CH","M","G","XL","XXL","XXXL"],"Dama": ["CH","M","G","XL","XXL"],"Niño": ["CH","M","G","XL"],"Niña": ["CH","M","G","XL"],"Juvenil": ["CH","M","G","XL"],"Unisex": ["CH","M","G","XL","XXL"]};
+const COLORES_COMUNES = ["Amarillo Neón","Aqua","Arena","Azul Claro","Beige","Blanco","Canario","Carbón","Caribe","Celeste","Chocolate","Coral","Delfín","Fucsia","Gris Jaspe","Jade","Ladrillo","Lavanda","Lima","Mango","Marino","Marrón","Morado","Naranja","Naranja Neón","Negro","Ocre","Olivo","Plata","Rojo","Rosa Pastel","Royal","Turquesa","Verde Bosque","Verde Neón","Otro"];
 const MARCAS_DISPONIBLES = ["Euro Cotton","Yazbek","Gildan","PlayeryTees","Bones","Optima","Otro"];
 
-/* ---------- utilidades de fecha ---------- */
-function hoyISO(){
-  const d = new Date();
-  return d.getFullYear()+"-"+String(d.getMonth()+1).padStart(2,"0")+"-"+String(d.getDate()).padStart(2,"0");
-}
-function mostrarFechaHoy(){
-  const opciones = {weekday:'long', year:'numeric', month:'long', day:'numeric'};
-  document.getElementById("fechaHoyTxt").textContent =
-    new Date().toLocaleDateString('es-MX', opciones);
-}
-function mostrarMsg(texto, tipo){
-  const el = document.getElementById("msgGlobal");
-  el.textContent = texto;
-  el.className = "msg " + tipo;
-  setTimeout(()=>{ el.className = "msg"; }, 3500);
-}
+function hoyISO(){ const d = new Date(); return d.getFullYear()+"-"+String(d.getMonth()+1).padStart(2,"0")+"-"+String(d.getDate()).padStart(2,"0"); }
+function mostrarFechaHoy(){ const opciones = {weekday:'long', year:'numeric', month:'long', day:'numeric'}; document.getElementById("fechaHoyTxt").textContent = new Date().toLocaleDateString('es-MX', opciones); }
+function mostrarMsg(texto, tipo){ const el = document.getElementById("msgGlobal"); el.textContent = texto; el.className = "msg " + tipo; setTimeout(()=>{ el.className = "msg"; }, 3500); }
 
-/* ---------- tabs ---------- */
 document.querySelectorAll(".tab-btn").forEach(btn=>{
   btn.addEventListener("click", ()=>{
     document.querySelectorAll(".tab-btn").forEach(b=>b.classList.remove("activo"));
@@ -517,28 +353,15 @@ document.querySelectorAll(".tab-btn").forEach(btn=>{
 
 window.onTipoClienteChange = function(){
   if(document.getElementById("fTipoCliente").value === "Local"){
-    document.querySelectorAll("#itemsBody .it-ciudad").forEach(inp=>{
-      if(!inp.value.trim()) inp.value = "Mazatlán, Sinaloa";
-    });
+    document.querySelectorAll("#itemsBody .it-ciudad").forEach(inp=>{ if(!inp.value.trim()) inp.value = "Mazatlán, Sinaloa"; });
   } else {
-    // Foráneo: quitar el "Mazatlán, Sinaloa" que se haya puesto solo, para que la escriban a mano
-    document.querySelectorAll("#itemsBody .it-ciudad").forEach(inp=>{
-      if(inp.value.trim() === "Mazatlán, Sinaloa") inp.value = "";
-    });
+    document.querySelectorAll("#itemsBody .it-ciudad").forEach(inp=>{ if(inp.value.trim() === "Mazatlán, Sinaloa") inp.value = ""; });
   }
 };
 
-/* ---------- filas dinámicas de prendas (cada una = un pedido independiente) ---------- */
-function opcionesTalla(genero, tallaActual){
-  const tallas = TALLAS_POR_GENERO[genero] || TALLAS_POR_GENERO["Unisex"];
-  return tallas.map(t=>`<option value="${t}"${t===tallaActual?' selected':''}>${t}</option>`).join("");
-}
-function opcionesColor(colorActual){
-  return COLORES_COMUNES.map(c=>`<option value="${c}"${c===colorActual?' selected':''}>${c}</option>`).join("");
-}
-function opcionesMarca(marcaActual){
-  return MARCAS_DISPONIBLES.map(m=>`<option value="${m}"${m===marcaActual?' selected':''}>${m}</option>`).join("");
-}
+function opcionesTalla(genero, tallaActual){ const tallas = TALLAS_POR_GENERO[genero] || TALLAS_POR_GENERO["Unisex"]; return tallas.map(t=>`<option value="${t}"${t===tallaActual?' selected':''}>${t}</option>`).join(""); }
+function opcionesColor(colorActual){ return COLORES_COMUNES.map(c=>`<option value="${c}"${c===colorActual?' selected':''}>${c}</option>`).join(""); }
+function opcionesMarca(marcaActual){ return MARCAS_DISPONIBLES.map(m=>`<option value="${m}"${m===marcaActual?' selected':''}>${m}</option>`).join(""); }
 
 function agregarFilaItem(valores){
   const id = "item_"+(itemIdCounter++);
@@ -563,15 +386,11 @@ function agregarFilaItem(valores){
         </select></td>
     <td><select class="it-talla">${opcionesTalla(generoInicial, valores?valores.talla:"")}</select></td>
     <td>
-      <select class="it-color" onchange="onColorFilaChange('${id}')">
-        ${opcionesColor(esColorOtro ? "Otro" : colorInicial)}
-      </select>
+      <select class="it-color" onchange="onColorFilaChange('${id}')">${opcionesColor(esColorOtro ? "Otro" : colorInicial)}</select>
       <input type="text" class="it-color-otro" placeholder="Especifica el color" style="margin-top:4px;display:${esColorOtro?'block':'none'};" value="${esColorOtro?colorInicial:''}">
     </td>
     <td>
-      <select class="it-marca" onchange="onMarcaFilaChange('${id}')">
-        ${opcionesMarca(esMarcaOtro ? "Otro" : marcaInicial)}
-      </select>
+      <select class="it-marca" onchange="onMarcaFilaChange('${id}')">${opcionesMarca(esMarcaOtro ? "Otro" : marcaInicial)}</select>
       <input type="text" class="it-marca-otro" placeholder="Especifica la marca" style="margin-top:4px;display:${esMarcaOtro?'block':'none'};" value="${esMarcaOtro?marcaInicial:''}">
     </td>
     <td><input type="text" class="it-desc" placeholder="Diseño / descripción"></td>
@@ -592,30 +411,9 @@ function agregarFilaItem(valores){
     tr.querySelector(".it-ciudad").value = "Mazatlán, Sinaloa";
   }
 }
-
-function onGeneroFilaChange(id){
-  const tr = document.getElementById(id);
-  const genero = tr.querySelector(".it-genero").value;
-  const tallaSel = tr.querySelector(".it-talla");
-  const tallaActual = tallaSel.value;
-  tallaSel.innerHTML = opcionesTalla(genero, tallaActual);
-}
-
-function onColorFilaChange(id){
-  const tr = document.getElementById(id);
-  const esOtro = tr.querySelector(".it-color").value === "Otro";
-  const otroInput = tr.querySelector(".it-color-otro");
-  otroInput.style.display = esOtro ? "block" : "none";
-  if(esOtro) otroInput.focus();
-}
-
-function onMarcaFilaChange(id){
-  const tr = document.getElementById(id);
-  const esOtro = tr.querySelector(".it-marca").value === "Otro";
-  const otroInput = tr.querySelector(".it-marca-otro");
-  otroInput.style.display = esOtro ? "block" : "none";
-  if(esOtro) otroInput.focus();
-}
+function onGeneroFilaChange(id){ const tr = document.getElementById(id); const genero = tr.querySelector(".it-genero").value; const tallaSel = tr.querySelector(".it-talla"); const tallaActual = tallaSel.value; tallaSel.innerHTML = opcionesTalla(genero, tallaActual); }
+function onColorFilaChange(id){ const tr = document.getElementById(id); const esOtro = tr.querySelector(".it-color").value === "Otro"; const otroInput = tr.querySelector(".it-color-otro"); otroInput.style.display = esOtro ? "block" : "none"; if(esOtro) otroInput.focus(); }
+function onMarcaFilaChange(id){ const tr = document.getElementById(id); const esOtro = tr.querySelector(".it-marca").value === "Otro"; const otroInput = tr.querySelector(".it-marca-otro"); otroInput.style.display = esOtro ? "block" : "none"; if(esOtro) otroInput.focus(); }
 
 function leerItems(){
   const filas = document.querySelectorAll("#itemsBody tr");
@@ -640,7 +438,6 @@ function leerItems(){
   });
   return items;
 }
-
 function limpiarFormulario(){
   document.getElementById("fCanal").value = "Local";
   document.getElementById("fTipoCliente").value = "Local";
@@ -648,113 +445,172 @@ function limpiarFormulario(){
   document.getElementById("itemsBody").innerHTML = "";
   agregarFilaItem();
 }
-
-/* auto-ajustar tipo cliente según canal */
 document.getElementById("fCanal").addEventListener("change", (e)=>{
   const canal = e.target.value;
   const tipoSel = document.getElementById("fTipoCliente");
-  if(canal === "Local") tipoSel.value = "Local";
-  else tipoSel.value = "Foraneo";
+  if(canal === "Local") tipoSel.value = "Local"; else tipoSel.value = "Foraneo";
   onTipoClienteChange();
 });
 
-/* ---------- guardar pedido: cada prenda = un pedido independiente ---------- */
+// Genera un folio automático consecutivo para pedidos Local/Foráneo cuando no se
+// escribió uno a mano. Formato: LOC-YYMMDD-## / FOR-YYMMDD-## (## reinicia cada día).
+async function obtenerConsecutivoFolio(canal, fecha){
+  const prefijo = canal === "Local" ? "LOC" : "FOR";
+  const snap = await db.collection(COLECCION).where("canal","==",canal).where("fecha","==",fecha).get();
+  return {prefijo, siguiente: snap.size + 1};
+}
+
+// Pone las prendas de MercadoLibre primero en la lista, dejando todo lo demás
+// (Local, Foráneo, Shopify, Tienda Nube, Otro) al final — sin alterar el orden
+// de captura dentro de cada uno de esos dos bloques.
+function priorizarML(lista){
+  return lista
+    .map((p, i)=>({p, i}))
+    .sort((a,b)=>{
+      const pa = a.p.canal === "MercadoLibre" ? 0 : 1;
+      const pb = b.p.canal === "MercadoLibre" ? 0 : 1;
+      if(pa !== pb) return pa - pb;
+      return a.i - b.i; // conserva el orden original entre elementos del mismo bloque
+    })
+    .map(x=>x.p);
+}
+
+// Pedido ya guardado al que se le van a agregar prendas nuevas (en vez de crear
+// pedidos independientes nuevos). null = modo normal (cada prenda es su propio pedido).
+let pedidoExistente = null;
+
+async function buscarPedidoExistente(){
+  const folio = document.getElementById("buscarFolioExistente").value.trim();
+  if(!folio){ mostrarMsg("Escribe el folio del pedido que quieres buscar.", "error"); return; }
+  try{
+    const snap = await db.collection(COLECCION).where("folio","==",folio).limit(1).get();
+    if(snap.empty){
+      pedidoExistente = null;
+      document.getElementById("infoPedidoExistente").style.display = "none";
+      mostrarMsg("No se encontró ningún pedido guardado con ese folio.", "error");
+      return;
+    }
+    const doc = snap.docs[0];
+    pedidoExistente = {id: doc.id, ...doc.data()};
+    document.getElementById("infoPedidoExistente").style.display = "block";
+    document.getElementById("infoPedidoExistenteTexto").textContent =
+      `✏️ Se van a AGREGAR las prendas de abajo al pedido "${pedidoExistente.folio}" (${pedidoExistente.cliente}, ya tiene ${pedidoExistente.totalPiezas} pieza(s)).`;
+    mostrarMsg("Pedido encontrado. Agrega las prendas nuevas en la tabla y presiona 'Guardar todo'.", "ok");
+  }catch(err){
+    mostrarMsg("Error al buscar: " + err.message, "error");
+  }
+}
+
+function cancelarPedidoExistente(){
+  pedidoExistente = null;
+  document.getElementById("buscarFolioExistente").value = "";
+  document.getElementById("infoPedidoExistente").style.display = "none";
+}
+
 async function guardarPedido(){
   const canal = document.getElementById("fCanal").value;
   const tipoCliente = document.getElementById("fTipoCliente").value;
   const fecha = document.getElementById("fFecha").value || hoyISO();
   const items = leerItems().filter(it => it.descripcion || it.talla || it.color || it.folio);
-
   if(items.length === 0){ mostrarMsg("Agrega al menos una prenda.", "error"); return; }
 
+  // ---- Modo "agregar a pedido existente" ----
+  if(pedidoExistente){
+    try{
+      const itemsNuevos = items.map(it=>({genero:it.genero, talla:it.talla, color:it.color, marca:it.marca, descripcion:it.descripcion, cantidad:it.cantidad}));
+      const itemsCombinados = [...(pedidoExistente.items||[]), ...itemsNuevos];
+      const totalPiezasCombinado = itemsCombinados.reduce((s,it)=> s + (+it.cantidad||1), 0);
+      await db.collection(COLECCION).doc(pedidoExistente.id).update({
+        items: itemsCombinados,
+        totalPiezas: totalPiezasCombinado,
+        piezasPaquete: Math.max(pedidoExistente.piezasPaquete||0, itemsCombinados.length)
+      });
+      mostrarMsg(`✔ Se agregaron ${items.length} prenda(s) al pedido "${pedidoExistente.folio}"`, "ok");
+      cancelarPedidoExistente();
+      limpiarFormulario();
+      cargarPedidosHoy();
+    }catch(err){
+      console.error(err);
+      mostrarMsg("Error al agregar al pedido: " + err.message, "error");
+    }
+    return;
+  }
+
+  // ---- Modo normal: cada prenda es un pedido independiente ----
   try{
     let guardados = 0;
+    let ordenBase = Date.now();
+    // Folio automático: solo aplica a Local y Foráneo (MercadoLibre/Shopify/etc.
+    // ya traen su propio folio real, que se escribe a mano en el campo Folio).
+    let folioAuto = null;
+    if(canal === "Local" || canal === "Foraneo"){
+      folioAuto = await obtenerConsecutivoFolio(canal, fecha);
+    }
     for(const it of items){
+      let folioFinal = it.folio;
+      if(!folioFinal && folioAuto){
+        const [yy, mm, dd] = fecha.split("-");
+        folioFinal = `${folioAuto.prefijo}-${yy.slice(2)}${mm}${dd}-${String(folioAuto.siguiente).padStart(2,"0")}`;
+        folioAuto.siguiente++;
+      }
       await db.collection(COLECCION).add({
-        folio: it.folio || "(sin folio)",
-        canal,
-        tipoCliente,
+        folio: folioFinal || "(sin folio)",
+        canal, tipoCliente,
         cliente: it.cliente || canal,
         ciudad: it.ciudad || "",
         fecha,
         items: [{genero:it.genero, talla:it.talla, color:it.color, marca:it.marca, descripcion:it.descripcion, cantidad:it.cantidad}],
         totalPiezas: it.cantidad,
         piezasPaquete: it.piezasPaquete || 0,
+        orden: ordenBase++,
         creadoEn: firebase.firestore.FieldValue.serverTimestamp()
       });
       guardados++;
     }
     mostrarMsg(`${guardados} pedido(s) guardado(s) ✔`, "ok");
     limpiarFormulario();
-  }catch(err){
-    console.error(err);
-    mostrarMsg("Error al guardar: " + err.message, "error");
-  }
+  }catch(err){ console.error(err); mostrarMsg("Error al guardar: " + err.message, "error"); }
 }
 
-/* ---------- badges de canal ---------- */
 function badgeCanal(canal){
-  const map = {
-    Local:"badge-local", Foraneo:"badge-foraneo", MercadoLibre:"badge-ml",
-    Shopify:"badge-shopify", TiendaNube:"badge-tn", Otro:"badge-otro"
-  };
+  const map = {Local:"badge-local", Foraneo:"badge-foraneo", MercadoLibre:"badge-ml", Shopify:"badge-shopify", TiendaNube:"badge-tn", Otro:"badge-otro"};
   return `<span class="badge ${map[canal]||'badge-otro'}">${canal}</span>`;
 }
 
-/* ---------- pedidos de hoy ---------- */
 let pedidosHoyCache = [];
-
 async function cargarPedidosHoy(){
   const cont = document.getElementById("tablaHoyCont");
   cont.innerHTML = '<div class="vacio">Cargando...</div>';
   try{
     const hoy = hoyISO();
-    const snap = await db.collection(COLECCION).where("fecha","==",hoy).get();
+    const snap = await db.collection(COLECCION).where("fecha","==",hoy).orderBy("orden","asc").get();
     pedidosHoyCache = [];
     snap.forEach(doc=> pedidosHoyCache.push({id:doc.id, ...doc.data()}));
+    pedidosHoyCache = priorizarML(pedidosHoyCache);
     pintarResumen(pedidosHoyCache, "resumenHoy");
     pintarTablaPedidos(pedidosHoyCache, cont);
-  }catch(err){
-    cont.innerHTML = `<div class="vacio">Error: ${err.message}</div>`;
-  }
+  }catch(err){ cont.innerHTML = `<div class="vacio">Error: ${err.message}</div>`; }
 }
-
 function pintarResumen(lista, contenedorId){
   const totalPedidos = lista.length;
   const totalPiezas = lista.reduce((s,p)=> s + (p.totalPiezas||0), 0);
   const porCanal = {};
   lista.forEach(p=> porCanal[p.canal] = (porCanal[p.canal]||0)+1);
   const canalesTxt = Object.entries(porCanal).map(([c,n])=>`${c}: ${n}`).join(" · ") || "—";
-
   document.getElementById(contenedorId).innerHTML = `
     <div class="stat"><div class="num">${totalPedidos}</div><div class="lbl">Pedidos</div></div>
     <div class="stat"><div class="num">${totalPiezas}</div><div class="lbl">Piezas totales</div></div>
     <div class="stat" style="min-width:220px;"><div class="lbl" style="margin-bottom:6px;">Por canal</div><div style="font-size:.82rem;">${canalesTxt}</div></div>
   `;
 }
-
 function pintarTablaPedidos(lista, contenedor){
-  if(lista.length === 0){
-    contenedor.innerHTML = '<div class="vacio">No hay pedidos registrados.</div>';
-    return;
-  }
-  let html = `<table><thead><tr>
-    <th>Folio</th><th>Canal</th><th>Cliente</th><th>Ciudad</th><th>Tipo</th><th>Piezas</th><th>Detalle</th><th>Acciones</th>
-  </tr></thead><tbody>`;
+  if(lista.length === 0){ contenedor.innerHTML = '<div class="vacio">No hay pedidos registrados.</div>'; return; }
+  let html = `<table><thead><tr><th>Folio</th><th>Canal</th><th>Cliente</th><th>Ciudad</th><th>Tipo</th><th>Piezas</th><th>Detalle</th><th>Acciones</th></tr></thead><tbody>`;
   lista.forEach(p=>{
-    const detalle = (p.items||[]).map(it=>
-      `${it.cantidad}× ${it.genero} ${it.talla} ${it.color}${it.marca?' ('+it.marca+')':''} — ${it.descripcion}`
-    ).join("<br>");
-    const notaPaquete = p.piezasPaquete>1
-      ? `<br><span style="color:#b45309;font-weight:600;">📦 ${p.piezasPaquete} playeras en el mismo paquete</span>`
-      : "";
+    const detalle = (p.items||[]).map(it=> `${it.cantidad}× ${it.genero} ${it.talla} ${it.color}${it.marca?' ('+it.marca+')':''} — ${it.descripcion}`).join("<br>");
+    const notaPaquete = p.piezasPaquete>1 ? `<br><span style="color:#b45309;font-weight:600;">📦 ${p.piezasPaquete} playeras en el mismo paquete</span>` : "";
     html += `<tr>
-      <td>${p.folio}</td>
-      <td>${badgeCanal(p.canal)}</td>
-      <td>${p.cliente}</td>
-      <td>${p.ciudad||'—'}</td>
-      <td>${p.tipoCliente}</td>
-      <td>${p.totalPiezas}</td>
+      <td>${p.folio}</td><td>${badgeCanal(p.canal)}</td><td>${p.cliente}</td><td>${p.ciudad||'—'}</td><td>${p.tipoCliente}</td><td>${p.totalPiezas}</td>
       <td style="font-size:.78rem;color:#6b7280;">${detalle}${notaPaquete}</td>
       <td style="white-space:nowrap;">
         <button class="btn btn-secundario btn-chico" onclick="abrirEditarPedido('${p.id}','hoy')">✏️</button>
@@ -766,13 +622,11 @@ function pintarTablaPedidos(lista, contenedor){
   contenedor.innerHTML = html;
 }
 
-/* ---------- editar / eliminar un pedido ya guardado ---------- */
 function abrirEditarPedido(id, origen){
   const lista = origen === "hoy" ? pedidosHoyCache : historicoCache;
   const p = lista.find(x=>x.id===id);
   if(!p){ mostrarMsg("No se encontró el pedido.", "error"); return; }
   const it = (p.items||[])[0] || {};
-
   document.getElementById("ed-id").value = p.id;
   document.getElementById("ed-id").dataset.origen = origen;
   document.getElementById("ed-folio").value = p.folio || "";
@@ -781,51 +635,26 @@ function abrirEditarPedido(id, origen){
   document.getElementById("ed-canal").value = p.canal || "Local";
   document.getElementById("ed-tipo").value = p.tipoCliente || "Local";
   document.getElementById("ed-fecha").value = p.fecha || hoyISO();
-
   const genero = it.genero || "Caballero";
   document.getElementById("ed-genero").value = genero;
   document.getElementById("ed-talla").innerHTML = opcionesTalla(genero, it.talla || "");
-
   const colorEsOtro = it.color && !COLORES_COMUNES.includes(it.color);
   document.getElementById("ed-color").innerHTML = opcionesColor(colorEsOtro ? "Otro" : (it.color||""));
   document.getElementById("ed-color-otro").style.display = colorEsOtro ? "block" : "none";
   document.getElementById("ed-color-otro").value = colorEsOtro ? it.color : "";
-
   const marcaEsOtro = it.marca && !MARCAS_DISPONIBLES.includes(it.marca);
   document.getElementById("ed-marca").innerHTML = opcionesMarca(marcaEsOtro ? "Otro" : (it.marca||""));
   document.getElementById("ed-marca-otro").style.display = marcaEsOtro ? "block" : "none";
   document.getElementById("ed-marca-otro").value = marcaEsOtro ? it.marca : "";
-
   document.getElementById("ed-descripcion").value = it.descripcion || "";
   document.getElementById("ed-cantidad").value = it.cantidad || 1;
   document.getElementById("ed-paquete").value = p.piezasPaquete || "";
-
   document.getElementById("modalEditar").classList.add("activo");
 }
-
-function cerrarModalEditar(){
-  document.getElementById("modalEditar").classList.remove("activo");
-}
-
-function onEdGeneroChange(){
-  const genero = document.getElementById("ed-genero").value;
-  const tallaSel = document.getElementById("ed-talla");
-  tallaSel.innerHTML = opcionesTalla(genero, tallaSel.value);
-}
-
-function onEdColorChange(){
-  const esOtro = document.getElementById("ed-color").value === "Otro";
-  const otroInput = document.getElementById("ed-color-otro");
-  otroInput.style.display = esOtro ? "block" : "none";
-  if(esOtro) otroInput.focus();
-}
-
-function onEdMarcaChange(){
-  const esOtro = document.getElementById("ed-marca").value === "Otro";
-  const otroInput = document.getElementById("ed-marca-otro");
-  otroInput.style.display = esOtro ? "block" : "none";
-  if(esOtro) otroInput.focus();
-}
+function cerrarModalEditar(){ document.getElementById("modalEditar").classList.remove("activo"); }
+function onEdGeneroChange(){ const genero = document.getElementById("ed-genero").value; const tallaSel = document.getElementById("ed-talla"); tallaSel.innerHTML = opcionesTalla(genero, tallaSel.value); }
+function onEdColorChange(){ const esOtro = document.getElementById("ed-color").value === "Otro"; const otroInput = document.getElementById("ed-color-otro"); otroInput.style.display = esOtro ? "block" : "none"; if(esOtro) otroInput.focus(); }
+function onEdMarcaChange(){ const esOtro = document.getElementById("ed-marca").value === "Otro"; const otroInput = document.getElementById("ed-marca-otro"); otroInput.style.display = esOtro ? "block" : "none"; if(esOtro) otroInput.focus(); }
 
 async function guardarEdicionPedido(){
   const id = document.getElementById("ed-id").value;
@@ -835,7 +664,6 @@ async function guardarEdicionPedido(){
   const marcaSel = document.getElementById("ed-marca").value;
   const marca = marcaSel === "Otro" ? document.getElementById("ed-marca-otro").value.trim() : marcaSel;
   const cantidad = parseInt(document.getElementById("ed-cantidad").value) || 1;
-
   const data = {
     folio: document.getElementById("ed-folio").value.trim() || "(sin folio)",
     cliente: document.getElementById("ed-cliente").value.trim(),
@@ -843,75 +671,45 @@ async function guardarEdicionPedido(){
     canal: document.getElementById("ed-canal").value,
     tipoCliente: document.getElementById("ed-tipo").value,
     fecha: document.getElementById("ed-fecha").value || hoyISO(),
-    items: [{
-      genero: document.getElementById("ed-genero").value,
-      talla: document.getElementById("ed-talla").value,
-      color, marca,
-      descripcion: document.getElementById("ed-descripcion").value.trim(),
-      cantidad
-    }],
+    items: [{ genero: document.getElementById("ed-genero").value, talla: document.getElementById("ed-talla").value, color, marca, descripcion: document.getElementById("ed-descripcion").value.trim(), cantidad }],
     totalPiezas: cantidad,
     piezasPaquete: parseInt(document.getElementById("ed-paquete").value) || 0
   };
-
   try{
     await db.collection(COLECCION).doc(id).update(data);
     mostrarMsg("✅ Pedido actualizado", "ok");
     cerrarModalEditar();
     if(origen === "hoy") cargarPedidosHoy(); else buscarHistorico();
-  }catch(err){
-    mostrarMsg("Error al actualizar: " + err.message, "error");
-  }
+  }catch(err){ mostrarMsg("Error al actualizar: " + err.message, "error"); }
 }
-
 async function eliminarPedido(id, origen){
   if(!confirm("¿Eliminar este pedido? Esta acción no se puede deshacer.")) return;
   try{
     await db.collection(COLECCION).doc(id).delete();
     mostrarMsg("🗑 Pedido eliminado", "ok");
     if(origen === "hoy") cargarPedidosHoy(); else buscarHistorico();
-  }catch(err){
-    mostrarMsg("Error al eliminar: " + err.message, "error");
-  }
+  }catch(err){ mostrarMsg("Error al eliminar: " + err.message, "error"); }
 }
 
-/* ---------- histórico ---------- */
 let historicoCache = [];
-
 async function buscarHistorico(){
   const desde = document.getElementById("hDesde").value;
   const hasta = document.getElementById("hHasta").value;
   const clienteFiltro = document.getElementById("hCliente").value.trim().toLowerCase();
   const canalFiltro = document.getElementById("hCanal").value;
   const cont = document.getElementById("tablaHistCont");
-
-  if(!desde || !hasta){
-    mostrarMsg("Elige fecha 'Desde' y 'Hasta'.", "error");
-    return;
-  }
-
+  if(!desde || !hasta){ mostrarMsg("Elige fecha 'Desde' y 'Hasta'.", "error"); return; }
   cont.innerHTML = '<div class="vacio">Buscando...</div>';
   try{
-    let query = db.collection(COLECCION).where("fecha",">=",desde).where("fecha","<=",hasta);
+    let query = db.collection(COLECCION).where("fecha",">=",desde).where("fecha","<=",hasta).orderBy("fecha","desc").orderBy("orden","asc");
     const snap = await query.get();
     let lista = [];
     snap.forEach(doc=> lista.push({id:doc.id, ...doc.data()}));
-
     if(canalFiltro) lista = lista.filter(p=> p.canal === canalFiltro);
     if(clienteFiltro) lista = lista.filter(p=> (p.cliente||"").toLowerCase().includes(clienteFiltro));
-
-    lista.sort((a,b)=> (a.fecha < b.fecha ? 1 : -1));
-    historicoCache = lista;
-
-    if(lista.length === 0){
-      cont.innerHTML = '<div class="vacio">Sin resultados para ese filtro.</div>';
-      document.getElementById("accionesHist").style.display = "none";
-      return;
-    }
-
-    let html = `<table><thead><tr>
-      <th>Fecha</th><th>Folio</th><th>Canal</th><th>Cliente</th><th>Ciudad</th><th>Tipo</th><th>Piezas</th><th>Acciones</th>
-    </tr></thead><tbody>`;
+    historicoCache = priorizarML(lista);
+    if(lista.length === 0){ cont.innerHTML = '<div class="vacio">Sin resultados para ese filtro.</div>'; document.getElementById("accionesHist").style.display = "none"; return; }
+    let html = `<table><thead><tr><th>Fecha</th><th>Folio</th><th>Canal</th><th>Cliente</th><th>Ciudad</th><th>Tipo</th><th>Piezas</th><th>Acciones</th></tr></thead><tbody>`;
     lista.forEach(p=>{
       html += `<tr>
         <td>${p.fecha}</td><td>${p.folio}</td><td>${badgeCanal(p.canal)}</td>
@@ -925,32 +723,16 @@ async function buscarHistorico(){
     html += "</tbody></table>";
     cont.innerHTML = html;
     document.getElementById("accionesHist").style.display = "flex";
-  }catch(err){
-    cont.innerHTML = `<div class="vacio">Error: ${err.message}</div>`;
-  }
+  }catch(err){ cont.innerHTML = `<div class="vacio">Error: ${err.message}</div>`; }
 }
 
-/* ---------- exportar a Excel (formato "lista de producción" con encabezado combinado) ---------- */
-
-// Talla/Género de captura → texto que se usa en la lista de producción
 const TALLA_EXPORT = {"CH":"CHICA","M":"MEDIANA","G":"GRANDE","XL":"XL","XXL":"XXL","XXXL":"XXXL"};
 const GENERO_EXPORT = {"Caballero":"HOMBRE","Dama":"MUJER","Niño":"NIÑO","Niña":"NIÑA","Juvenil":"JUVENIL","Unisex":"UNISEX"};
 
 async function exportarExcel(origen){
   const lista = origen === "hoy" ? pedidosHoyCache : historicoCache;
-  if(!lista || lista.length === 0){
-    mostrarMsg("No hay datos para exportar.", "error");
-    return;
-  }
-
-  // Agrupar por folio para que las prendas del mismo pedido/paquete queden juntas
-  const listaOrdenada = [...lista].sort((a,b)=>{
-    const fa = (a.folio||"").toString();
-    const fb = (b.folio||"").toString();
-    return fa.localeCompare(fb, 'es');
-  });
-
-  // Aplanar a líneas (una por prenda), conservando el folio para agrupar
+  if(!lista || lista.length === 0){ mostrarMsg("No hay datos para exportar.", "error"); return; }
+  const listaOrdenada = [...lista];
   const lineas = [];
   listaOrdenada.forEach(p=>{
     (p.items||[]).forEach(it=>{
@@ -965,38 +747,22 @@ async function exportarExcel(origen){
       });
     });
   });
-
-  if(lineas.length === 0){
-    mostrarMsg("No hay prendas para exportar.", "error");
-    return;
-  }
-
-  // Detectar grupos consecutivos con el mismo folio válido → se combina su celda de CLIENTE
+  if(lineas.length === 0){ mostrarMsg("No hay prendas para exportar.", "error"); return; }
   const grupos = [];
   let i = 0;
   while(i < lineas.length){
     let j = i;
     const folioActual = lineas[i].folio;
-    while(j+1 < lineas.length && lineas[j+1].folio === folioActual && folioActual !== "(sin folio)"){
-      j++;
-    }
+    while(j+1 < lineas.length && lineas[j+1].folio === folioActual && folioActual !== "(sin folio)"){ j++; }
     grupos.push({inicio:i, fin:j});
     i = j+1;
   }
-
   const workbook = new ExcelJS.Workbook();
   const ws = workbook.addWorksheet("Pedidos");
-
-  // Columna A vacía (separador), B..G con los anchos del formato de referencia
-  ws.columns = [
-    {width:5}, {width:7.57}, {width:22.71}, {width:26.57}, {width:22}, {width:65.86}, {width:57.14}
-  ];
-
+  ws.columns = [{width:5}, {width:7.57}, {width:22.71}, {width:26.57}, {width:22}, {width:65.86}, {width:57.14}];
   const FUENTE = "Calibri";
   const bordeMedio = {style:"medium", color:{argb:"FF000000"}};
   const bordeFino = {style:"thin", color:{argb:"FF000000"}};
-
-  // ---- Fila 1: fecha ----
   ws.mergeCells("B1:G1");
   const celdaFecha = ws.getCell("B1");
   const fechasDistintas = [...new Set(listaOrdenada.map(p=>p.fecha))].filter(Boolean).sort();
@@ -1006,19 +772,12 @@ async function exportarExcel(origen){
     celdaFecha.numFmt = "mm-dd-yy";
   } else if(fechasDistintas.length > 1){
     celdaFecha.value = `${fechasDistintas[0]}  a  ${fechasDistintas[fechasDistintas.length-1]}`;
-  } else {
-    celdaFecha.value = hoyISO();
-  }
+  } else { celdaFecha.value = hoyISO(); }
   celdaFecha.font = {name:FUENTE, size:14, bold:true};
   celdaFecha.alignment = {horizontal:"center", vertical:"center"};
   celdaFecha.border = {bottom:bordeMedio};
   ws.getRow(1).height = 19.5;
-
-  // ---- Filas 2-3: encabezados combinados ----
-  const encabezados = [
-    {col:"B", texto:"#"}, {col:"C", texto:"TALLA"}, {col:"D", texto:"COLOR"},
-    {col:"E", texto:"GENERO"}, {col:"F", texto:"DESCRIPCION"}, {col:"G", texto:"CLIENTE"}
-  ];
+  const encabezados = [{col:"B", texto:"#"}, {col:"C", texto:"TALLA"}, {col:"D", texto:"COLOR"}, {col:"E", texto:"GENERO"}, {col:"F", texto:"DESCRIPCION"}, {col:"G", texto:"CLIENTE"}];
   encabezados.forEach(h=>{
     ws.mergeCells(`${h.col}2:${h.col}3`);
     const celda = ws.getCell(`${h.col}2`);
@@ -1028,8 +787,6 @@ async function exportarExcel(origen){
   });
   ws.getRow(2).height = 26.25;
   ws.getRow(3).height = 15.75;
-
-  // ---- Filas de datos ----
   const filaInicio = 4;
   lineas.forEach((l, idx)=>{
     const fila = filaInicio + idx;
@@ -1046,8 +803,6 @@ async function exportarExcel(origen){
     });
   });
   const filaFin = filaInicio + lineas.length - 1;
-
-  // ---- Columna CLIENTE: combinada cuando varias prendas comparten folio/paquete ----
   grupos.forEach(g=>{
     const filaTop = filaInicio + g.inicio;
     const filaBottom = filaInicio + g.fin;
@@ -1064,14 +819,10 @@ async function exportarExcel(origen){
     celda.font = {name:FUENTE, size:20};
     celda.alignment = {horizontal:"center", vertical:"center", wrapText:true};
   });
-
-  // ---- Bordes: fino entre celdas, medio en el perímetro de toda la tabla (B2:G filaFin) ----
   for(let f = 2; f <= filaFin; f++){
     ["B","C","D","E","F","G"].forEach(col=>{
       const c = ws.getCell(`${col}${f}`);
-      c.border = {
-        top: bordeFino, bottom: bordeFino, left: bordeFino, right: bordeFino
-      };
+      c.border = {top: bordeFino, bottom: bordeFino, left: bordeFino, right: bordeFino};
     });
   }
   ["B","C","D","E","F","G"].forEach(col=>{
@@ -1086,13 +837,9 @@ async function exportarExcel(origen){
     const cRight = ws.getCell(`G${f}`);
     cRight.border = {...cRight.border, right: bordeMedio};
   }
-
-  // ---- Descargar ----
   const buffer = await workbook.xlsx.writeBuffer();
   const blob = new Blob([buffer], {type:"application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"});
-  const nombreArchivo = origen === "hoy"
-    ? `Pedidos_${hoyISO()}.xlsx`
-    : `Pedidos_Historico_${document.getElementById("hDesde").value}_a_${document.getElementById("hHasta").value}.xlsx`;
+  const nombreArchivo = origen === "hoy" ? `Pedidos_${hoyISO()}.xlsx` : `Pedidos_Historico_${document.getElementById("hDesde").value}_a_${document.getElementById("hHasta").value}.xlsx`;
   const url = URL.createObjectURL(blob);
   const a = document.createElement("a");
   a.href = url; a.download = nombreArchivo;
@@ -1100,21 +847,14 @@ async function exportarExcel(origen){
   URL.revokeObjectURL(url);
 }
 
-/* ---------- reportes por ciudad / talla / color / género ---------- */
 let reporteCache = [];
-
 async function generarReporte(){
   const desde = document.getElementById("rDesde").value;
   const hasta = document.getElementById("rHasta").value;
   const canalFiltro = document.getElementById("rCanal").value;
   const cont = document.getElementById("reporteContenido");
   const resumenEl = document.getElementById("reporteResumen");
-
-  if(!desde || !hasta){
-    mostrarMsg("Elige fecha 'Desde' y 'Hasta'.", "error");
-    return;
-  }
-
+  if(!desde || !hasta){ mostrarMsg("Elige fecha 'Desde' y 'Hasta'.", "error"); return; }
   cont.innerHTML = '<div class="vacio">Generando reporte...</div>';
   resumenEl.innerHTML = "";
   try{
@@ -1123,82 +863,31 @@ async function generarReporte(){
     snap.forEach(doc=> lista.push({id:doc.id, ...doc.data()}));
     if(canalFiltro) lista = lista.filter(p=> p.canal === canalFiltro);
     reporteCache = lista;
-
-    if(lista.length === 0){
-      cont.innerHTML = '<div class="vacio">Sin datos para ese rango.</div>';
-      document.getElementById("accionesReporte").style.display = "none";
-      return;
-    }
-
-    // Aplanar: cada línea de item con los datos de su pedido
+    if(lista.length === 0){ cont.innerHTML = '<div class="vacio">Sin datos para ese rango.</div>'; document.getElementById("accionesReporte").style.display = "none"; return; }
     const lineas = [];
-    lista.forEach(p=>{
-      (p.items||[]).forEach(it=>{
-        lineas.push({ciudad: p.ciudad || "(sin ciudad)", talla: it.talla || "(sin talla)",
-          color: it.color || "(sin color)", genero: it.genero || "(sin género)", cantidad: it.cantidad || 0});
-      });
-    });
-
+    lista.forEach(p=>{ (p.items||[]).forEach(it=>{ lineas.push({ciudad: p.ciudad || "(sin ciudad)", talla: it.talla || "(sin talla)", color: it.color || "(sin color)", genero: it.genero || "(sin género)", cantidad: it.cantidad || 0}); }); });
     const totalPedidos = lista.length;
     const totalPiezas = lineas.reduce((s,l)=> s + l.cantidad, 0);
-
-    resumenEl.innerHTML = `
-      <div class="stat"><div class="num">${totalPedidos}</div><div class="lbl">Pedidos</div></div>
-      <div class="stat"><div class="num">${totalPiezas}</div><div class="lbl">Piezas totales</div></div>
-    `;
-
+    resumenEl.innerHTML = `<div class="stat"><div class="num">${totalPedidos}</div><div class="lbl">Pedidos</div></div><div class="stat"><div class="num">${totalPiezas}</div><div class="lbl">Piezas totales</div></div>`;
     function agrupar(campo){
       const grupos = {};
-      lineas.forEach(l=>{
-        const k = l[campo];
-        if(!grupos[k]) grupos[k] = {pedidos:0, piezas:0};
-        grupos[k].pedidos++;
-        grupos[k].piezas += l.cantidad;
-      });
+      lineas.forEach(l=>{ const k = l[campo]; if(!grupos[k]) grupos[k] = {pedidos:0, piezas:0}; grupos[k].pedidos++; grupos[k].piezas += l.cantidad; });
       return Object.entries(grupos).sort((a,b)=> b[1].piezas - a[1].piezas);
     }
-
     function tablaGrupo(titulo, campo){
       const grupos = agrupar(campo);
-      let filas = grupos.map(([nombre, g])=>
-        `<tr><td>${nombre}</td><td>${g.piezas}</td><td>${g.pedidos}</td></tr>`
-      ).join("");
-      return `
-        <div class="card" style="margin-bottom:14px;">
-          <h2 style="margin-bottom:8px;">${titulo}</h2>
-          <table><thead><tr><th>${titulo.replace('Por ','')}</th><th>Piezas</th><th>Líneas</th></tr></thead>
-          <tbody>${filas}</tbody></table>
-        </div>`;
+      let filas = grupos.map(([nombre, g])=> `<tr><td>${nombre}</td><td>${g.piezas}</td><td>${g.pedidos}</td></tr>`).join("");
+      return `<div class="card" style="margin-bottom:14px;"><h2 style="margin-bottom:8px;">${titulo}</h2><table><thead><tr><th>${titulo.replace('Por ','')}</th><th>Piezas</th><th>Líneas</th></tr></thead><tbody>${filas}</tbody></table></div>`;
     }
-
-    cont.innerHTML = `
-      <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:14px;">
-        ${tablaGrupo("Por Ciudad","ciudad")}
-        ${tablaGrupo("Por Género","genero")}
-        ${tablaGrupo("Por Talla","talla")}
-        ${tablaGrupo("Por Color","color")}
-      </div>`;
+    cont.innerHTML = `<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:14px;">${tablaGrupo("Por Ciudad","ciudad")}${tablaGrupo("Por Género","genero")}${tablaGrupo("Por Talla","talla")}${tablaGrupo("Por Color","color")}</div>`;
     document.getElementById("accionesReporte").style.display = "flex";
-  }catch(err){
-    cont.innerHTML = `<div class="vacio">Error: ${err.message}</div>`;
-  }
+  }catch(err){ cont.innerHTML = `<div class="vacio">Error: ${err.message}</div>`; }
 }
 
 function exportarReporteExcel(){
-  if(!reporteCache || reporteCache.length === 0){
-    mostrarMsg("No hay datos para exportar.", "error");
-    return;
-  }
+  if(!reporteCache || reporteCache.length === 0){ mostrarMsg("No hay datos para exportar.", "error"); return; }
   const filas = [];
-  reporteCache.forEach(p=>{
-    (p.items||[]).forEach(it=>{
-      filas.push({
-        "Fecha": p.fecha, "Folio": p.folio, "Canal": p.canal, "Cliente": p.cliente,
-        "Ciudad": p.ciudad||"", "Género": it.genero, "Talla": it.talla, "Color": it.color,
-        "Marca": it.marca||"", "Descripción": it.descripcion, "Cantidad": it.cantidad
-      });
-    });
-  });
+  reporteCache.forEach(p=>{ (p.items||[]).forEach(it=>{ filas.push({"Fecha": p.fecha, "Folio": p.folio, "Canal": p.canal, "Cliente": p.cliente, "Ciudad": p.ciudad||"", "Género": it.genero, "Talla": it.talla, "Color": it.color, "Marca": it.marca||"", "Descripción": it.descripcion, "Cantidad": it.cantidad}); }); });
   const ws = XLSX.utils.json_to_sheet(filas);
   ws['!cols'] = [{wch:12},{wch:16},{wch:14},{wch:22},{wch:16},{wch:10},{wch:8},{wch:10},{wch:16},{wch:30},{wch:9}];
   const wb = XLSX.utils.book_new();
@@ -1208,10 +897,8 @@ function exportarReporteExcel(){
   XLSX.writeFile(wb, `Reporte_Pedidos_${desde}_a_${hasta}.xlsx`);
 }
 
-/* ---------- init ---------- */
 mostrarFechaHoy();
 limpiarFormulario();
-// (cargarPedidosHoy ahora se dispara tras iniciar sesión, ver arriba)
 </script>
 </body>
 </html>
