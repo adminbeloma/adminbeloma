@@ -2763,7 +2763,7 @@ window.openVentaModal=function(tipo, ventaId){
         window._ventaItems=JSON.parse(JSON.stringify(v.items));
         // Asegurar que items viejos tengan los nuevos campos
         window._ventaItems=window._ventaItems.map(it=>({
-          genero:'',talla:'',color:'',material:'',tipoPrenda:'',tipoPrendaOtro:'',tipoGorra:'',tipoGorraOtro:'',marca:'',tintaBlanca:0,tintaColor:0,
+          genero:'',talla:'',color:'',material:'',tipoPrenda:'',tipoPrendaOtro:'',tipoGorra:'',tipoGorraOtro:'',marca:'',tintaBlanca:0,tintaColor:0,multiTG:false,desglose:[],
           ...it
         }));
       } else {
@@ -2868,7 +2868,7 @@ const _LABEL=(txt,req)=>`<label style="font-size:11px;font-weight:600;color:var(
 window._ventaItems=[];
 
 window.agregarItemVenta=function(item){
-  const it=item||{tipo:'Hombre',genero:'',talla:'',color:'',material:'',tipoPrenda:'',tipoPrendaOtro:'',tipoGorra:'',tipoGorraOtro:'',marca:'',descripcion:'',proceso:'DTG',cantidad:1,precio:0,tintaBlanca:0,tintaColor:0};
+  const it=item||{tipo:'Hombre',genero:'',talla:'',color:'',material:'',tipoPrenda:'',tipoPrendaOtro:'',tipoGorra:'',tipoGorraOtro:'',marca:'',descripcion:'',proceso:'DTG',cantidad:1,precio:0,tintaBlanca:0,tintaColor:0,multiTG:false,desglose:[]};
   window._ventaItems.push(it);
   renderItemsVenta();
 };
@@ -2878,11 +2878,46 @@ window.eliminarItemVenta=function(idx){
   renderItemsVenta();
 };
 
+// ---- Mismo diseño, varias tallas/géneros: no repetir tinta ni datos por cada combinación ----
+window.toggleMultiTG=function(idx, checked){
+  const it=window._ventaItems[idx];
+  it.multiTG=checked;
+  if(checked && (!it.desglose || it.desglose.length===0)){
+    // Arranca el desglose con lo que ya tenía capturado en Género/Talla/Cant.
+    it.desglose=[{genero:it.genero||'', talla:it.talla||'', cantidad:it.cantidad||1}];
+  }
+  window.actualizarCantidadDesdeDesglose(idx);
+  renderItemsVenta();
+};
+window.agregarVarianteDesglose=function(idx){
+  const it=window._ventaItems[idx];
+  if(!it.desglose) it.desglose=[];
+  it.desglose.push({genero:'', talla:'', cantidad:1});
+  window.actualizarCantidadDesdeDesglose(idx);
+  renderItemsVenta();
+};
+window.quitarVarianteDesglose=function(idx, dIdx){
+  window._ventaItems[idx].desglose.splice(dIdx,1);
+  window.actualizarCantidadDesdeDesglose(idx);
+  renderItemsVenta();
+};
+window.actualizarCantidadDesdeDesglose=function(idx){
+  const it=window._ventaItems[idx];
+  const suma=(it.desglose||[]).reduce((s,d)=>s+(+d.cantidad||0),0);
+  it.cantidad=suma>0?suma:1;
+  recalcTotalVenta();
+  recalcCostoTintaVenta();
+};
+
 window.renderItemsVenta=function(){
   const cont=document.getElementById('v-items-container');
   if(!cont) return;
   cont.innerHTML=window._ventaItems.map((it,idx)=>`
     <div style="background:var(--bg);border:1px solid var(--border);border-radius:10px;padding:12px;margin-bottom:4px;">
+      <div style="display:flex;align-items:center;gap:6px;margin-bottom:10px;">
+        <input type="checkbox" id="multiTG-${idx}" ${it.multiTG?'checked':''} onchange="toggleMultiTG(${idx}, this.checked)">
+        <label for="multiTG-${idx}" style="font-size:11px;font-weight:600;color:var(--ink-soft);cursor:pointer;">🎨 Mismo diseño, varias tallas/géneros (captura la tinta y el resto una sola vez)</label>
+      </div>
       <div style="display:grid;grid-template-columns:1fr 1fr 1fr 1fr 80px 100px 32px;gap:8px;align-items:end;">
         <div>
           ${_LABEL('Tipo')}
@@ -2890,6 +2925,15 @@ window.renderItemsVenta=function(){
             ${ITEM_TIPOS.map(t=>`<option value="${t.value}"${it.tipo===t.value?' selected':''}>${t.label}</option>`).join('')}
           </select>
         </div>
+        ${it.multiTG?`
+        <div>
+          ${_LABEL('Género')}
+          <input type="text" value="Varios (ver abajo)" disabled style="${_ESTILO}background:var(--border);color:var(--ink-soft);">
+        </div>
+        <div>
+          ${_LABEL('Talla')}
+          <input type="text" value="Varias (ver abajo)" disabled style="${_ESTILO}background:var(--border);color:var(--ink-soft);">
+        </div>`:`
         <div>
           ${_LABEL('Género *')}
           <select onchange="window._ventaItems[${idx}].genero=this.value;renderItemsVenta()" style="${_ESTILO}">
@@ -2903,7 +2947,7 @@ window.renderItemsVenta=function(){
             <option value="">— Talla —</option>
             ${opcionesTallaVenta(it.genero,it.tipoPrenda,it.talla)}
           </select>
-        </div>
+        </div>`}
         <div>
           ${_LABEL('Color')}
           ${(()=>{const listaColoresGenero=coloresParaGenero(it.genero);const colorEsOtro=it._colorModoOtro||(it.color&&!listaColoresGenero.includes(it.color));return `
@@ -2915,7 +2959,9 @@ window.renderItemsVenta=function(){
         </div>
         <div>
           ${_LABEL('Cant.')}
-          <input type="number" value="${it.cantidad||1}" min="1" oninput="window._ventaItems[${idx}].cantidad=+this.value||1;recalcTotalVenta()" style="${_ESTILO}">
+          ${it.multiTG?
+            `<input type="number" value="${it.cantidad||1}" disabled style="${_ESTILO}background:var(--border);color:var(--ink-soft);">`
+            :`<input type="number" value="${it.cantidad||1}" min="1" oninput="window._ventaItems[${idx}].cantidad=+this.value||1;recalcTotalVenta()" style="${_ESTILO}">`}
         </div>
         <div>
           ${_LABEL('Precio $')}
@@ -2925,6 +2971,27 @@ window.renderItemsVenta=function(){
           <button type="button" onclick="eliminarItemVenta(${idx})" title="Quitar" style="background:none;border:none;font-size:18px;cursor:pointer;color:var(--red);">🗑</button>
         </div>
       </div>
+      ${it.multiTG?`
+      <div style="margin-top:8px;padding:10px;background:var(--bg-card);border:1px dashed var(--border);border-radius:8px;">
+        <div style="font-size:11px;font-weight:600;color:var(--ink-soft);margin-bottom:8px;">Desglose por género/talla (mismo diseño, mismo color, misma tinta)</div>
+        ${(it.desglose||[]).map((d,dIdx)=>`
+        <div style="display:grid;grid-template-columns:1fr 1fr 80px 32px;gap:6px;margin-bottom:6px;align-items:end;">
+          <select onchange="window._ventaItems[${idx}].desglose[${dIdx}].genero=this.value;renderItemsVenta()" style="${_ESTILO}">
+            <option value="">— Género —</option>
+            ${['Hombre','Mujer','Niño / Niña','Juvenil','Bebé','Unisex'].map(g=>`<option value="${g}"${d.genero===g?' selected':''}>${g}</option>`).join('')}
+          </select>
+          <select onchange="window._ventaItems[${idx}].desglose[${dIdx}].talla=this.value" style="${_ESTILO}">
+            <option value="">— Talla —</option>
+            ${opcionesTallaVenta(d.genero,it.tipoPrenda,d.talla)}
+          </select>
+          <input type="number" value="${d.cantidad||1}" min="1" oninput="window._ventaItems[${idx}].desglose[${dIdx}].cantidad=+this.value||1;actualizarCantidadDesdeDesglose(${idx})" style="${_ESTILO}">
+          <button type="button" onclick="quitarVarianteDesglose(${idx},${dIdx})" title="Quitar variante" style="background:none;border:none;font-size:16px;cursor:pointer;color:var(--red);">🗑</button>
+        </div>`).join('')}
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-top:6px;">
+          <button type="button" onclick="agregarVarianteDesglose(${idx})" style="background:var(--accent-light);border:1px solid var(--border);border-radius:6px;padding:5px 10px;font-size:11px;cursor:pointer;">+ Agregar variante</button>
+          <div style="font-size:11px;color:var(--ink-soft);">Total: <strong>${it.cantidad||0} pzas</strong> (se calcula solo, sumando las variantes de arriba)</div>
+        </div>
+      </div>`:''}
       <div style="display:grid;grid-template-columns:1fr 1fr 1fr 1fr;gap:8px;margin-top:8px;align-items:end;">
         <div>
           ${_LABEL('Proceso')}
@@ -3168,9 +3235,13 @@ window.guardarVenta=async function(){
   const id=idExistente||uid();
   const folioVal=document.getElementById('v-folio').value||generarFolio(canal2);
   // Descripción resumida para registros legacy
-  const productoResumen=window._ventaItems.map(it=>
-    `${it.cantidad}x ${it.genero||''} ${it.tipo}${it.talla?' Talla '+it.talla:''}${it.color?' '+it.color:''}${it.marca?' ['+it.marca+']':''}${it.descripcion?' ('+it.descripcion+')':''}`.replace(/\s+/g,' ').trim()
-  ).join(', ');
+  const productoResumen=window._ventaItems.map(it=>{
+    if(it.multiTG && it.desglose && it.desglose.length){
+      const detalle=it.desglose.map(d=>`${d.cantidad}${d.genero?' '+d.genero:''}${d.talla?' '+d.talla:''}`).join(' + ');
+      return `${it.cantidad}x ${it.tipo} [${detalle}]${it.color?' '+it.color:''}${it.marca?' ['+it.marca+']':''}${it.descripcion?' ('+it.descripcion+')':''}`.replace(/\s+/g,' ').trim();
+    }
+    return `${it.cantidad}x ${it.genero||''} ${it.tipo}${it.talla?' Talla '+it.talla:''}${it.color?' '+it.color:''}${it.marca?' ['+it.marca+']':''}${it.descripcion?' ('+it.descripcion+')':''}`.replace(/\s+/g,' ').trim();
+  }).join(', ');
   // Preservar fecha de creación si es edición
   const ventaOriginal=idExistente?ventas.find(v=>v.id===idExistente):null;
   const data={id,fecha:document.getElementById('v-fecha').value,canal:canal2,
@@ -3421,8 +3492,8 @@ window.renderVentas=function renderVentas(){
     if(Array.isArray(v.items)&&v.items.length>0){
       productoTxt=v.items.map(it=>`${it.cantidad}x ${it.tipo}${it.descripcion?' ('+it.descripcion+')':''}`).join(', ');
       procesoTxt=[...new Set(v.items.map(it=>it.proceso).filter(Boolean))].join(', ')||v.tipoProceso||'—';
-      generoTxt=[...new Set(v.items.map(it=>it.genero).filter(Boolean))].join(', ')||v.genero||'—';
-      tallaTxt=[...new Set(v.items.map(it=>it.talla).filter(Boolean))].join(', ')||v.talla||'—';
+      generoTxt=[...new Set(v.items.flatMap(it=>(it.multiTG&&it.desglose&&it.desglose.length)?it.desglose.map(d=>d.genero):[it.genero]).filter(Boolean))].join(', ')||v.genero||'—';
+      tallaTxt=[...new Set(v.items.flatMap(it=>(it.multiTG&&it.desglose&&it.desglose.length)?it.desglose.map(d=>d.talla):[it.talla]).filter(Boolean))].join(', ')||v.talla||'—';
       colorTxt=[...new Set(v.items.map(it=>it.color).filter(Boolean))].join(', ')||v.color||'—';
     } else {
       generoTxt=v.genero||'—';
@@ -6162,7 +6233,13 @@ window.exportarReporteExcel=function(){
     const rows=[];
     ventasPer.forEach(v=>{
       if(Array.isArray(v.items)&&v.items.length>0){
-        v.items.forEach(it=>rows.push([v.fecha,v.cliente||'—',it.tipo,it.genero||'—',it.talla||'—',it.color||'—',it.material||'—',it.marca||'—',it.tipoPrenda||'—',(it.tipoGorra==='Otro'?it.tipoGorraOtro:it.tipoGorra)||'—',it.proceso||'—',it.cantidad,it.precio]));
+        v.items.forEach(it=>{
+          if(it.multiTG && Array.isArray(it.desglose) && it.desglose.length){
+            it.desglose.forEach(d=>rows.push([v.fecha,v.cliente||'—',it.tipo,d.genero||'—',d.talla||'—',it.color||'—',it.material||'—',it.marca||'—',it.tipoPrenda||'—',(it.tipoGorra==='Otro'?it.tipoGorraOtro:it.tipoGorra)||'—',it.proceso||'—',d.cantidad,it.precio]));
+          } else {
+            rows.push([v.fecha,v.cliente||'—',it.tipo,it.genero||'—',it.talla||'—',it.color||'—',it.material||'—',it.marca||'—',it.tipoPrenda||'—',(it.tipoGorra==='Otro'?it.tipoGorraOtro:it.tipoGorra)||'—',it.proceso||'—',it.cantidad,it.precio]);
+          }
+        });
       } else {
         rows.push([v.fecha,v.cliente||'—',v.genero||'—',v.genero||'—',v.talla||'—',v.color||'—','—','—','—','—',v.tipoProceso||'—',v.cantidad,v.precio]);
       }
