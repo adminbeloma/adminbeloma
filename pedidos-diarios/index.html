@@ -4,9 +4,9 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Pedidos Diarios · Playeras Beloma</title>
-<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
-<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-auth-compat.js"></script>
-<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-auth-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore-compat.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/exceljs/4.4.0/exceljs.min.js"></script>
 <style>
@@ -302,9 +302,13 @@ const firebaseConfig = {
   messagingSenderId: "542305826307",
   appId: "1:542305826307:web:4d97b65719bf534eff0036"
 };
-firebase.initializeApp(firebaseConfig);
-const db = firebase.firestore();
-const auth = firebase.auth();
+// Nombre propio para esta app de Firebase: así su sesión se guarda bajo una
+// llave distinta a la del adminbeloma principal (antes usaba la app "por
+// defecto", la MISMA que el sistema principal, y eso podía pisar la sesión
+// de quien estuviera usando el otro módulo al mismo tiempo).
+const appPedidosDiarios = firebase.initializeApp(firebaseConfig, "pedidosDiarios");
+const db = appPedidosDiarios.firestore();
+const auth = appPedidosDiarios.auth();
 const COLECCION = "pedidosDiarios";
 
 window.iniciarSesion = async function(){
