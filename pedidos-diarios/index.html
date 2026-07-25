@@ -587,9 +587,14 @@ async function cargarPedidosHoy(){
   cont.innerHTML = '<div class="vacio">Cargando...</div>';
   try{
     const hoy = hoyISO();
-    const snap = await db.collection(COLECCION).where("fecha","==",hoy).orderBy("orden","asc").get();
+    // Ya NO se usa orderBy("orden") aquí: eso excluía automáticamente cualquier
+    // pedido capturado ANTES de que existiera ese campo (todo lo viejo
+    // desaparecía). Se trae todo el día y se ordena en JavaScript, usando
+    // "orden" cuando existe y 0 como respaldo para los pedidos antiguos.
+    const snap = await db.collection(COLECCION).where("fecha","==",hoy).get();
     pedidosHoyCache = [];
     snap.forEach(doc=> pedidosHoyCache.push({id:doc.id, ...doc.data()}));
+    pedidosHoyCache.sort((a,b)=> (a.orden||0) - (b.orden||0));
     pedidosHoyCache = priorizarML(pedidosHoyCache);
     pintarResumen(pedidosHoyCache, "resumenHoy");
     pintarTablaPedidos(pedidosHoyCache, cont);
@@ -705,10 +710,16 @@ async function buscarHistorico(){
   if(!desde || !hasta){ mostrarMsg("Elige fecha 'Desde' y 'Hasta'.", "error"); return; }
   cont.innerHTML = '<div class="vacio">Buscando...</div>';
   try{
-    let query = db.collection(COLECCION).where("fecha",">=",desde).where("fecha","<=",hasta).orderBy("fecha","desc").orderBy("orden","asc");
+    let query = db.collection(COLECCION).where("fecha",">=",desde).where("fecha","<=",hasta).orderBy("fecha","desc");
     const snap = await query.get();
     let lista = [];
     snap.forEach(doc=> lista.push({id:doc.id, ...doc.data()}));
+    // Ordenar en JS (no con orderBy("orden") en Firestore): así no se excluyen
+    // los pedidos capturados antes de que existiera el campo "orden".
+    lista.sort((a,b)=>{
+      if(a.fecha !== b.fecha) return a.fecha < b.fecha ? 1 : -1;
+      return (a.orden||0) - (b.orden||0);
+    });
     if(canalFiltro) lista = lista.filter(p=> p.canal === canalFiltro);
     if(clienteFiltro) lista = lista.filter(p=> (p.cliente||"").toLowerCase().includes(clienteFiltro));
     historicoCache = priorizarML(lista);
