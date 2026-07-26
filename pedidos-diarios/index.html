@@ -104,6 +104,16 @@
       <button class="btn btn-secundario btn-chico" onclick="document.getElementById('inputImportarML').click()">📥 Elegir Excel</button>
       <input type="file" id="inputImportarML" accept=".xlsx" style="display:none;" onchange="importarPedidosExcelML(this.files[0])">
     </div>
+    <div class="card" style="border:1px dashed var(--gris-borde);">
+      <h2>📥 Importar "Listado" histórico (un día por hoja, Local + Mercado Libre)</h2>
+      <p style="font-size:.8rem;color:#6b7280;margin:0 0 12px;">
+        Sube el Excel mensual con formato de lista de producción (#, TALLA, COLOR, GENERO, DESCRIPCION, CLIENTE — un día por hoja).
+        Las filas de "MERCADO LIBRE" quedan sin cliente/ciudad; las locales conservan el nombre capturado.
+        No duplica días ya importados de este mismo archivo.
+      </p>
+      <button class="btn btn-secundario btn-chico" onclick="document.getElementById('inputImportarListado').click()">📥 Elegir Excel</button>
+      <input type="file" id="inputImportarListado" accept=".xlsx" style="display:none;" onchange="importarListadoHistorico(this.files[0])">
+    </div>
     <div class="card">
       <h2>Datos generales de esta captura</h2>
       <div class="grid-form">
@@ -686,6 +696,127 @@ async function importarPedidosExcelML(file){
 
     document.getElementById('inputImportarML').value = '';
     mostrarMsg(`✅ Importadas ${creados} prendas (${ordenFolios.length} folios nuevos)`, 'ok');
+  }catch(err){
+    console.error(err);
+    mostrarMsg('⚠️ Error al importar: ' + err.message, 'error');
+  }
+}
+
+// ---- Importar "Listado" histórico (un día por hoja, formato # TALLA COLOR
+// GENERO DESCRIPCION CLIENTE, mezcla Local + Mercado Libre) ----
+const GENERO_MAP_HIST = {
+  'HOMBRE':'Caballero', 'MUJER':'Dama', 'NIÑO':'Niño', 'NINO':'Niño', 'NIÑA':'Niña', 'NINA':'Niña',
+  'JUVENIL':'Juvenil', 'JUEVENIL':'Juvenil', 'UNISEX':'Unisex', 'BEBE':'Bebé', 'BEBÉ':'Bebé'
+};
+function mapGeneroHist(txt){
+  const t = (txt||'').toString().trim().toUpperCase();
+  return GENERO_MAP_HIST[t] || 'Unisex';
+}
+function tituloCasoHist(s){
+  return (s||'').toLowerCase().replace(/\b\w/g, c=>c.toUpperCase());
+}
+function fechaISOdeCeldaHist(v){
+  let d = v;
+  if(typeof v === 'number') d = new Date(Math.round((v-25569)*86400*1000));
+  if(!(d instanceof Date) || isNaN(d)) return null;
+  const yyyy=d.getUTCFullYear(), mm=String(d.getUTCMonth()+1).padStart(2,'0'), dd=String(d.getUTCDate()).padStart(2,'0');
+  return `${yyyy}-${mm}-${dd}`;
+}
+async function importarListadoHistorico(file){
+  if(!file) return;
+  if(!confirm(`¿Importar "${file.name}" como pedidos históricos?\n\nSe crea un pedido por cada prenda de cada día. Las de Mercado Libre quedan sin cliente/ciudad; las locales conservan el nombre capturado. No se duplican días ya importados de este archivo.`)){
+    document.getElementById('inputImportarListado').value = '';
+    return;
+  }
+  mostrarMsg('⏳ Leyendo Excel (puede tardar un momento)...', 'ok');
+  try{
+    const buf = await file.arrayBuffer();
+    const wb = XLSX.read(buf, {type:'array', cellDates:true});
+
+    const gruposTotales = [];
+    const fechasVistas = [];
+
+    wb.SheetNames.forEach(nombreHoja=>{
+      const ws = wb.Sheets[nombreHoja];
+      const filas = XLSX.utils.sheet_to_json(ws, {header:1, defval:''});
+      if(filas.length < 4) return;
+      const fecha = fechaISOdeCeldaHist(filas[0] && filas[0][1]);
+      if(!fecha) return;
+      fechasVistas.push(fecha);
+
+      let contadorGrupo = 0;
+      let grupoActivo = null;
+
+      for(let i=3; i<filas.length; i++){
+        const fila = filas[i];
+        if(!fila) continue;
+        const talla = (fila[2]||'').toString().trim();
+        const color = (fila[3]||'').toString().trim();
+        const genero = (fila[4]||'').toString().trim();
+        const descripcion = (fila[5]||'').toString().trim();
+        const clienteCelda = (fila[6]||'').toString().trim();
+        if(!talla && !color && !genero && !descripcion && !clienteCelda) continue;
+
+        if(clienteCelda || !grupoActivo){
+          contadorGrupo++;
+          const esML = /^mercado\s*libre/i.test(clienteCelda);
+          const mPaquete = clienteCelda.match(/(\d+)\s*playeras/i);
+          grupoActivo = {
+            folio: `HIST-${fecha}-${String(contadorGrupo).padStart(3,'0')}`,
+            fecha,
+            canal: esML ? 'MercadoLibre' : 'Local',
+            tipoCliente: esML ? 'Foraneo' : 'Local',
+            cliente: esML ? '' : tituloCasoHist(clienteCelda),
+            ciudad: esML ? '' : 'Mazatlán, Sinaloa',
+            piezasPaquete: mPaquete ? parseInt(mPaquete[1]) : 0,
+            items: []
+          };
+          gruposTotales.push(grupoActivo);
+        }
+        grupoActivo.items.push({
+          genero: mapGeneroHist(genero), talla: talla.toUpperCase(), color: color.toUpperCase(),
+          marca: 'Yazbek', descripcion, cantidad: 1
+        });
+      }
+    });
+
+    if(gruposTotales.length === 0){
+      mostrarMsg('⚠️ No se encontraron pedidos en el Excel.', 'error');
+      return;
+    }
+
+    // Folios ya importados en ese rango de fechas (para no duplicar si se
+    // corre el import dos veces con el mismo archivo)
+    fechasVistas.sort();
+    const fechaMin = fechasVistas[0], fechaMax = fechasVistas[fechasVistas.length-1];
+    const snapExistente = await db.collection(COLECCION).where('fecha','>=',fechaMin).where('fecha','<=',fechaMax).get();
+    const foliosExistentes = new Set();
+    snapExistente.forEach(doc=> foliosExistentes.add(String(doc.data().folio||'')));
+
+    let ordenBase = Date.now();
+    let creados = 0, gruposNuevos = 0, gruposSaltados = 0;
+    let batch = db.batch();
+    let enBatch = 0;
+    for(const g of gruposTotales){
+      if(foliosExistentes.has(g.folio)){ gruposSaltados++; continue; }
+      gruposNuevos++;
+      for(const it of g.items){
+        const ref = db.collection(COLECCION).doc();
+        batch.set(ref, {
+          folio: g.folio, canal: g.canal, tipoCliente: g.tipoCliente,
+          cliente: g.cliente, ciudad: g.ciudad, fecha: g.fecha,
+          items: [it], totalPiezas: it.cantidad, piezasPaquete: g.piezasPaquete,
+          orden: ordenBase++, creadoEn: firebase.firestore.FieldValue.serverTimestamp(),
+          importadoDeListado: true
+        });
+        creados++; enBatch++;
+        if(enBatch >= 450){ await batch.commit(); batch = db.batch(); enBatch = 0; }
+      }
+    }
+    if(enBatch > 0) await batch.commit();
+
+    document.getElementById('inputImportarListado').value = '';
+    mostrarMsg(`✅ Importadas ${creados} prendas de ${gruposNuevos} pedidos nuevos (${gruposSaltados} pedidos ya existían)`, 'ok');
   }catch(err){
     console.error(err);
     mostrarMsg('⚠️ Error al importar: ' + err.message, 'error');
