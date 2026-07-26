@@ -302,6 +302,8 @@ tbody td{padding:11px 14px;font-size:13.5px;vertical-align:middle;}
     <div class="topbar">
       <h1>Ventas</h1>
       <div class="actions">
+        <button class="btn btn-ghost" onclick="document.getElementById('input-importar-ventas-ml').click()">📥 Importar Excel ML</button>
+        <input type="file" id="input-importar-ventas-ml" accept=".xlsx" style="display:none;" onchange="importarVentasExcelML(this.files[0])">
         <button class="btn btn-accent" onclick="openVentaModal()">+ Nueva Venta</button>
       </div>
     </div>
@@ -2483,7 +2485,7 @@ tbody td{padding:11px 14px;font-size:13.5px;vertical-align:middle;}
 
 <script type="module">
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
-import { getFirestore, collection, doc, setDoc, deleteDoc, onSnapshot, query, getDocs, orderBy, limit, startAfter, where, getDoc } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
+import { getFirestore, collection, doc, setDoc, deleteDoc, onSnapshot, query, getDocs, orderBy, limit, startAfter, where, getDoc, writeBatch } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
 import { getAuth, signInWithEmailAndPassword, signOut, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js";
 
 const firebaseConfig = {
@@ -2706,7 +2708,6 @@ window.openVentaModal=function(tipo, ventaId){
   document.getElementById('v-tinta-blanca').value='0';
   document.getElementById('v-tinta-color').value='0';
   document.getElementById('v-costo-tinta-info').style.display='none';
-  if(document.getElementById('v-sin-tinta')) document.getElementById('v-sin-tinta').checked=false;
   document.getElementById('v-ciudad').value='';
   document.getElementById('v-guia').value='';
   document.getElementById('v-costo-guia').value='0';
@@ -2759,7 +2760,6 @@ window.openVentaModal=function(tipo, ventaId){
       if(v.metodoPago==='efectivo' && +v.pagoCon>0){
         document.getElementById('v-pago-con').value=v.pagoCon;
       }
-      if(v.sinTinta && document.getElementById('v-sin-tinta')) document.getElementById('v-sin-tinta').checked=true;
       // Cargar items guardados o construir uno desde campos legacy
       if(Array.isArray(v.items)&&v.items.length>0){
         window._ventaItems=JSON.parse(JSON.stringify(v.items));
@@ -3283,7 +3283,117 @@ window.guardarVenta=async function(){
   renderDashboard();
 };
 
-// 6) TICKET WHATSAPP
+// ---- Importar Excel de ventas ya procesado (folio/ciudad/estado/cliente/
+// descripción/color/talla/género/unidades) — crea una Venta real por folio,
+// dejando precio/tinta/proceso en 0 para que Felipe solo complete eso. ----
+function parsearFechaML(txt){
+  // "31 de enero de 2026 22:24 hs." -> "2026-01-31"
+  const MESES={enero:1,febrero:2,marzo:3,abril:4,mayo:5,junio:6,julio:7,agosto:8,septiembre:9,octubre:10,noviembre:11,diciembre:12};
+  if(!txt) return hoy();
+  const m=String(txt).toLowerCase().match(/(\d{1,2})\s+de\s+([a-záéíóúñ]+)\s+de\s+(\d{4})/);
+  if(!m) return hoy();
+  const dia=m[1].padStart(2,'0');
+  const mes=String(MESES[m[2]]||1).padStart(2,'0');
+  const anio=m[3];
+  return `${anio}-${mes}-${dia}`;
+}
+function mapGeneroImportado(txt){
+  const t=(txt||'').toLowerCase();
+  if(t.includes('hombre')) return 'Hombre';
+  if(t.includes('mujer')) return 'Mujer';
+  if(t.includes('niñ')) return 'Niño / Niña';
+  if(t.includes('juvenil')) return 'Juvenil';
+  if(t.includes('bebé')||t.includes('bebe')) return 'Bebé';
+  return '';
+}
+window.importarVentasExcelML=async function(file){
+  if(!file) return;
+  if(!confirm(`¿Importar "${file.name}" como ventas nuevas?\n\nSe creará una venta por cada folio que no exista ya en tu sistema (canal Mercado Libre). Precio, tinta y proceso quedan en 0 para que los completes tú.`)) {
+    document.getElementById('input-importar-ventas-ml').value='';
+    return;
+  }
+  toast('⏳ Leyendo Excel...');
+  try{
+    const buf=await file.arrayBuffer();
+    const wb=XLSX.read(buf,{type:'array'});
+    const hojasOmitir=['Resumen','Léeme','Leeme'];
+    let filas=[];
+    wb.SheetNames.forEach(nombre=>{
+      if(hojasOmitir.includes(nombre)) return;
+      const ws=wb.Sheets[nombre];
+      const datos=XLSX.utils.sheet_to_json(ws,{defval:''});
+      filas=filas.concat(datos);
+    });
+    if(filas.length===0){ toast('⚠️ No se encontraron filas de ventas en el Excel'); return; }
+
+    // Agrupar por Folio
+    const porFolio={};
+    const ordenFolios=[];
+    filas.forEach(f=>{
+      const folio=String(f.Folio||'').trim();
+      if(!folio) return;
+      if(!porFolio[folio]){ porFolio[folio]=[]; ordenFolios.push(folio); }
+      porFolio[folio].push(f);
+    });
+
+    // Traer folios ya existentes de Mercado Libre para no duplicar
+    toast('⏳ Revisando folios ya importados...');
+    const snapExistentes=await getDocs(query(collection(db,'pl_ventas'), where('canal','==','Mercado Libre')));
+    const foliosExistentes=new Set();
+    snapExistentes.forEach(d=> foliosExistentes.add(String(d.data().folio||'').trim()));
+
+    let creadas=0, saltadas=0;
+    let batch=writeBatch(db);
+    let enBatch=0;
+    for(const folio of ordenFolios){
+      if(foliosExistentes.has(folio)){ saltadas++; continue; }
+      const grupo=porFolio[folio];
+      const primero=grupo[0];
+      const items=grupo.map(f=>({
+        tipo:'Playera', genero:mapGeneroImportado(f['Género']), talla:String(f.Talla||''),
+        color:String(f.Color||''), material:'', tipoPrenda:'', tipoPrendaOtro:'',
+        tipoGorra:'', tipoGorraOtro:'', marca:'Yazbek', descripcion:String(f['Descripción']||''),
+        proceso:'DTG', cantidad:+f.Unidades||1, precio:0, tintaBlanca:0, tintaColor:0,
+        multiTG:false, desglose:[]
+      }));
+      const cantTotal=items.reduce((s,it)=>s+(+it.cantidad||1),0);
+      const productoResumen=items.map(it=>
+        `${it.cantidad}x ${it.genero||''} ${it.tipo}${it.talla?' Talla '+it.talla:''}${it.color?' '+it.color:''}${it.descripcion?' ('+it.descripcion+')':''}`.replace(/\s+/g,' ').trim()
+      ).join(', ');
+      const id=uid();
+      const data={
+        id, fecha:parsearFechaML(primero.Fecha), canal:'Mercado Libre',
+        cliente:primero.Cliente||'Público en general',
+        producto:productoResumen, items,
+        genero:'', talla:'', color:'',
+        tipoProceso:'DTG', sinTinta:false,
+        ciudad:[primero.Ciudad,primero.Estado].filter(Boolean).join(', '),
+        paqueteria:'', guia:'', costoGuia:0, domicilioEnvio:'',
+        cantidad:cantTotal, precio:0, descuento:0, total:0, anticipo:0, saldo:0,
+        proveedor:'Yazbek', folio, notas:'Importado de Excel de Mercado Libre — falta completar precio, tinta y proceso.',
+        tintaBlanca:0, tintaColor:0, costoTinta:0,
+        metodoPago:'', lugDeposito:'', tipoTarjeta:'', bancoOrigen:'', pagoCon:0,
+        pendienteCompletar:true,
+        creado:new Date().toISOString(), actualizado:new Date().toISOString()
+      };
+      batch.set(doc(db,'pl_ventas',id), data);
+      enBatch++; creadas++;
+      if(enBatch>=450){ await batch.commit(); batch=writeBatch(db); enBatch=0; }
+    }
+    if(enBatch>0) await batch.commit();
+
+    document.getElementById('input-importar-ventas-ml').value='';
+    toast(`✅ Importadas ${creadas} ventas nuevas (${saltadas} ya existían y se saltaron)`);
+    await cargarVentas(true);
+    renderVentas();
+    renderDashboard();
+  }catch(err){
+    console.error(err);
+    toast('⚠️ Error al importar: '+err.message);
+  }
+};
+
+
 const PROCESOS_SIN_TINTA=['Bordado','Serigrafía','Vinil','DTF'];
 window.enviarTicketWA=function(){
   const folio=document.getElementById('v-folio').value||'—';
