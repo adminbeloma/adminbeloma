@@ -5,9 +5,9 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Pedido Multi-Proveedor · Playeras Beloma</title>
 
-<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
-<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore-compat.js"></script>
-<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-auth-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-auth-compat.js"></script>
 
 <style>
   :root{
@@ -46,7 +46,6 @@
   .msg.error{background:#fde8e8;color:var(--rojo);display:block;}
   .resumen{background:var(--azul-suave);border-radius:8px;padding:12px 14px;font-size:.85rem;margin-top:14px;}
   .badge-proveedor{display:inline-block;background:var(--azul-suave);color:var(--azul);padding:2px 8px;border-radius:6px;font-size:.72rem;font-weight:600;white-space:nowrap;}
-  /* fix flechita nativa del datalist para que no se encime con el texto */
   input[list]{padding-right:28px;}
   input[list]::-webkit-calendar-picker-indicator{opacity:.65;cursor:pointer;}
   .filtro-fecha{display:flex;gap:10px;align-items:end;flex-wrap:wrap;margin-bottom:14px;}
@@ -179,8 +178,18 @@ const firebaseConfig = {
   messagingSenderId: "542305826307",
   appId: "1:542305826307:web:4d97b65719bf534eff0036"
 };
-firebase.initializeApp(firebaseConfig);
-const db = firebase.firestore();
+// IMPORTANTE: app con NOMBRE PROPIO ("pedidoMultiProveedor"), NO la app por
+// defecto. Antes se usaba firebase.initializeApp(firebaseConfig) sin nombre,
+// es decir, la MISMA app que usa adminbeloma principal. Aunque este módulo
+// cambiaba el tipo de persistencia a SESSION para su login anónimo, al ser
+// la misma app (mismo apiKey + mismo nombre) Firebase guarda ambas sesiones
+// en la misma "ranura", y firmar la sesión anónima aquí podía pisar/borrar
+// la sesión de correo y contraseña que Ana Luz tiene en el panel principal.
+// Con un nombre propio, este módulo tiene su propio espacio de sesión y ya
+// no puede tocar la sesión del panel principal, sin importar qué tipo de
+// persistencia use.
+const appPedidoMultiProveedor = firebase.initializeApp(firebaseConfig, "pedidoMultiProveedor");
+const db = appPedidoMultiProveedor.firestore();
 
 const NOMBRES_PROVEEDOR_DEFAULT = {
   yazbek: "Yazbek", gildan: "Gildan", blue_white: "Blue & White", euro_cotton: "Euro Cotton",
@@ -208,10 +217,6 @@ function hoyISO(){
 
 /* =====================================================
    NORMALIZACIÓN DE CATÁLOGOS
-   Cada proveedor tiene su propia forma de nombrar campos
-   (clave/codigo, colores/colores_solidos/colores_jaspeados/
-   colores_combinaciones, tallas/tallas_adulto+tallas_nino, etc.)
-   Esta función homogeniza todo a: {codigo,nombre,categoria,genero,tallas,colores}
 ===================================================== */
 function detectarGenero(e){
   const texto = ((e.nombre||"") + " " + (e.categoria||"")).toLowerCase();
@@ -792,20 +797,20 @@ function escucharHistorial(){
 /* ---------- init ---------- */
 const catalogosListos = cargarCatalogos();
 
-firebase.auth().onAuthStateChanged(user=>{
+appPedidoMultiProveedor.auth().onAuthStateChanged(user=>{
   if(user){
     cargarColoresGuardados();
     escucharHistorial();
     catalogosListos.then(()=>cargarConfigProveedores());
   }
 });
-// Sesión anónima aislada a esta pestaña (sessionStorage) en vez de compartida
-// entre pestañas (localStorage). Así evitamos que el panel principal de
-// Admin Beloma, que cierra automáticamente cualquier sesión anónima que
-// detecte, termine cerrando también la sesión que este módulo necesita
-// para guardar el historial en Firestore.
-firebase.auth().setPersistence(firebase.auth.Auth.Persistence.SESSION)
-  .then(() => firebase.auth().signInAnonymously())
+// Sesión anónima de ESTA app con nombre propio (ver arriba). Al ser una app
+// distinta a la del panel principal, ya no hace falta preocuparse por pisar
+// la sesión de correo/contraseña de Ana Luz — quedó completamente separada.
+// Se deja SESSION (en vez de LOCAL) para que cada pestaña nueva inicie su
+// propia sesión anónima fresca, sin arrastrar estado de pestañas anteriores.
+appPedidoMultiProveedor.auth().setPersistence(firebase.auth.Auth.Persistence.SESSION)
+  .then(() => appPedidoMultiProveedor.auth().signInAnonymously())
   .catch(err=>{
     console.error("Error de autenticación:", err);
     mostrarMsg("⚠️ No se pudo conectar con la base de datos: " + err.message, "error");
