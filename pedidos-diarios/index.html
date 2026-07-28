@@ -254,7 +254,7 @@
   </div>
 </div>
 <div class="modal-overlay" id="modalEditar">
-  <div class="modal-box">
+  <div class="modal-box" style="max-width:760px;">
     <h3>✏️ Editar pedido</h3>
     <input type="hidden" id="ed-id">
     <div class="modal-grid">
@@ -280,33 +280,29 @@
         </select>
       </div>
       <div><label>Fecha</label><input type="date" id="ed-fecha"></div>
-      <div>
-        <label>Género</label>
-        <select id="ed-genero" onchange="onEdGeneroChange()">
-          <option value="Caballero">Caballero</option>
-          <option value="Dama">Dama</option>
-          <option value="Niño">Niño</option>
-          <option value="Niña">Niña</option>
-          <option value="Juvenil">Juvenil</option>
-          <option value="Unisex">Unisex</option>
-        </select>
-      </div>
-      <div><label>Talla</label><select id="ed-talla"></select></div>
-      <div>
-        <label>Color</label>
-        <select id="ed-color" onchange="onEdColorChange()"></select>
-        <input type="text" id="ed-color-otro" placeholder="Especifica el color" style="display:none;margin-top:4px;">
-      </div>
-      <div>
-        <label>Marca</label>
-        <select id="ed-marca" onchange="onEdMarcaChange()"></select>
-        <input type="text" id="ed-marca-otro" placeholder="Especifica la marca" style="display:none;margin-top:4px;">
-      </div>
-      <div style="grid-column:1/-1;"><label>Descripción</label><input type="text" id="ed-descripcion"></div>
-      <div><label>Cantidad</label><input type="number" id="ed-cantidad" min="1"></div>
       <div><label>Piezas en el mismo paquete</label><input type="number" id="ed-paquete" min="2"></div>
     </div>
+    <h3 style="margin:16px 0 8px;font-size:.9rem;">Prendas de este pedido</h3>
+    <div style="overflow-x:auto;">
+    <table class="items-tabla" style="width:100%;">
+      <thead>
+        <tr>
+          <th style="min-width:100px;">Género</th>
+          <th style="min-width:90px;">Talla</th>
+          <th style="min-width:110px;">Color</th>
+          <th style="min-width:110px;">Marca</th>
+          <th style="min-width:160px;">Descripción</th>
+          <th style="min-width:60px;">Cant.</th>
+          <th></th>
+        </tr>
+      </thead>
+      <tbody id="ed-items-body"></tbody>
+    </table>
+    </div>
     <div class="fila-acciones">
+      <button class="btn btn-secundario btn-chico" onclick="edAgregarFilaItem()">+ Agregar prenda</button>
+    </div>
+    <div class="fila-acciones" style="margin-top:14px;">
       <button class="btn btn-primario" onclick="guardarEdicionPedido()">Guardar cambios</button>
       <button class="btn btn-secundario" onclick="cerrarModalEditar()">Cancelar</button>
     </div>
@@ -878,11 +874,71 @@ function pintarTablaPedidos(lista, contenedor){
   contenedor.innerHTML = html;
 }
 
+let edItemIdCounter = 0;
+
+function edRenderFilaItem(it){
+  const id = "edit_"+(edItemIdCounter++);
+  const tr = document.createElement("tr");
+  tr.id = id;
+  const generoInicial = (it && it.genero) || "Caballero";
+  const colorInicial = (it && it.color) || "Negro";
+  const esColorOtro = colorInicial && !COLORES_COMUNES.includes(colorInicial);
+  const marcaInicial = (it && it.marca) || "";
+  const esMarcaOtro = marcaInicial && !MARCAS_DISPONIBLES.includes(marcaInicial);
+  tr.innerHTML = `
+    <td><select class="ed-it-genero" onchange="edOnGeneroFilaChange('${id}')">
+          <option value="Caballero">Caballero</option>
+          <option value="Dama">Dama</option>
+          <option value="Niño">Niño</option>
+          <option value="Niña">Niña</option>
+          <option value="Juvenil">Juvenil</option>
+          <option value="Unisex">Unisex</option>
+        </select></td>
+    <td><select class="ed-it-talla">${opcionesTalla(generoInicial, it?it.talla:"")}</select></td>
+    <td>
+      <select class="ed-it-color" onchange="edOnColorFilaChange('${id}')">${opcionesColor(esColorOtro ? "Otro" : colorInicial)}</select>
+      <input type="text" class="ed-it-color-otro" placeholder="Especifica el color" style="margin-top:4px;display:${esColorOtro?'block':'none'};" value="${esColorOtro?colorInicial:''}">
+    </td>
+    <td>
+      <select class="ed-it-marca" onchange="edOnMarcaFilaChange('${id}')">${opcionesMarca(esMarcaOtro ? "Otro" : marcaInicial)}</select>
+      <input type="text" class="ed-it-marca-otro" placeholder="Especifica la marca" style="margin-top:4px;display:${esMarcaOtro?'block':'none'};" value="${esMarcaOtro?marcaInicial:''}">
+    </td>
+    <td><input type="text" class="ed-it-desc" placeholder="Diseño / descripción"></td>
+    <td><input type="number" class="ed-it-cant" min="1" value="1"></td>
+    <td><button class="btn btn-rojo btn-chico" onclick="document.getElementById('${id}').remove()">✕</button></td>
+  `;
+  document.getElementById("ed-items-body").appendChild(tr);
+  tr.querySelector(".ed-it-genero").value = generoInicial;
+  tr.querySelector(".ed-it-desc").value = (it && it.descripcion) || "";
+  tr.querySelector(".ed-it-cant").value = (it && it.cantidad) || 1;
+}
+function edAgregarFilaItem(){ edRenderFilaItem(null); }
+function edOnGeneroFilaChange(id){ const tr = document.getElementById(id); const genero = tr.querySelector(".ed-it-genero").value; const tallaSel = tr.querySelector(".ed-it-talla"); tallaSel.innerHTML = opcionesTalla(genero, tallaSel.value); }
+function edOnColorFilaChange(id){ const tr = document.getElementById(id); const esOtro = tr.querySelector(".ed-it-color").value === "Otro"; const otroInput = tr.querySelector(".ed-it-color-otro"); otroInput.style.display = esOtro ? "block" : "none"; if(esOtro) otroInput.focus(); }
+function edOnMarcaFilaChange(id){ const tr = document.getElementById(id); const esOtro = tr.querySelector(".ed-it-marca").value === "Otro"; const otroInput = tr.querySelector(".ed-it-marca-otro"); otroInput.style.display = esOtro ? "block" : "none"; if(esOtro) otroInput.focus(); }
+function edLeerItems(){
+  const filas = document.querySelectorAll("#ed-items-body tr");
+  const items = [];
+  filas.forEach(tr=>{
+    const colorSel = tr.querySelector(".ed-it-color").value;
+    const color = colorSel === "Otro" ? tr.querySelector(".ed-it-color-otro").value.trim() : colorSel;
+    const marcaSel = tr.querySelector(".ed-it-marca").value;
+    const marca = marcaSel === "Otro" ? tr.querySelector(".ed-it-marca-otro").value.trim() : marcaSel;
+    items.push({
+      genero: tr.querySelector(".ed-it-genero").value,
+      talla: tr.querySelector(".ed-it-talla").value.trim(),
+      color, marca,
+      descripcion: tr.querySelector(".ed-it-desc").value.trim(),
+      cantidad: parseInt(tr.querySelector(".ed-it-cant").value) || 1
+    });
+  });
+  return items;
+}
+
 function abrirEditarPedido(id, origen){
   const lista = origen === "hoy" ? pedidosHoyCache : historicoCache;
   const p = lista.find(x=>x.id===id);
   if(!p){ mostrarMsg("No se encontró el pedido.", "error"); return; }
-  const it = (p.items||[])[0] || {};
   document.getElementById("ed-id").value = p.id;
   document.getElementById("ed-id").dataset.origen = origen;
   document.getElementById("ed-folio").value = p.folio || "";
@@ -891,35 +947,22 @@ function abrirEditarPedido(id, origen){
   document.getElementById("ed-canal").value = p.canal || "Local";
   document.getElementById("ed-tipo").value = p.tipoCliente || "Local";
   document.getElementById("ed-fecha").value = p.fecha || hoyISO();
-  const genero = it.genero || "Caballero";
-  document.getElementById("ed-genero").value = genero;
-  document.getElementById("ed-talla").innerHTML = opcionesTalla(genero, it.talla || "");
-  const colorEsOtro = it.color && !COLORES_COMUNES.includes(it.color);
-  document.getElementById("ed-color").innerHTML = opcionesColor(colorEsOtro ? "Otro" : (it.color||""));
-  document.getElementById("ed-color-otro").style.display = colorEsOtro ? "block" : "none";
-  document.getElementById("ed-color-otro").value = colorEsOtro ? it.color : "";
-  const marcaEsOtro = it.marca && !MARCAS_DISPONIBLES.includes(it.marca);
-  document.getElementById("ed-marca").innerHTML = opcionesMarca(marcaEsOtro ? "Otro" : (it.marca||""));
-  document.getElementById("ed-marca-otro").style.display = marcaEsOtro ? "block" : "none";
-  document.getElementById("ed-marca-otro").value = marcaEsOtro ? it.marca : "";
-  document.getElementById("ed-descripcion").value = it.descripcion || "";
-  document.getElementById("ed-cantidad").value = it.cantidad || 1;
   document.getElementById("ed-paquete").value = p.piezasPaquete || "";
+  // Prendas: se cargan TODAS las que tenga el pedido (antes solo se veía la
+  // primera), y aquí mismo se pueden agregar más con "+ Agregar prenda".
+  document.getElementById("ed-items-body").innerHTML = "";
+  const itemsPedido = (p.items && p.items.length) ? p.items : [{}];
+  itemsPedido.forEach(it=> edRenderFilaItem(it));
   document.getElementById("modalEditar").classList.add("activo");
 }
 function cerrarModalEditar(){ document.getElementById("modalEditar").classList.remove("activo"); }
-function onEdGeneroChange(){ const genero = document.getElementById("ed-genero").value; const tallaSel = document.getElementById("ed-talla"); tallaSel.innerHTML = opcionesTalla(genero, tallaSel.value); }
-function onEdColorChange(){ const esOtro = document.getElementById("ed-color").value === "Otro"; const otroInput = document.getElementById("ed-color-otro"); otroInput.style.display = esOtro ? "block" : "none"; if(esOtro) otroInput.focus(); }
-function onEdMarcaChange(){ const esOtro = document.getElementById("ed-marca").value === "Otro"; const otroInput = document.getElementById("ed-marca-otro"); otroInput.style.display = esOtro ? "block" : "none"; if(esOtro) otroInput.focus(); }
 
 async function guardarEdicionPedido(){
   const id = document.getElementById("ed-id").value;
   const origen = document.getElementById("ed-id").dataset.origen;
-  const colorSel = document.getElementById("ed-color").value;
-  const color = colorSel === "Otro" ? document.getElementById("ed-color-otro").value.trim() : colorSel;
-  const marcaSel = document.getElementById("ed-marca").value;
-  const marca = marcaSel === "Otro" ? document.getElementById("ed-marca-otro").value.trim() : marcaSel;
-  const cantidad = parseInt(document.getElementById("ed-cantidad").value) || 1;
+  const items = edLeerItems();
+  if(items.length === 0){ mostrarMsg("Agrega al menos una prenda.", "error"); return; }
+  const totalPiezas = items.reduce((s,it)=> s + (+it.cantidad||1), 0);
   const data = {
     folio: document.getElementById("ed-folio").value.trim() || "(sin folio)",
     cliente: document.getElementById("ed-cliente").value.trim(),
@@ -927,8 +970,8 @@ async function guardarEdicionPedido(){
     canal: document.getElementById("ed-canal").value,
     tipoCliente: document.getElementById("ed-tipo").value,
     fecha: document.getElementById("ed-fecha").value || hoyISO(),
-    items: [{ genero: document.getElementById("ed-genero").value, talla: document.getElementById("ed-talla").value, color, marca, descripcion: document.getElementById("ed-descripcion").value.trim(), cantidad }],
-    totalPiezas: cantidad,
+    items,
+    totalPiezas,
     piezasPaquete: parseInt(document.getElementById("ed-paquete").value) || 0
   };
   try{
