@@ -534,18 +534,31 @@ async function guardarPedido(){
   const items = leerItems().filter(it => it.descripcion || it.talla || it.color || it.folio);
   if(items.length === 0){ mostrarMsg("Agrega al menos una prenda.", "error"); return; }
 
-  // ---- Modo "agregar a pedido existente" ----
+  // ---- Modo "agregar a pedido existente": crea renglones NUEVOS e
+  // independientes con el mismo folio/cliente/ciudad/canal, igual que el
+  // resto del sistema (varias prendas del mismo paquete = varios renglones
+  // que comparten folio, NO un solo renglón con todo apachurrado adentro). ----
   if(pedidoExistente){
     try{
-      const itemsNuevos = items.map(it=>({genero:it.genero, talla:it.talla, color:it.color, marca:it.marca, descripcion:it.descripcion, cantidad:it.cantidad}));
-      const itemsCombinados = [...(pedidoExistente.items||[]), ...itemsNuevos];
-      const totalPiezasCombinado = itemsCombinados.reduce((s,it)=> s + (+it.cantidad||1), 0);
-      await db.collection(COLECCION).doc(pedidoExistente.id).update({
-        items: itemsCombinados,
-        totalPiezas: totalPiezasCombinado,
-        piezasPaquete: Math.max(pedidoExistente.piezasPaquete||0, itemsCombinados.length)
-      });
-      mostrarMsg(`✔ Se agregaron ${items.length} prenda(s) al pedido "${pedidoExistente.folio}"`, "ok");
+      let guardados = 0;
+      let ordenBase = Date.now();
+      for(const it of items){
+        await db.collection(COLECCION).add({
+          folio: pedidoExistente.folio,
+          canal: pedidoExistente.canal,
+          tipoCliente: pedidoExistente.tipoCliente,
+          cliente: pedidoExistente.cliente,
+          ciudad: pedidoExistente.ciudad,
+          fecha: pedidoExistente.fecha,
+          items: [{genero:it.genero, talla:it.talla, color:it.color, marca:it.marca, descripcion:it.descripcion, cantidad:it.cantidad}],
+          totalPiezas: it.cantidad,
+          piezasPaquete: it.piezasPaquete || pedidoExistente.piezasPaquete || 0,
+          orden: ordenBase++,
+          creadoEn: firebase.firestore.FieldValue.serverTimestamp()
+        });
+        guardados++;
+      }
+      mostrarMsg(`✔ Se agregaron ${guardados} renglón(es) nuevo(s) al folio "${pedidoExistente.folio}"`, "ok");
       cancelarPedidoExistente();
       limpiarFormulario();
       cargarPedidosHoy();
