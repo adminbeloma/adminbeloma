@@ -197,6 +197,34 @@
         <button class="btn btn-verde" onclick="exportarExcel('hoy')">⬇️ Exportar Excel (hoy)</button>
       </div>
     </div>
+    <div class="card">
+      <h2>➕ Agregar pedido(s) de hoy</h2>
+      <div style="overflow-x:auto;">
+      <table class="items-tabla" id="tablaNuevosHoy" style="display:none;">
+        <thead>
+          <tr>
+            <th style="min-width:100px;">Canal</th>
+            <th style="min-width:120px;">Folio</th>
+            <th style="min-width:130px;">Cliente</th>
+            <th style="min-width:110px;">Ciudad</th>
+            <th style="min-width:100px;">Género</th>
+            <th style="min-width:90px;">Talla</th>
+            <th style="min-width:110px;">Color</th>
+            <th style="min-width:110px;">Marca</th>
+            <th style="min-width:160px;">Descripción</th>
+            <th style="min-width:60px;">Cant.</th>
+            <th style="min-width:90px;">Paquete</th>
+            <th style="width:8%"></th>
+          </tr>
+        </thead>
+        <tbody id="nuevosHoyBody"></tbody>
+      </table>
+      </div>
+      <div class="fila-acciones">
+        <button class="btn btn-secundario btn-chico" onclick="agregarFilaNuevaHoy()">+ Agregar renglón</button>
+        <button class="btn btn-primario" id="btnGuardarNuevosHoy" style="display:none;" onclick="guardarNuevosHoy()">Guardar renglón(es) nuevo(s)</button>
+      </div>
+    </div>
   </div>
   <div class="panel" id="panel-historico">
     <div class="card">
@@ -382,6 +410,112 @@ window.onTipoClienteChange = function(){
 function opcionesTalla(genero, tallaActual){ const tallas = TALLAS_POR_GENERO[genero] || TALLAS_POR_GENERO["Unisex"]; return tallas.map(t=>`<option value="${t}"${t===tallaActual?' selected':''}>${t}</option>`).join(""); }
 function opcionesColor(colorActual){ return COLORES_COMUNES.map(c=>`<option value="${c}"${c===colorActual?' selected':''}>${c}</option>`).join(""); }
 function opcionesMarca(marcaActual){ return MARCAS_DISPONIBLES.map(m=>`<option value="${m}"${m===marcaActual?' selected':''}>${m}</option>`).join(""); }
+
+/* ---------- captura rápida de nuevos pedidos, directo en "Pedidos de hoy" ---------- */
+let nhItemIdCounter = 0;
+function agregarFilaNuevaHoy(){
+  const id = "nh_"+(nhItemIdCounter++);
+  const tr = document.createElement("tr");
+  tr.id = id;
+  tr.innerHTML = `
+    <td><select class="nh-canal">
+          <option value="Local">Local</option>
+          <option value="MercadoLibre">MercadoLibre</option>
+          <option value="Shopify">Shopify</option>
+          <option value="TiendaNube">Tienda Nube</option>
+          <option value="Foraneo">Foráneo</option>
+          <option value="Otro">Otro</option>
+        </select></td>
+    <td><input type="text" class="nh-folio" placeholder="Ej. ML-123456 (vacío = automático)"></td>
+    <td><input type="text" class="nh-cliente" placeholder="Nombre / opcional"></td>
+    <td><input type="text" class="nh-ciudad" placeholder="Ciudad" value="Mazatlán, Sinaloa"></td>
+    <td><select class="nh-genero" onchange="onGeneroFilaChangeNH('${id}')">
+          <option value="Caballero">Caballero</option>
+          <option value="Dama">Dama</option>
+          <option value="Niño">Niño</option>
+          <option value="Niña">Niña</option>
+          <option value="Juvenil">Juvenil</option>
+          <option value="Unisex">Unisex</option>
+        </select></td>
+    <td><select class="nh-talla">${opcionesTalla("Caballero","")}</select></td>
+    <td>
+      <select class="nh-color" onchange="onColorFilaChangeNH('${id}')">${opcionesColor("Negro")}</select>
+      <input type="text" class="nh-color-otro" placeholder="Especifica el color" style="margin-top:4px;display:none;">
+    </td>
+    <td>
+      <select class="nh-marca" onchange="onMarcaFilaChangeNH('${id}')">${opcionesMarca("")}</select>
+      <input type="text" class="nh-marca-otro" placeholder="Especifica la marca" style="margin-top:4px;display:none;">
+    </td>
+    <td><input type="text" class="nh-desc" placeholder="Diseño / descripción"></td>
+    <td><input type="number" class="nh-cant" min="1" value="1"></td>
+    <td><input type="number" class="nh-paquete" min="2" placeholder="Ej. 2, 3"></td>
+    <td><button class="btn btn-rojo btn-chico" onclick="document.getElementById('${id}').remove(); actualizarVisibilidadNuevosHoy();">✕</button></td>
+  `;
+  document.getElementById("nuevosHoyBody").appendChild(tr);
+  actualizarVisibilidadNuevosHoy();
+}
+function actualizarVisibilidadNuevosHoy(){
+  const hayFilas = document.querySelectorAll("#nuevosHoyBody tr").length > 0;
+  document.getElementById("tablaNuevosHoy").style.display = hayFilas ? "table" : "none";
+  document.getElementById("btnGuardarNuevosHoy").style.display = hayFilas ? "inline-block" : "none";
+}
+function onGeneroFilaChangeNH(id){ const tr = document.getElementById(id); const genero = tr.querySelector(".nh-genero").value; const tallaSel = tr.querySelector(".nh-talla"); tallaSel.innerHTML = opcionesTalla(genero, tallaSel.value); }
+function onColorFilaChangeNH(id){ const tr = document.getElementById(id); const esOtro = tr.querySelector(".nh-color").value === "Otro"; const otroInput = tr.querySelector(".nh-color-otro"); otroInput.style.display = esOtro ? "block" : "none"; if(esOtro) otroInput.focus(); }
+function onMarcaFilaChangeNH(id){ const tr = document.getElementById(id); const esOtro = tr.querySelector(".nh-marca").value === "Otro"; const otroInput = tr.querySelector(".nh-marca-otro"); otroInput.style.display = esOtro ? "block" : "none"; if(esOtro) otroInput.focus(); }
+
+async function guardarNuevosHoy(){
+  const filas = document.querySelectorAll("#nuevosHoyBody tr");
+  if(filas.length === 0){ mostrarMsg("Agrega al menos un renglón.", "error"); return; }
+  const fecha = hoyISO();
+  const folioAutoPorCanal = {}; // un consecutivo por canal, para no repetir folios dentro del mismo guardado
+  let guardados = 0;
+  let ordenBase = Date.now();
+  try{
+    for(const tr of filas){
+      const canal = tr.querySelector(".nh-canal").value;
+      const colorSel = tr.querySelector(".nh-color").value;
+      const color = colorSel === "Otro" ? tr.querySelector(".nh-color-otro").value.trim() : colorSel;
+      const marcaSel = tr.querySelector(".nh-marca").value;
+      const marca = marcaSel === "Otro" ? tr.querySelector(".nh-marca-otro").value.trim() : marcaSel;
+      let folio = tr.querySelector(".nh-folio").value.trim();
+
+      if(!folio && (canal === "Local" || canal === "Foraneo")){
+        if(!folioAutoPorCanal[canal]) folioAutoPorCanal[canal] = await obtenerConsecutivoFolio(canal, fecha);
+        const [yy, mm, dd] = fecha.split("-");
+        folio = `${folioAutoPorCanal[canal].prefijo}-${yy.slice(2)}${mm}${dd}-${String(folioAutoPorCanal[canal].siguiente).padStart(2,"0")}`;
+        folioAutoPorCanal[canal].siguiente++;
+      }
+
+      await db.collection(COLECCION).add({
+        folio: folio || "(sin folio)",
+        canal,
+        tipoCliente: (canal === "Local") ? "Local" : "Foraneo",
+        cliente: tr.querySelector(".nh-cliente").value.trim() || canal,
+        ciudad: tr.querySelector(".nh-ciudad").value.trim(),
+        fecha,
+        items: [{
+          genero: tr.querySelector(".nh-genero").value,
+          talla: tr.querySelector(".nh-talla").value.trim(),
+          color, marca,
+          descripcion: tr.querySelector(".nh-desc").value.trim(),
+          cantidad: parseInt(tr.querySelector(".nh-cant").value) || 1
+        }],
+        totalPiezas: parseInt(tr.querySelector(".nh-cant").value) || 1,
+        piezasPaquete: parseInt(tr.querySelector(".nh-paquete").value) || 0,
+        orden: ordenBase++,
+        creadoEn: firebase.firestore.FieldValue.serverTimestamp()
+      });
+      guardados++;
+    }
+    mostrarMsg(`✔ ${guardados} pedido(s) nuevo(s) guardado(s)`, "ok");
+    document.getElementById("nuevosHoyBody").innerHTML = "";
+    actualizarVisibilidadNuevosHoy();
+    cargarPedidosHoy();
+  }catch(err){
+    console.error(err);
+    mostrarMsg("Error al guardar: " + err.message, "error");
+  }
+}
 
 function agregarFilaItem(valores){
   const id = "item_"+(itemIdCounter++);
@@ -876,21 +1010,6 @@ function pintarResumen(lista, contenedorId){
     <div class="stat" style="min-width:220px;"><div class="lbl" style="margin-bottom:6px;">Por canal</div><div style="font-size:.82rem;">${canalesTxt}</div></div>
   `;
 }
-// Empieza un pedido NUEVO e independiente (folio propio) desde donde sea que
-// estés en la lista — cancela cualquier búsqueda de "folio existente" que
-// haya quedado activa, limpia el formulario y te manda a la pestaña de
-// Capturar, para que no se te vaya sin querer a un folio ajeno.
-function irACapturarNuevo(canal, fecha){
-  cancelarPedidoExistente();
-  limpiarFormulario();
-  if(canal) document.getElementById("fCanal").value = canal;
-  if(fecha) document.getElementById("fFecha").value = fecha;
-  onTipoClienteChange();
-  const tabCaptura = document.querySelector('.tab-btn[data-tab="captura"]');
-  if(tabCaptura) tabCaptura.click();
-  window.scrollTo({top:0, behavior:"smooth"});
-}
-
 function pintarTablaPedidos(lista, contenedor){
   if(lista.length === 0){ contenedor.innerHTML = '<div class="vacio">No hay pedidos registrados.</div>'; return; }
   let html = `<table><thead><tr><th>Folio</th><th>Canal</th><th>Cliente</th><th>Ciudad</th><th>Tipo</th><th>Piezas</th><th>Detalle</th><th>Acciones</th></tr></thead><tbody>`;
@@ -901,7 +1020,6 @@ function pintarTablaPedidos(lista, contenedor){
       <td>${p.folio}</td><td>${badgeCanal(p.canal)}</td><td>${p.cliente}</td><td>${p.ciudad||'—'}</td><td>${p.tipoCliente}</td><td>${p.totalPiezas}</td>
       <td style="font-size:.78rem;color:#6b7280;">${detalle}${notaPaquete}</td>
       <td style="white-space:nowrap;">
-        <button class="btn btn-verde btn-chico" onclick="irACapturarNuevo('${p.canal}','${p.fecha}')" title="Nuevo pedido independiente">➕</button>
         <button class="btn btn-secundario btn-chico" onclick="abrirEditarPedido('${p.id}','hoy')">✏️</button>
         <button class="btn btn-rojo btn-chico" onclick="eliminarPedido('${p.id}','hoy')">🗑</button>
       </td>
@@ -1057,7 +1175,6 @@ async function buscarHistorico(){
         <td>${p.fecha}</td><td>${p.folio}</td><td>${badgeCanal(p.canal)}</td>
         <td>${p.cliente}</td><td>${p.ciudad||'—'}</td><td>${p.tipoCliente}</td><td>${p.totalPiezas}</td>
         <td style="white-space:nowrap;">
-          <button class="btn btn-verde btn-chico" onclick="irACapturarNuevo('${p.canal}','${p.fecha}')" title="Nuevo pedido independiente">➕</button>
           <button class="btn btn-secundario btn-chico" onclick="abrirEditarPedido('${p.id}','historico')">✏️</button>
           <button class="btn btn-rojo btn-chico" onclick="eliminarPedido('${p.id}','historico')">🗑</button>
         </td>
