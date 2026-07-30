@@ -43,7 +43,7 @@
   .vacio{text-align:center;color:#94a3b8;padding:24px 10px;font-size:.9rem;}
   .msg{padding:10px 14px;border-radius:8px;font-size:.85rem;margin-bottom:12px;display:none;}
   .msg.ok{background:#e7f8ee;color:#127a3d;display:block;}
-  .msg.error{background:#fde8e8;color:var(--rojo);display:block;}
+  .msg.error{background:#fde8e8;color:var(--rojo);display:block;cursor:pointer;}
   .resumen{background:var(--azul-suave);border-radius:8px;padding:12px 14px;font-size:.85rem;margin-top:14px;}
   .badge-proveedor{display:inline-block;background:var(--azul-suave);color:var(--azul);padding:2px 8px;border-radius:6px;font-size:.72rem;font-weight:600;white-space:nowrap;}
   input[list]{padding-right:28px;}
@@ -66,7 +66,7 @@
 </header>
 
 <div class="contenedor">
-  <div id="msgGlobal" class="msg"></div>
+  <div id="msgGlobal" class="msg" onclick="this.className='msg'"></div>
 
   <!-- ===== Agregar producto ===== -->
   <div class="card">
@@ -75,7 +75,7 @@
     <div class="grid-form">
       <div>
         <label>Proveedor</label>
-        <select id="fProveedor" onchange="onProveedorChange()"></select>
+        <select id="fProveedor" onchange="onProveedorChange()"><option value="">Cargando catálogos…</option></select>
       </div>
       <div>
         <label>Producto</label>
@@ -99,6 +99,7 @@
     <div class="fila-acciones">
       <button class="btn btn-primario" id="btnAgregar" onclick="agregarRenglon()">+ Agregar al pedido</button>
       <button class="btn btn-gris" id="btnCancelarEdicion" onclick="cancelarEdicion()" style="display:none;">✖ Cancelar edición</button>
+      <button class="btn btn-gris btn-chico" onclick="recargarCatalogos()">🔄 Recargar catálogos</button>
     </div>
   </div>
 
@@ -179,15 +180,8 @@ const firebaseConfig = {
   appId: "1:542305826307:web:4d97b65719bf534eff0036"
 };
 // IMPORTANTE: app con NOMBRE PROPIO ("pedidoMultiProveedor"), NO la app por
-// defecto. Antes se usaba firebase.initializeApp(firebaseConfig) sin nombre,
-// es decir, la MISMA app que usa adminbeloma principal. Aunque este módulo
-// cambiaba el tipo de persistencia a SESSION para su login anónimo, al ser
-// la misma app (mismo apiKey + mismo nombre) Firebase guarda ambas sesiones
-// en la misma "ranura", y firmar la sesión anónima aquí podía pisar/borrar
-// la sesión de correo y contraseña que Ana Luz tiene en el panel principal.
-// Con un nombre propio, este módulo tiene su propio espacio de sesión y ya
-// no puede tocar la sesión del panel principal, sin importar qué tipo de
-// persistencia use.
+// defecto, para que la sesión anónima de este módulo no pise la sesión de
+// correo/contraseña del panel principal (Ana Luz / Felipe).
 const appPedidoMultiProveedor = firebase.initializeApp(firebaseConfig, "pedidoMultiProveedor");
 const db = appPedidoMultiProveedor.firestore();
 
@@ -197,18 +191,21 @@ const NOMBRES_PROVEEDOR_DEFAULT = {
   mayork: "Mayork", jhk: "JHK", mo: "M&O"
 };
 
-let PROVEEDORES = {};       // slug -> {nombre, contacto_whatsapp, estilos:[{codigo,nombre,categoria,genero,tallas,colores}]}
+let PROVEEDORES = {};       // slug -> {nombre, contacto_whatsapp, estilos:[...]}
 let coloresGuardados = {};  // slug -> [colores extra guardados por el usuario]
 let pedidoActual = [];      // renglones del pedido en curso
 let historial = [];
-let editandoIndex = null;   // si no es null, agregarRenglon() edita ese renglón en vez de crear uno nuevo
+let editandoIndex = null;
 
 /* ---------- utilidades ---------- */
+// Los mensajes OK se ocultan solos; los de ERROR se quedan hasta que les des
+// clic. Antes los errores se borraban a los 3.5 s y por eso el fallo de carga
+// de catálogos pasaba desapercibido: el select quedaba vacío sin explicación.
 function mostrarMsg(texto, tipo){
   const el = document.getElementById("msgGlobal");
-  el.textContent = texto;
+  el.textContent = texto + (tipo === "error" ? "  (clic para cerrar)" : "");
   el.className = "msg " + tipo;
-  setTimeout(()=>{ el.className = "msg"; }, 3500);
+  if(tipo === "ok") setTimeout(()=>{ el.className = "msg"; }, 3500);
 }
 function hoyISO(){
   const d = new Date();
@@ -275,18 +272,37 @@ function normalizarCatalogo(slug, raw){
 async function cargarCatalogos(){
   try{
     const snap = await db.collection("catalogos_proveedores").get();
+    console.log("[multiproveedor] docs en catalogos_proveedores:", snap.size);
     if(snap.empty){
-      mostrarMsg("⚠️ No se encontraron catálogos en catalogos_proveedores.", "error");
+      mostrarMsg("⚠️ La colección catalogos_proveedores está vacía o no existe. Revisa el nombre de la colección en Firestore.", "error");
+      llenarSelectorProveedores();
       return;
     }
+    PROVEEDORES = {};
     snap.docs.forEach(doc=>{
       PROVEEDORES[doc.id] = normalizarCatalogo(doc.id, doc.data());
     });
+    const sinEstilos = Object.keys(PROVEEDORES).filter(s=>!PROVEEDORES[s].estilos.length);
+    if(sinEstilos.length){
+      console.warn("[multiproveedor] proveedores sin estilos normalizados:", sinEstilos);
+    }
     llenarSelectorProveedores();
   }catch(err){
-    console.error("Error cargando catálogos:", err);
-    mostrarMsg("⚠️ No se pudieron cargar los catálogos: " + err.message, "error");
+    console.error("Error cargando catálogos:", err.code, err.message);
+    llenarSelectorProveedores();
+    if(err.code === "permission-denied"){
+      mostrarMsg("⚠️ Firestore negó el permiso de lectura sobre catalogos_proveedores. Revisa las Reglas de seguridad para esa colección.", "error");
+    }else{
+      mostrarMsg("⚠️ No se pudieron cargar los catálogos: " + err.message, "error");
+    }
   }
+}
+
+// Botón manual, por si la red se cayó justo en la carga inicial.
+async function recargarCatalogos(){
+  document.getElementById("fProveedor").innerHTML = '<option value="">Cargando catálogos…</option>';
+  await cargarCatalogos();
+  await cargarConfigProveedores();
 }
 
 function llenarSelectorProveedores(){
@@ -294,6 +310,12 @@ function llenarSelectorProveedores(){
   const slugsOrdenados = Object.keys(PROVEEDORES).sort((a,b)=>
     PROVEEDORES[a].nombre.localeCompare(PROVEEDORES[b].nombre)
   );
+  if(!slugsOrdenados.length){
+    sel.innerHTML = '<option value="">— Sin catálogos disponibles —</option>';
+    document.getElementById("fProducto").innerHTML = "";
+    poblarFiltroProveedorHistorial();
+    return;
+  }
   sel.innerHTML = slugsOrdenados.map(slug=>
     `<option value="${slug}">${PROVEEDORES[slug].nombre}</option>`
   ).join("");
@@ -562,7 +584,7 @@ async function generarFolio(){
   });
 }
 
-/* ---------- guardar pedido en historial (con o sin enviar por WhatsApp) ---------- */
+/* ---------- guardar pedido en historial ---------- */
 async function guardarPedidoProveedor(slug, enviarWhatsApp){
   const msg = construirMensajePorProveedor(slug);
   if(!msg){ mostrarMsg("No hay productos de este proveedor en el pedido.", "error"); return; }
@@ -599,13 +621,13 @@ async function guardarPedidoProveedor(slug, enviarWhatsApp){
   }
 }
 
-/* ---------- configurar / cambiar número de WhatsApp de un proveedor ---------- */
+/* ---------- configurar / cambiar número de WhatsApp ---------- */
 async function configurarWhatsApp(slug){
   const prov = PROVEEDORES[slug];
   const nombre = prov ? prov.nombre : slug;
   const actual = prov && prov.contacto_whatsapp ? prov.contacto_whatsapp : "";
   const numero = window.prompt(`Número de WhatsApp de ${nombre} (10 dígitos, sin espacios ni +52):`, actual);
-  if(numero === null) return; // canceló
+  if(numero === null) return;
   const limpio = numero.replace(/\D/g, "");
   if(limpio.length !== 10){
     mostrarMsg("El número debe tener 10 dígitos (sin lada +52).", "error");
@@ -794,25 +816,35 @@ function escucharHistorial(){
   }, err=>console.error("Error en historial:", err));
 }
 
-/* ---------- init ---------- */
-const catalogosListos = cargarCatalogos();
+/* =====================================================
+   INIT — CORRECCIÓN PRINCIPAL
+   -----------------------------------------------------
+   Antes, cargarCatalogos() se ejecutaba de inmediato al cargar el script,
+   ANTES de que signInAnonymously() creara la sesión. Firestore respondía
+   permission-denied y el select de proveedores se quedaba vacío. El historial
+   sí funcionaba porque escucharHistorial() estaba dentro de onAuthStateChanged.
+   Ahora TODA la lectura de Firestore ocurre después de tener sesión.
+===================================================== */
+let yaInicializado = false;
 
-appPedidoMultiProveedor.auth().onAuthStateChanged(user=>{
-  if(user){
-    cargarColoresGuardados();
-    escucharHistorial();
-    catalogosListos.then(()=>cargarConfigProveedores());
-  }
+appPedidoMultiProveedor.auth().onAuthStateChanged(async (user)=>{
+  if(!user) return;
+  if(yaInicializado) return;   // onAuthStateChanged puede dispararse varias veces
+  yaInicializado = true;
+
+  await cargarCatalogos();        // 1. catálogos → llena el select de proveedores
+  await cargarConfigProveedores();// 2. números de WhatsApp
+  await cargarColoresGuardados(); // 3. colores extra
+  escucharHistorial();            // 4. historial en tiempo real
 });
-// Sesión anónima de ESTA app con nombre propio (ver arriba). Al ser una app
-// distinta a la del panel principal, ya no hace falta preocuparse por pisar
-// la sesión de correo/contraseña de Ana Luz — quedó completamente separada.
-// Se deja SESSION (en vez de LOCAL) para que cada pestaña nueva inicie su
-// propia sesión anónima fresca, sin arrastrar estado de pestañas anteriores.
+
+// Sesión anónima de ESTA app con nombre propio. SESSION para que cada pestaña
+// inicie su propia sesión fresca y no toque la sesión del panel principal.
 appPedidoMultiProveedor.auth().setPersistence(firebase.auth.Auth.Persistence.SESSION)
   .then(() => appPedidoMultiProveedor.auth().signInAnonymously())
   .catch(err=>{
     console.error("Error de autenticación:", err);
+    document.getElementById("fProveedor").innerHTML = '<option value="">— Error de conexión —</option>';
     mostrarMsg("⚠️ No se pudo conectar con la base de datos: " + err.message, "error");
   });
 </script>
