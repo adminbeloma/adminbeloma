@@ -1023,6 +1023,15 @@ tbody td{padding:11px 14px;font-size:13.5px;vertical-align:middle;}
           <input type="date" id="ped-fecha-hasta" style="padding:6px 8px;border:1px solid var(--border);border-radius:8px;font-size:12px;" onchange="filterPedidosFecha('rango')">
         </div>
       </div>
+      <div style="display:flex;align-items:center;gap:8px;margin-top:10px;flex-wrap:wrap;">
+        <input type="text" id="ped-buscar" placeholder="🔍 Buscar por cliente, descripción o folio..."
+               oninput="renderPedidos()"
+               style="flex:1;min-width:240px;max-width:420px;padding:8px 12px;border:1px solid var(--border);border-radius:8px;font-size:13px;">
+        <button class="btn btn-ghost btn-sm" onclick="limpiarBusquedaPedidos()">✖ Limpiar</button>
+        <span id="ped-contador" style="font-size:12px;color:var(--ink-soft);"></span>
+        <button class="btn btn-sm" style="background:var(--accent);color:#fff;margin-left:auto;"
+                onclick="revisarDescuadres()">🔄 Revisar descuadres con Ventas</button>
+      </div>
       <div class="table-wrap">
         <table>
           <thead><tr><th>Fecha</th><th>Cliente</th><th>Descripción</th><th>Total</th><th>Anticipo</th><th>Saldo</th><th>Entrega</th><th>Estatus</th><th>Acciones</th></tr></thead>
@@ -5521,8 +5530,16 @@ window.guardarPedido=async function(){
   const anticipo=+document.getElementById('ped-anticipo').value||0;
   const saldo=Math.max(0,total-anticipo);
   const id=document.getElementById('ped-id').value||uid();
-  const data={id,fecha:document.getElementById('ped-fecha').value,entrega:document.getElementById('ped-entrega').value,cliente,telefono:document.getElementById('ped-telefono').value,descripcion:document.getElementById('ped-descripcion').value,total,anticipo,saldo,formaPago:document.getElementById('ped-forma-pago').value,estatus:document.getElementById('ped-estatus').value,notas:document.getElementById('ped-notas').value,ciudad:document.getElementById('ped-ciudad').value,paqueteria:document.getElementById('ped-paqueteria').value,costoGuia:+document.getElementById('ped-costo-guia').value||0,guia:document.getElementById('ped-guia').value,domicilio:document.getElementById('ped-domicilio').value,creado:new Date().toISOString()};
+  const previo=pedidos.find(x=>x.id===id);
+  const data={id,fecha:document.getElementById('ped-fecha').value,entrega:document.getElementById('ped-entrega').value,cliente,telefono:document.getElementById('ped-telefono').value,descripcion:document.getElementById('ped-descripcion').value,total,anticipo,saldo,formaPago:document.getElementById('ped-forma-pago').value,estatus:document.getElementById('ped-estatus').value,notas:document.getElementById('ped-notas').value,ciudad:document.getElementById('ped-ciudad').value,paqueteria:document.getElementById('ped-paqueteria').value,costoGuia:+document.getElementById('ped-costo-guia').value||0,guia:document.getElementById('ped-guia').value,domicilio:document.getElementById('ped-domicilio').value,
+    // CORRECCIÓN: antes este setDoc reemplazaba el documento completo y borraba
+    // origen/ventaId/folio, dejando huérfano al pedido espejo (ya no se podía
+    // ligar de vuelta a su venta). Ahora se conservan.
+    origen:previo?.origen||'', ventaId:previo?.ventaId||'', folio:previo?.folio||'',
+    ultimoPago:previo?.ultimoPago||null,
+    creado:previo?.creado||new Date().toISOString()};
   await setDoc(doc(db,'pl_pedidos',id),data);
+  await sincronizarVentaDesdePedido(data);
   closeModal('modal-pedido');
   toast('✅ Pedido guardado');
 };
@@ -5570,9 +5587,21 @@ function renderPedidos(){
       return true;
     });
   }
+  // Búsqueda por texto: cliente, descripción o folio. Se normaliza para que
+  // "magaña" encuentre "Magana" y viceversa (acentos y mayúsculas dan igual).
+  const termino=normalizarTexto(document.getElementById('ped-buscar')?.value||'');
+  if(termino){
+    lista=lista.filter(p=>
+      normalizarTexto(p.cliente||'').includes(termino) ||
+      normalizarTexto(p.descripcion||'').includes(termino) ||
+      normalizarTexto(p.folio||'').includes(termino)
+    );
+  }
   lista.sort((a,b)=>b.fecha>a.fecha?1:-1);
   const tbody=document.getElementById('tabla-pedidos');
   const empty=document.getElementById('pedidos-empty');
+  const contador=document.getElementById('ped-contador');
+  if(contador) contador.textContent=termino?`${lista.length} resultado(s)`:`${lista.length} pedido(s)`;
   if(!tbody)return;
   if(lista.length===0){tbody.innerHTML='';empty.style.display='block';return;}
   empty.style.display='none';
@@ -5585,7 +5614,15 @@ function renderPedidos(){
     <td style="color:var(--green);font-weight:600;">${fmtMoney(p.anticipo)}</td>
     <td style="color:${p.saldo>0?'var(--red)':'var(--green)'};font-weight:700;">${fmtMoney(p.saldo)}</td>
     <td>${p.entrega?fmtFecha(p.entrega):'—'}</td>
-    <td><span class="badge ${estatusColor[p.estatus]||'badge-gray'}">${p.estatus}</span></td>
+    <td>
+      <select onchange="cambiarEstatusPedido('${p.id}', this.value)"
+              class="badge ${estatusColor[p.estatus]||'badge-gray'}"
+              style="border:1px solid var(--border);border-radius:8px;padding:4px 6px;font-size:11px;font-weight:700;cursor:pointer;">
+        ${['En elaboración','Listo','Entregado','Liquidado'].map(e=>
+          `<option value="${e}"${p.estatus===e?' selected':''}>${e}</option>`).join('')}
+      </select>
+      ${descuadreDeVenta(p)?`<div style="font-size:10px;color:var(--red);font-weight:700;margin-top:3px;" title="El anticipo/saldo de este pedido no coincide con su venta. Usa el botón 'Revisar descuadres con Ventas'.">⚠️ No cuadra con Ventas</div>`:''}
+    </td>
     <td style="display:flex;gap:4px;flex-wrap:wrap;">
       ${isAdmin?`<button class="btn btn-ghost btn-sm" onclick="openPedidoModal('${p.id}')">✏️</button>`:''}
       ${+p.saldo>0?`<button class="btn btn-sm" style="background:var(--accent);color:#fff;" onclick="openPagoSaldoModal('${p.id}')">💰 Pago</button>`:''}
@@ -5596,6 +5633,137 @@ function renderPedidos(){
     </td>
   </tr>`).join('');
 }
+
+// ═══════════════════════════════════════════════════════════════════
+//  SINCRONIZACIÓN PEDIDOS → VENTAS  (dirección que faltaba)
+//  ------------------------------------------------------------------
+//  Antes solo existía Ventas → Pedidos (sincronizarPedidoDesdeVenta).
+//  Cuando se registraba un pago desde el módulo de Pedidos, pl_ventas
+//  se quedaba con el anticipo viejo y el cliente seguía apareciendo
+//  con deuda en Ventas aunque en Pedidos dijera "Liquidado".
+//  Esta función cierra el círculo.
+// ═══════════════════════════════════════════════════════════════════
+function normalizarTexto(t){
+  return (t||'').toString().toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'');
+}
+
+window.limpiarBusquedaPedidos=function(){
+  const inp=document.getElementById('ped-buscar');
+  if(inp) inp.value='';
+  renderPedidos();
+};
+
+// Devuelve true si el pedido viene de una venta y sus montos NO coinciden
+// con los de esa venta (solo revisa contra las ventas cargadas en memoria;
+// el botón "Revisar descuadres" hace la revisión completa contra Firestore).
+function descuadreDeVenta(p){
+  if(p.origen!=='venta'||!p.ventaId) return false;
+  const v=ventas.find(x=>x.id===p.ventaId);
+  if(!v) return false;
+  return Math.round((+v.anticipo||0)*100)!==Math.round((+p.anticipo||0)*100);
+}
+
+// Empuja anticipo/saldo del pedido hacia su venta de origen.
+// Lee la venta directo de Firestore (no del arreglo en memoria) porque
+// en Ventas solo están cargadas las últimas ~50-100.
+async function sincronizarVentaDesdePedido(pedidoData){
+  if(pedidoData.origen!=='venta'||!pedidoData.ventaId) return false;
+  try{
+    const ref=doc(db,'pl_ventas',pedidoData.ventaId);
+    const snap=await getDoc(ref);
+    if(!snap.exists()) return false;
+    const v=snap.data();
+    const nuevoAnticipo=+(+pedidoData.anticipo||0).toFixed(2);
+    const nuevoSaldo=+Math.max(0,(+v.total||0)-nuevoAnticipo).toFixed(2);
+    // Si ya está igual, no escribimos nada (evita writes innecesarios)
+    if(Math.round((+v.anticipo||0)*100)===Math.round(nuevoAnticipo*100)) return false;
+    await setDoc(ref,{anticipo:nuevoAnticipo,saldo:nuevoSaldo,actualizado:new Date().toISOString()},{merge:true});
+    // Reflejarlo en memoria para que la tabla de Ventas se actualice sin recargar
+    const idx=ventas.findIndex(x=>x.id===pedidoData.ventaId);
+    if(idx>=0){ ventas[idx]={...ventas[idx],anticipo:nuevoAnticipo,saldo:nuevoSaldo}; renderVentas(); renderDashboard(); }
+    return true;
+  }catch(err){
+    console.error('Error sincronizando venta desde pedido:',err);
+    toast('⚠️ El pago se guardó en Pedidos pero no se pudo actualizar la Venta');
+    return false;
+  }
+}
+
+// Cambio manual de estatus desde la tabla de Pedidos.
+window.cambiarEstatusPedido=async function(id, nuevoEstatus){
+  const p=pedidos.find(x=>x.id===id);
+  if(!p){toast('Pedido no encontrado');return;}
+  if(p.estatus===nuevoEstatus) return;
+  // Marcar "Liquidado" a mano cuando todavía hay saldo suele ser un error de dedo:
+  // se avisa, pero si confirma se respeta (a veces se perdona un resto).
+  if(nuevoEstatus==='Liquidado' && (+p.saldo||0)>0){
+    if(!confirm(`Este pedido todavía tiene un saldo de ${fmtMoney(p.saldo)}.\n\nSi lo marcas como Liquidado, el saldo NO se pone en cero automáticamente.\nPara registrar el pago usa el botón 💰 Pago.\n\n¿Aun así quieres cambiar el estatus?`)) {
+      renderPedidos(); // regresa el selector a su valor anterior
+      return;
+    }
+  }
+  await setDoc(doc(db,'pl_pedidos',id),{estatus:nuevoEstatus},{merge:true});
+  toast('✅ Estatus actualizado a: '+nuevoEstatus);
+};
+
+// ── Reconciliación completa Pedidos ↔ Ventas ─────────────────────
+// Recorre TODAS las ventas de Firestore y compara con su pedido espejo.
+// Regla: gana el anticipo MÁS ALTO de los dos, porque los abonos solo suman
+// (si el pago se capturó en Pedidos, gana Pedidos; si se capturó/editó en
+// Ventas, gana Ventas). Muestra el detalle antes de aplicar nada.
+window.revisarDescuadres=async function(){
+  toast('🔍 Revisando... esto puede tardar unos segundos');
+  try{
+    const snap=await getDocs(collection(db,'pl_ventas'));
+    const todasVentas=snap.docs.map(d=>d.data());
+    const mapaPedidos={};
+    pedidos.forEach(p=>{ if(p.ventaId) mapaPedidos[p.ventaId]=p; });
+
+    const desajustes=[];
+    todasVentas.forEach(v=>{
+      const p=mapaPedidos[v.id]||pedidos.find(x=>x.id==='venta_'+v.id);
+      if(!p) return;
+      const antVenta=+(+v.anticipo||0).toFixed(2);
+      const antPedido=+(+p.anticipo||0).toFixed(2);
+      if(Math.round(antVenta*100)===Math.round(antPedido*100)) return;
+      const ganador=Math.max(antVenta,antPedido);
+      desajustes.push({
+        venta:v, pedido:p, antVenta, antPedido, ganador,
+        direccion: ganador===antPedido ? 'pedido→venta' : 'venta→pedido'
+      });
+    });
+
+    if(desajustes.length===0){ toast('✅ Todo cuadra — no hay diferencias entre Pedidos y Ventas'); return; }
+
+    const detalle=desajustes.slice(0,25).map(d=>
+      `• ${d.venta.cliente||'—'} (${fmtFecha(d.venta.fecha)}): Ventas ${fmtMoney(d.antVenta)} vs Pedidos ${fmtMoney(d.antPedido)} → queda en ${fmtMoney(d.ganador)}`
+    ).join('\n');
+    const extra=desajustes.length>25?`\n...y ${desajustes.length-25} más.`:'';
+
+    if(!confirm(`Se encontraron ${desajustes.length} registro(s) que no cuadran:\n\n${detalle}${extra}\n\nSe va a dejar el anticipo MÁS ALTO de los dos lados (los abonos solo suman).\n\n¿Aplicar la corrección?`)) return;
+
+    let corregidos=0;
+    for(const d of desajustes){
+      const totalV=+d.venta.total||0;
+      const totalP=+d.pedido.total||0;
+      const saldoV=+Math.max(0,totalV-d.ganador).toFixed(2);
+      const saldoP=+Math.max(0,totalP-d.ganador).toFixed(2);
+      await setDoc(doc(db,'pl_ventas',d.venta.id),
+        {anticipo:d.ganador,saldo:saldoV,actualizado:new Date().toISOString()},{merge:true});
+      const patchPedido={anticipo:d.ganador,saldo:saldoP};
+      if(saldoP===0 && d.pedido.estatus==='En elaboración') patchPedido.estatus='Liquidado';
+      // Repara de paso el enlace si se había perdido al editar el pedido
+      if(!d.pedido.ventaId){ patchPedido.origen='venta'; patchPedido.ventaId=d.venta.id; }
+      await setDoc(doc(db,'pl_pedidos',d.pedido.id),patchPedido,{merge:true});
+      corregidos++;
+    }
+    toast(`✅ ${corregidos} registro(s) corregidos en Ventas y Pedidos`);
+    cargarVentas(true);
+  }catch(err){
+    console.error('Error revisando descuadres:',err);
+    toast('⚠️ No se pudo completar la revisión: '+err.message);
+  }
+};
 
 window.wsComprobante=function(id, tipo){
   const p=pedidos.find(x=>x.id===id);
@@ -6419,15 +6587,20 @@ window.guardarPagoSaldo=async function(){
   const nuevoSaldo=+Math.max(0,(+p.total||0)-nuevoAnticipo).toFixed(2);
   const metodo=document.querySelector('input[name="ps-metodo"]:checked')?.value||'efectivo';
   const nuevoEstatus=nuevoSaldo===0?'Liquidado':p.estatus;
-  await setDoc(doc(db,'pl_pedidos',id),{
+  const pedidoActualizado={
     ...p,
     anticipo:nuevoAnticipo,
     saldo:nuevoSaldo,
     estatus:nuevoEstatus,
     ultimoPago:{fecha:document.getElementById('ps-fecha').value,monto:pago,metodo,notas:document.getElementById('ps-notas').value}
-  });
+  };
+  await setDoc(doc(db,'pl_pedidos',id),pedidoActualizado);
+  // CORRECCIÓN: empujar el pago también a la venta de origen. Sin esto el
+  // cliente seguía apareciendo con deuda en el módulo de Ventas.
+  const sincronizada=await sincronizarVentaDesdePedido(pedidoActualizado);
   closeModal('modal-pago-saldo');
-  toast(nuevoSaldo===0?'✅ Pedido liquidado por completo':'✅ Pago registrado — Saldo: '+fmtMoney(nuevoSaldo));
+  toast((nuevoSaldo===0?'✅ Pedido liquidado por completo':'✅ Pago registrado — Saldo: '+fmtMoney(nuevoSaldo))
+        +(sincronizada?' · Venta actualizada':''));
 };
 
 // ═══════════════════════════════════════════════════════════════════
