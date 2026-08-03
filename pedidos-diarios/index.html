@@ -64,6 +64,12 @@
   .modal-box{background:#fff;border-radius:12px;padding:22px 24px;max-width:560px;width:100%;max-height:90vh;overflow-y:auto;}
   .modal-box h3{margin:0 0 16px;color:var(--azul);}
   .modal-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:12px;}
+  /* selección múltiple de renglones */
+  input[type=checkbox]{width:17px;height:17px;padding:0;cursor:pointer;accent-color:var(--azul);}
+  .barra-sel{display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:10px;padding:8px 12px;background:#fff5f5;border:1px solid #f6caca;border-radius:8px;}
+  .barra-sel .cuenta{font-size:.82rem;font-weight:600;color:var(--rojo);}
+  tr.fila-sel td{background:#fff5f5 !important;}
+  .col-chk{width:38px;text-align:center;}
 </style>
 </head>
 <body>
@@ -163,6 +169,7 @@
       <table class="items-tabla" id="tablaItems">
         <thead>
           <tr>
+            <th class="col-chk"><input type="checkbox" id="chkTodosItems" onchange="toggleTodosCaptura(this,'it')" title="Seleccionar todos"></th>
             <th style="min-width:120px;">Folio</th>
             <th style="min-width:130px;">Cliente</th>
             <th style="min-width:110px;">Ciudad</th>
@@ -181,6 +188,7 @@
       </div>
       <div class="fila-acciones">
         <button class="btn btn-secundario btn-chico" onclick="agregarFilaItem()">+ Agregar prenda / pedido</button>
+        <button class="btn btn-rojo btn-chico" onclick="borrarFilasCapturaSeleccionadas('it')">🗑 Quitar renglones seleccionados</button>
       </div>
       <div class="fila-acciones" style="margin-top:18px;">
         <button class="btn btn-primario" onclick="guardarPedido()">Guardar todo</button>
@@ -203,6 +211,7 @@
       <table class="items-tabla" id="tablaNuevosHoy" style="display:none;">
         <thead>
           <tr>
+            <th class="col-chk"><input type="checkbox" id="chkTodosNH" onchange="toggleTodosCaptura(this,'nh')" title="Seleccionar todos"></th>
             <th style="min-width:100px;">Canal</th>
             <th style="min-width:120px;">Folio</th>
             <th style="min-width:130px;">Cliente</th>
@@ -222,6 +231,7 @@
       </div>
       <div class="fila-acciones">
         <button class="btn btn-secundario btn-chico" onclick="agregarFilaNuevaHoy()">+ Agregar renglón</button>
+        <button class="btn btn-rojo btn-chico" onclick="borrarFilasCapturaSeleccionadas('nh')">🗑 Quitar renglones seleccionados</button>
         <button class="btn btn-primario" id="btnGuardarNuevosHoy" style="display:none;" onclick="guardarNuevosHoy()">Guardar renglón(es) nuevo(s)</button>
       </div>
     </div>
@@ -381,7 +391,11 @@ document.addEventListener("DOMContentLoaded", ()=>{
 });
 
 let itemIdCounter = 0;
-const TALLAS_POR_GENERO = {"Caballero": ["CH","M","G","XL","XXL","XXXL"],"Dama": ["CH","M","G","XL","XXL"],"Niño": ["CH","M","G","XL"],"Niña": ["CH","M","G","XL"],"Juvenil": ["CH","M","G","XL"],"Unisex": ["CH","M","G","XL","XXL"]};
+const GENEROS_DISPONIBLES = ["Caballero","Dama","Niño","Niña","Juvenil","Unisex","Pañalero Bebé"];
+const TALLAS_POR_GENERO = {"Caballero": ["CH","M","G","XL","XXL","XXXL"],"Dama": ["CH","M","G","XL","XXL"],"Niño": ["CH","M","G","XL"],"Niña": ["CH","M","G","XL"],"Juvenil": ["CH","M","G","XL"],"Unisex": ["CH","M","G","XL","XXL"],"Pañalero Bebé": ["3 meses","6 meses","9 meses","12 meses","18 meses","24 meses"]};
+// Géneros/prendas que solo se manejan en ciertos colores. El Pañalero de Bebé
+// únicamente se maneja en BLANCO, así que su selector de color queda limitado.
+const COLORES_POR_GENERO = {"Pañalero Bebé": ["Blanco"]};
 const COLORES_COMUNES = ["Amarillo Neón","Aqua","Arena","Azul Claro","Beige","Blanco","Canario","Carbón","Caribe","Celeste","Chocolate","Coral","Delfín","Fucsia","Gris Jaspe","Jade","Ladrillo","Lavanda","Lima","Mango","Marino","Marrón","Morado","Naranja","Naranja Neón","Negro","Ocre","Olivo","Plata","Rojo","Rosa Pastel","Royal","Turquesa","Verde Bosque","Verde Neón","Otro"];
 const MARCAS_DISPONIBLES = ["Euro Cotton","Yazbek","Gildan","PlayeryTees","Bones","Optima","Otro"];
 
@@ -408,7 +422,33 @@ window.onTipoClienteChange = function(){
 };
 
 function opcionesTalla(genero, tallaActual){ const tallas = TALLAS_POR_GENERO[genero] || TALLAS_POR_GENERO["Unisex"]; return tallas.map(t=>`<option value="${t}"${t===tallaActual?' selected':''}>${t}</option>`).join(""); }
-function opcionesColor(colorActual){ return COLORES_COMUNES.map(c=>`<option value="${c}"${c===colorActual?' selected':''}>${c}</option>`).join(""); }
+// Si el género tiene colores restringidos (ej. Pañalero Bebé = solo Blanco),
+// se muestran únicamente esos; si no, la lista completa.
+function coloresDe(genero){ return COLORES_POR_GENERO[genero] || COLORES_COMUNES; }
+function opcionesColor(colorActual, genero){ return coloresDe(genero).map(c=>`<option value="${c}"${c===colorActual?' selected':''}>${c}</option>`).join(""); }
+// Los géneros no se escriben a mano en cada tabla: salen de GENEROS_DISPONIBLES.
+// Si un pedido viejo trae un género que ya no está en la lista, se conserva
+// como opción extra para no perderlo al editar.
+function opcionesGenero(generoActual){
+  const lista = GENEROS_DISPONIBLES.slice();
+  if(generoActual && !lista.includes(generoActual)) lista.push(generoActual);
+  return lista.map(g=>`<option value="${g}"${g===generoActual?' selected':''}>${g}</option>`).join("");
+}
+// Al cambiar el género se recalculan tallas Y colores de ese renglón.
+// prefijo: "it-" (captura), "nh-" (nuevos de hoy), "ed-it-" (modal editar).
+function refrescarTallaYColorFila(tr, prefijo){
+  if(!tr) return;
+  const genero = tr.querySelector("."+prefijo+"genero").value;
+  const tallaSel = tr.querySelector("."+prefijo+"talla");
+  const tallasValidas = TALLAS_POR_GENERO[genero] || TALLAS_POR_GENERO["Unisex"];
+  tallaSel.innerHTML = opcionesTalla(genero, tallasValidas.includes(tallaSel.value) ? tallaSel.value : tallasValidas[0]);
+  const colorSel = tr.querySelector("."+prefijo+"color");
+  const permitidos = coloresDe(genero);
+  const colorActual = permitidos.includes(colorSel.value) ? colorSel.value : permitidos[0];
+  colorSel.innerHTML = opcionesColor(colorActual, genero);
+  const otro = tr.querySelector("."+prefijo+"color-otro");
+  if(otro && colorSel.value !== "Otro"){ otro.style.display = "none"; otro.value = ""; }
+}
 function opcionesMarca(marcaActual){ return MARCAS_DISPONIBLES.map(m=>`<option value="${m}"${m===marcaActual?' selected':''}>${m}</option>`).join(""); }
 
 /* ---------- captura rápida de nuevos pedidos, directo en "Pedidos de hoy" ---------- */
@@ -418,6 +458,7 @@ function agregarFilaNuevaHoy(){
   const tr = document.createElement("tr");
   tr.id = id;
   tr.innerHTML = `
+    <td class="col-chk"><input type="checkbox" class="nh-chk" onchange="actualizarChkMaster('nh')"></td>
     <td><select class="nh-canal">
           <option value="Local">Local</option>
           <option value="MercadoLibre">MercadoLibre</option>
@@ -429,17 +470,10 @@ function agregarFilaNuevaHoy(){
     <td><input type="text" class="nh-folio" placeholder="Ej. ML-123456 (vacío = automático)"></td>
     <td><input type="text" class="nh-cliente" placeholder="Nombre / opcional"></td>
     <td><input type="text" class="nh-ciudad" placeholder="Ciudad" value="Mazatlán, Sinaloa"></td>
-    <td><select class="nh-genero" onchange="onGeneroFilaChangeNH('${id}')">
-          <option value="Caballero">Caballero</option>
-          <option value="Dama">Dama</option>
-          <option value="Niño">Niño</option>
-          <option value="Niña">Niña</option>
-          <option value="Juvenil">Juvenil</option>
-          <option value="Unisex">Unisex</option>
-        </select></td>
+    <td><select class="nh-genero" onchange="onGeneroFilaChangeNH('${id}')">${opcionesGenero("Caballero")}</select></td>
     <td><select class="nh-talla">${opcionesTalla("Caballero","")}</select></td>
     <td>
-      <select class="nh-color" onchange="onColorFilaChangeNH('${id}')">${opcionesColor("Negro")}</select>
+      <select class="nh-color" onchange="onColorFilaChangeNH('${id}')">${opcionesColor("Negro","Caballero")}</select>
       <input type="text" class="nh-color-otro" placeholder="Especifica el color" style="margin-top:4px;display:none;">
     </td>
     <td>
@@ -449,7 +483,7 @@ function agregarFilaNuevaHoy(){
     <td><input type="text" class="nh-desc" placeholder="Diseño / descripción"></td>
     <td><input type="number" class="nh-cant" min="1" value="1"></td>
     <td><input type="number" class="nh-paquete" min="2" placeholder="Ej. 2, 3"></td>
-    <td><button class="btn btn-rojo btn-chico" onclick="document.getElementById('${id}').remove(); actualizarVisibilidadNuevosHoy();">✕</button></td>
+    <td><button class="btn btn-rojo btn-chico" onclick="document.getElementById('${id}').remove(); actualizarVisibilidadNuevosHoy(); actualizarChkMaster('nh');">✕</button></td>
   `;
   document.getElementById("nuevosHoyBody").appendChild(tr);
   actualizarVisibilidadNuevosHoy();
@@ -459,7 +493,7 @@ function actualizarVisibilidadNuevosHoy(){
   document.getElementById("tablaNuevosHoy").style.display = hayFilas ? "table" : "none";
   document.getElementById("btnGuardarNuevosHoy").style.display = hayFilas ? "inline-block" : "none";
 }
-function onGeneroFilaChangeNH(id){ const tr = document.getElementById(id); const genero = tr.querySelector(".nh-genero").value; const tallaSel = tr.querySelector(".nh-talla"); tallaSel.innerHTML = opcionesTalla(genero, tallaSel.value); }
+function onGeneroFilaChangeNH(id){ refrescarTallaYColorFila(document.getElementById(id), "nh-"); }
 function onColorFilaChangeNH(id){ const tr = document.getElementById(id); const esOtro = tr.querySelector(".nh-color").value === "Otro"; const otroInput = tr.querySelector(".nh-color-otro"); otroInput.style.display = esOtro ? "block" : "none"; if(esOtro) otroInput.focus(); }
 function onMarcaFilaChangeNH(id){ const tr = document.getElementById(id); const esOtro = tr.querySelector(".nh-marca").value === "Otro"; const otroInput = tr.querySelector(".nh-marca-otro"); otroInput.style.display = esOtro ? "block" : "none"; if(esOtro) otroInput.focus(); }
 
@@ -509,6 +543,8 @@ async function guardarNuevosHoy(){
     }
     mostrarMsg(`✔ ${guardados} pedido(s) nuevo(s) guardado(s)`, "ok");
     document.getElementById("nuevosHoyBody").innerHTML = "";
+    const mNH = document.getElementById("chkTodosNH");
+    if(mNH){ mNH.checked = false; mNH.indeterminate = false; }
     actualizarVisibilidadNuevosHoy();
     cargarPedidosHoy();
   }catch(err){
@@ -522,25 +558,21 @@ function agregarFilaItem(valores){
   const tr = document.createElement("tr");
   tr.id = id;
   const generoInicial = (valores && valores.genero) || "Caballero";
-  const colorInicial = (valores && valores.color) || "Negro";
-  const esColorOtro = colorInicial && !COLORES_COMUNES.includes(colorInicial);
+  const coloresValidos = coloresDe(generoInicial);
+  let colorInicial = (valores && valores.color) || "Negro";
+  if(!coloresValidos.includes(colorInicial) && COLORES_POR_GENERO[generoInicial]) colorInicial = coloresValidos[0];
+  const esColorOtro = colorInicial && !coloresValidos.includes(colorInicial);
   const marcaInicial = (valores && valores.marca) || "";
   const esMarcaOtro = marcaInicial && !MARCAS_DISPONIBLES.includes(marcaInicial);
   tr.innerHTML = `
+    <td class="col-chk"><input type="checkbox" class="it-chk" onchange="actualizarChkMaster('it')"></td>
     <td><input type="text" class="it-folio" placeholder="Ej. ML-123456"></td>
     <td><input type="text" class="it-cliente" placeholder="Nombre / opcional"></td>
     <td><input type="text" class="it-ciudad" placeholder="Ciudad"></td>
-    <td><select class="it-genero" onchange="onGeneroFilaChange('${id}')">
-          <option value="Caballero">Caballero</option>
-          <option value="Dama">Dama</option>
-          <option value="Niño">Niño</option>
-          <option value="Niña">Niña</option>
-          <option value="Juvenil">Juvenil</option>
-          <option value="Unisex">Unisex</option>
-        </select></td>
+    <td><select class="it-genero" onchange="onGeneroFilaChange('${id}')">${opcionesGenero(generoInicial)}</select></td>
     <td><select class="it-talla">${opcionesTalla(generoInicial, valores?valores.talla:"")}</select></td>
     <td>
-      <select class="it-color" onchange="onColorFilaChange('${id}')">${opcionesColor(esColorOtro ? "Otro" : colorInicial)}</select>
+      <select class="it-color" onchange="onColorFilaChange('${id}')">${opcionesColor(esColorOtro ? "Otro" : colorInicial, generoInicial)}</select>
       <input type="text" class="it-color-otro" placeholder="Especifica el color" style="margin-top:4px;display:${esColorOtro?'block':'none'};" value="${esColorOtro?colorInicial:''}">
     </td>
     <td>
@@ -550,7 +582,7 @@ function agregarFilaItem(valores){
     <td><input type="text" class="it-desc" placeholder="Diseño / descripción"></td>
     <td><input type="number" class="it-cant" min="1" value="1"></td>
     <td><input type="number" class="it-paquete" min="2" placeholder="Ej. 2, 3"></td>
-    <td><button class="btn btn-rojo btn-chico" onclick="document.getElementById('${id}').remove()">✕</button></td>
+    <td><button class="btn btn-rojo btn-chico" onclick="document.getElementById('${id}').remove(); actualizarChkMaster('it');">✕</button></td>
   `;
   document.getElementById("itemsBody").appendChild(tr);
   if(valores){
@@ -565,7 +597,7 @@ function agregarFilaItem(valores){
     tr.querySelector(".it-ciudad").value = "Mazatlán, Sinaloa";
   }
 }
-function onGeneroFilaChange(id){ const tr = document.getElementById(id); const genero = tr.querySelector(".it-genero").value; const tallaSel = tr.querySelector(".it-talla"); const tallaActual = tallaSel.value; tallaSel.innerHTML = opcionesTalla(genero, tallaActual); }
+function onGeneroFilaChange(id){ refrescarTallaYColorFila(document.getElementById(id), "it-"); }
 function onColorFilaChange(id){ const tr = document.getElementById(id); const esOtro = tr.querySelector(".it-color").value === "Otro"; const otroInput = tr.querySelector(".it-color-otro"); otroInput.style.display = esOtro ? "block" : "none"; if(esOtro) otroInput.focus(); }
 function onMarcaFilaChange(id){ const tr = document.getElementById(id); const esOtro = tr.querySelector(".it-marca").value === "Otro"; const otroInput = tr.querySelector(".it-marca-otro"); otroInput.style.display = esOtro ? "block" : "none"; if(esOtro) otroInput.focus(); }
 
@@ -597,6 +629,8 @@ function limpiarFormulario(){
   document.getElementById("fTipoCliente").value = "Local";
   document.getElementById("fFecha").value = hoyISO();
   document.getElementById("itemsBody").innerHTML = "";
+  const mItems = document.getElementById("chkTodosItems");
+  if(mItems){ mItems.checked = false; mItems.indeterminate = false; }
   agregarFilaItem();
 }
 document.getElementById("fCanal").addEventListener("change", (e)=>{
@@ -754,6 +788,7 @@ async function guardarPedido(){
 // es el puente entre ambos sistemas si algún día hay que cruzarlos.
 function mapGeneroImportadoPedidos(txt){
   const t=(txt||'').toLowerCase();
+  if(t.includes('pañalero') || t.includes('panalero') || t.includes('mameluco')) return 'Pañalero Bebé';
   if(t.includes('niña juvenil')) return 'Niña';
   if(t.includes('niño juvenil')) return 'Niño';
   if(t.includes('juvenil')) return 'Juvenil';
@@ -857,7 +892,9 @@ async function importarPedidosExcelML(file){
 // GENERO DESCRIPCION CLIENTE, mezcla Local + Mercado Libre) ----
 const GENERO_MAP_HIST = {
   'HOMBRE':'Caballero', 'MUJER':'Dama', 'NIÑO':'Niño', 'NINO':'Niño', 'NIÑA':'Niña', 'NINA':'Niña',
-  'JUVENIL':'Juvenil', 'JUEVENIL':'Juvenil', 'UNISEX':'Unisex', 'BEBE':'Bebé', 'BEBÉ':'Bebé'
+  'JUVENIL':'Juvenil', 'JUEVENIL':'Juvenil', 'UNISEX':'Unisex',
+  'BEBE':'Pañalero Bebé', 'BEBÉ':'Pañalero Bebé', 'PAÑALERO':'Pañalero Bebé',
+  'PANALERO':'Pañalero Bebé', 'PAÑALERO BEBE':'Pañalero Bebé', 'PAÑALERO BEBÉ':'Pañalero Bebé'
 };
 function mapGeneroHist(txt){
   const t = (txt||'').toString().trim().toUpperCase();
@@ -1012,11 +1049,14 @@ function pintarResumen(lista, contenedorId){
 }
 function pintarTablaPedidos(lista, contenedor){
   if(lista.length === 0){ contenedor.innerHTML = '<div class="vacio">No hay pedidos registrados.</div>'; return; }
-  let html = `<table><thead><tr><th>Folio</th><th>Canal</th><th>Cliente</th><th>Ciudad</th><th>Tipo</th><th>Piezas</th><th>Detalle</th><th>Acciones</th></tr></thead><tbody>`;
+  let html = barraSeleccionHTML("hoy") + `<table><thead><tr>
+      <th class="col-chk"><input type="checkbox" id="chkTodos-hoy" onchange="toggleTodosPedidos(this,'hoy')" title="Seleccionar todos"></th>
+      <th>Folio</th><th>Canal</th><th>Cliente</th><th>Ciudad</th><th>Tipo</th><th>Piezas</th><th>Detalle</th><th>Acciones</th></tr></thead><tbody>`;
   lista.forEach(p=>{
     const detalle = (p.items||[]).map(it=> `${it.cantidad}× ${it.genero} ${it.talla} ${it.color}${it.marca?' ('+it.marca+')':''} — ${it.descripcion}`).join("<br>");
     const notaPaquete = p.piezasPaquete>1 ? `<br><span style="color:#b45309;font-weight:600;">📦 ${p.piezasPaquete} playeras en el mismo paquete</span>` : "";
     html += `<tr>
+      <td class="col-chk"><input type="checkbox" class="chk-pedido-hoy" value="${p.id}" onchange="onChkPedido(this,'hoy')"></td>
       <td>${p.folio}</td><td>${badgeCanal(p.canal)}</td><td>${p.cliente}</td><td>${p.ciudad||'—'}</td><td>${p.tipoCliente}</td><td>${p.totalPiezas}</td>
       <td style="font-size:.78rem;color:#6b7280;">${detalle}${notaPaquete}</td>
       <td style="white-space:nowrap;">
@@ -1029,6 +1069,108 @@ function pintarTablaPedidos(lista, contenedor){
   contenedor.innerHTML = html;
 }
 
+/* ---------- selección múltiple de renglones ya guardados ----------
+   contexto = "hoy" (Pedidos de hoy) o "historico" (resultados de búsqueda).
+   Cada renglón de la tabla es un documento de Firestore, así que borrar en
+   lote se hace con writeBatch (máx. 500 operaciones por batch). */
+function barraSeleccionHTML(contexto){
+  return `<div class="barra-sel" id="barraSel-${contexto}" style="display:none;">
+    <span class="cuenta" id="cuentaSel-${contexto}"></span>
+    <button class="btn btn-rojo btn-chico" onclick="borrarSeleccionados('${contexto}')">🗑 Borrar seleccionados</button>
+    <button class="btn btn-secundario btn-chico" onclick="limpiarSeleccion('${contexto}')">Quitar selección</button>
+  </div>`;
+}
+function onChkPedido(chk, contexto){
+  const tr = chk.closest("tr");
+  if(tr) tr.classList.toggle("fila-sel", chk.checked);
+  actualizarBarraSeleccion(contexto);
+}
+function toggleTodosPedidos(master, contexto){
+  document.querySelectorAll(".chk-pedido-"+contexto).forEach(c=>{
+    c.checked = master.checked;
+    const tr = c.closest("tr");
+    if(tr) tr.classList.toggle("fila-sel", c.checked);
+  });
+  actualizarBarraSeleccion(contexto);
+}
+function limpiarSeleccion(contexto){
+  document.querySelectorAll(".chk-pedido-"+contexto).forEach(c=>{
+    c.checked = false;
+    const tr = c.closest("tr");
+    if(tr) tr.classList.remove("fila-sel");
+  });
+  const master = document.getElementById("chkTodos-"+contexto);
+  if(master){ master.checked = false; master.indeterminate = false; }
+  actualizarBarraSeleccion(contexto);
+}
+function actualizarBarraSeleccion(contexto){
+  const total = document.querySelectorAll(".chk-pedido-"+contexto).length;
+  const n = document.querySelectorAll(".chk-pedido-"+contexto+":checked").length;
+  const barra = document.getElementById("barraSel-"+contexto);
+  if(barra) barra.style.display = n ? "flex" : "none";
+  const cuenta = document.getElementById("cuentaSel-"+contexto);
+  if(cuenta) cuenta.textContent = `${n} renglón(es) seleccionado(s)`;
+  const master = document.getElementById("chkTodos-"+contexto);
+  if(master){ master.checked = total>0 && n===total; master.indeterminate = n>0 && n<total; }
+}
+async function borrarSeleccionados(contexto){
+  const ids = Array.from(document.querySelectorAll(".chk-pedido-"+contexto+":checked")).map(c=>c.value);
+  if(ids.length === 0){ mostrarMsg("Marca primero los renglones que quieres borrar.", "error"); return; }
+  if(!confirm(`¿Eliminar ${ids.length} renglón(es)? Esta acción no se puede deshacer.`)) return;
+  try{
+    for(let i=0; i<ids.length; i+=450){
+      const batch = db.batch();
+      ids.slice(i, i+450).forEach(id=> batch.delete(db.collection(COLECCION).doc(id)));
+      await batch.commit();
+    }
+    mostrarMsg(`🗑 ${ids.length} renglón(es) eliminado(s)`, "ok");
+    if(contexto === "hoy") cargarPedidosHoy(); else buscarHistorico();
+  }catch(err){
+    console.error(err);
+    mostrarMsg("Error al eliminar: " + err.message, "error");
+  }
+}
+
+/* ---------- selección múltiple en las tablas de CAPTURA (aún sin guardar) ----------
+   Aquí no se toca Firestore: solo se quitan renglones de la pantalla.
+   pref = "it" (Capturar pedido) o "nh" (Agregar pedido(s) de hoy). */
+function refsCaptura(pref){
+  return pref === "it"
+    ? {body:"itemsBody", clase:".it-chk", master:"chkTodosItems"}
+    : {body:"nuevosHoyBody", clase:".nh-chk", master:"chkTodosNH"};
+}
+function toggleTodosCaptura(master, pref){
+  const r = refsCaptura(pref);
+  document.querySelectorAll(`#${r.body} ${r.clase}`).forEach(c=>{
+    c.checked = master.checked;
+    const tr = c.closest("tr");
+    if(tr) tr.classList.toggle("fila-sel", c.checked);
+  });
+  master.indeterminate = false;
+}
+function actualizarChkMaster(pref){
+  const r = refsCaptura(pref);
+  const total = document.querySelectorAll(`#${r.body} ${r.clase}`).length;
+  const n = document.querySelectorAll(`#${r.body} ${r.clase}:checked`).length;
+  document.querySelectorAll(`#${r.body} ${r.clase}`).forEach(c=>{
+    const tr = c.closest("tr");
+    if(tr) tr.classList.toggle("fila-sel", c.checked);
+  });
+  const master = document.getElementById(r.master);
+  if(master){ master.checked = total>0 && n===total; master.indeterminate = n>0 && n<total; }
+}
+function borrarFilasCapturaSeleccionadas(pref){
+  const r = refsCaptura(pref);
+  const chks = document.querySelectorAll(`#${r.body} ${r.clase}:checked`);
+  if(chks.length === 0){ mostrarMsg("Marca primero los renglones que quieres quitar.", "error"); return; }
+  if(!confirm(`¿Quitar ${chks.length} renglón(es) de la captura? (Todavía no están guardados)`)) return;
+  chks.forEach(c=>{ const tr = c.closest("tr"); if(tr) tr.remove(); });
+  const master = document.getElementById(r.master);
+  if(master){ master.checked = false; master.indeterminate = false; }
+  if(pref === "nh") actualizarVisibilidadNuevosHoy();
+  actualizarChkMaster(pref);
+}
+
 let edItemIdCounter = 0;
 
 function edRenderFilaItem(it){
@@ -1036,22 +1178,17 @@ function edRenderFilaItem(it){
   const tr = document.createElement("tr");
   tr.id = id;
   const generoInicial = (it && it.genero) || "Caballero";
-  const colorInicial = (it && it.color) || "Negro";
-  const esColorOtro = colorInicial && !COLORES_COMUNES.includes(colorInicial);
+  const coloresValidos = coloresDe(generoInicial);
+  let colorInicial = (it && it.color) || "Negro";
+  if(!coloresValidos.includes(colorInicial) && COLORES_POR_GENERO[generoInicial]) colorInicial = coloresValidos[0];
+  const esColorOtro = colorInicial && !coloresValidos.includes(colorInicial);
   const marcaInicial = (it && it.marca) || "";
   const esMarcaOtro = marcaInicial && !MARCAS_DISPONIBLES.includes(marcaInicial);
   tr.innerHTML = `
-    <td><select class="ed-it-genero" onchange="edOnGeneroFilaChange('${id}')">
-          <option value="Caballero">Caballero</option>
-          <option value="Dama">Dama</option>
-          <option value="Niño">Niño</option>
-          <option value="Niña">Niña</option>
-          <option value="Juvenil">Juvenil</option>
-          <option value="Unisex">Unisex</option>
-        </select></td>
+    <td><select class="ed-it-genero" onchange="edOnGeneroFilaChange('${id}')">${opcionesGenero(generoInicial)}</select></td>
     <td><select class="ed-it-talla">${opcionesTalla(generoInicial, it?it.talla:"")}</select></td>
     <td>
-      <select class="ed-it-color" onchange="edOnColorFilaChange('${id}')">${opcionesColor(esColorOtro ? "Otro" : colorInicial)}</select>
+      <select class="ed-it-color" onchange="edOnColorFilaChange('${id}')">${opcionesColor(esColorOtro ? "Otro" : colorInicial, generoInicial)}</select>
       <input type="text" class="ed-it-color-otro" placeholder="Especifica el color" style="margin-top:4px;display:${esColorOtro?'block':'none'};" value="${esColorOtro?colorInicial:''}">
     </td>
     <td>
@@ -1068,7 +1205,7 @@ function edRenderFilaItem(it){
   tr.querySelector(".ed-it-cant").value = (it && it.cantidad) || 1;
 }
 function edAgregarFilaItem(){ edRenderFilaItem(null); }
-function edOnGeneroFilaChange(id){ const tr = document.getElementById(id); const genero = tr.querySelector(".ed-it-genero").value; const tallaSel = tr.querySelector(".ed-it-talla"); tallaSel.innerHTML = opcionesTalla(genero, tallaSel.value); }
+function edOnGeneroFilaChange(id){ refrescarTallaYColorFila(document.getElementById(id), "ed-it-"); }
 function edOnColorFilaChange(id){ const tr = document.getElementById(id); const esOtro = tr.querySelector(".ed-it-color").value === "Otro"; const otroInput = tr.querySelector(".ed-it-color-otro"); otroInput.style.display = esOtro ? "block" : "none"; if(esOtro) otroInput.focus(); }
 function edOnMarcaFilaChange(id){ const tr = document.getElementById(id); const esOtro = tr.querySelector(".ed-it-marca").value === "Otro"; const otroInput = tr.querySelector(".ed-it-marca-otro"); otroInput.style.display = esOtro ? "block" : "none"; if(esOtro) otroInput.focus(); }
 function edLeerItems(){
@@ -1169,9 +1306,12 @@ async function buscarHistorico(){
     if(clienteFiltro) lista = lista.filter(p=> (p.cliente||"").toLowerCase().includes(clienteFiltro));
     historicoCache = priorizarML(lista);
     if(lista.length === 0){ cont.innerHTML = '<div class="vacio">Sin resultados para ese filtro.</div>'; document.getElementById("accionesHist").style.display = "none"; return; }
-    let html = `<table><thead><tr><th>Fecha</th><th>Folio</th><th>Canal</th><th>Cliente</th><th>Ciudad</th><th>Tipo</th><th>Piezas</th><th>Acciones</th></tr></thead><tbody>`;
+    let html = barraSeleccionHTML("historico") + `<table><thead><tr>
+        <th class="col-chk"><input type="checkbox" id="chkTodos-historico" onchange="toggleTodosPedidos(this,'historico')" title="Seleccionar todos"></th>
+        <th>Fecha</th><th>Folio</th><th>Canal</th><th>Cliente</th><th>Ciudad</th><th>Tipo</th><th>Piezas</th><th>Acciones</th></tr></thead><tbody>`;
     lista.forEach(p=>{
       html += `<tr>
+        <td class="col-chk"><input type="checkbox" class="chk-pedido-historico" value="${p.id}" onchange="onChkPedido(this,'historico')"></td>
         <td>${p.fecha}</td><td>${p.folio}</td><td>${badgeCanal(p.canal)}</td>
         <td>${p.cliente}</td><td>${p.ciudad||'—'}</td><td>${p.tipoCliente}</td><td>${p.totalPiezas}</td>
         <td style="white-space:nowrap;">
@@ -1186,8 +1326,9 @@ async function buscarHistorico(){
   }catch(err){ cont.innerHTML = `<div class="vacio">Error: ${err.message}</div>`; }
 }
 
-const TALLA_EXPORT = {"CH":"CHICA","M":"MEDIANA","G":"GRANDE","XL":"XL","XXL":"XXL","XXXL":"XXXL"};
-const GENERO_EXPORT = {"Caballero":"HOMBRE","Dama":"MUJER","Niño":"NIÑO","Niña":"NIÑA","Juvenil":"JUVENIL","Unisex":"UNISEX"};
+const TALLA_EXPORT = {"CH":"CHICA","M":"MEDIANA","G":"GRANDE","XL":"XL","XXL":"XXL","XXXL":"XXXL",
+  "3 meses":"3 MESES","6 meses":"6 MESES","9 meses":"9 MESES","12 meses":"12 MESES","18 meses":"18 MESES","24 meses":"24 MESES"};
+const GENERO_EXPORT = {"Caballero":"HOMBRE","Dama":"MUJER","Niño":"NIÑO","Niña":"NIÑA","Juvenil":"JUVENIL","Unisex":"UNISEX","Pañalero Bebé":"PAÑALERO BEBÉ"};
 
 async function exportarExcel(origen){
   const lista = origen === "hoy" ? pedidosHoyCache : historicoCache;
