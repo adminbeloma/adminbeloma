@@ -999,7 +999,7 @@ tbody td{padding:11px 14px;font-size:13.5px;vertical-align:middle;}
     <div class="topbar">
       <h1>Pedidos</h1>
       <div class="actions">
-        <span style="font-size:12px;color:var(--ink-soft);">Los pedidos se generan automáticamente desde Ventas</span>
+        <span style="font-size:12px;color:var(--ink-soft);">Los pedidos se generan automáticamente desde Ventas · Solo se muestran los que se pagan con anticipo y se completan después (no las ventas liquidadas en una sola exhibición)</span>
       </div>
     </div>
     <div class="content">
@@ -1026,14 +1026,38 @@ tbody td{padding:11px 14px;font-size:13.5px;vertical-align:middle;}
         <input type="text" id="ped-buscar" placeholder="🔍 Buscar por cliente, descripción o folio..."
                oninput="renderPedidos()"
                style="flex:1;min-width:240px;max-width:420px;padding:8px 12px;border:1px solid var(--border);border-radius:8px;font-size:13px;">
+        <select id="ped-filter-canal" onchange="renderPedidos()"
+                style="padding:8px 10px;border:1px solid var(--border);border-radius:8px;font-size:13px;">
+          <option value="">Todos los canales</option>
+          <option value="Local">Local</option>
+          <option value="Foráneo">Foráneo</option>
+          <option value="Mercado Libre">Mercado Libre</option>
+          <option value="Amazon">Amazon</option>
+          <option value="Shopify">Shopify</option>
+          <option value="Otro">Otro</option>
+        </select>
         <button class="btn btn-ghost btn-sm" onclick="limpiarBusquedaPedidos()">✖ Limpiar</button>
         <span id="ped-contador" style="font-size:12px;color:var(--ink-soft);"></span>
         <button class="btn btn-sm" style="background:var(--accent);color:#fff;margin-left:auto;"
                 onclick="revisarDescuadres()">🔄 Revisar descuadres con Ventas</button>
       </div>
+      <div id="ped-bulk-bar" style="display:none;align-items:center;gap:10px;margin-top:8px;padding:8px 12px;background:var(--bg-card);border:1px solid var(--accent);border-radius:8px;flex-wrap:wrap;">
+        <span id="ped-bulk-contador" style="font-size:12px;font-weight:700;"></span>
+        <select id="ped-bulk-estatus" style="padding:6px 10px;border:1px solid var(--border);border-radius:8px;font-size:12px;">
+          <option value="En elaboración">En elaboración</option>
+          <option value="Listo">Listo</option>
+          <option value="Entregado">Entregado</option>
+          <option value="Liquidado">Liquidado</option>
+        </select>
+        <button class="btn btn-sm" style="background:var(--accent);color:#fff;" onclick="aplicarEstatusMasivoPedidos()">Cambiar estatus</button>
+        <button class="btn btn-ghost btn-sm" onclick="deseleccionarTodosPedidos()">✖ Quitar selección</button>
+      </div>
       <div class="table-wrap">
         <table>
-          <thead><tr><th>Fecha</th><th>Cliente</th><th>Descripción</th><th>Total</th><th>Anticipo</th><th>Saldo</th><th>Entrega</th><th>Estatus</th><th>Acciones</th></tr></thead>
+          <thead><tr>
+            <th style="width:28px;"><input type="checkbox" id="ped-check-all" onchange="toggleTodosPedidos(this.checked)" style="width:15px;height:15px;cursor:pointer;"></th>
+            <th>Fecha</th><th>Cliente</th><th>Descripción</th><th>Canal</th><th>Total</th><th>Anticipo</th><th>Saldo</th><th>Entrega</th><th>Estatus</th><th>Acciones</th>
+          </tr></thead>
           <tbody id="tabla-pedidos"></tbody>
         </table>
       </div>
@@ -3231,6 +3255,7 @@ async function sincronizarPedidoDesdeVenta(ventaData, telefonoCliente){
     fecha:ventaData.fecha||'', entrega:existente?.entrega||'',
     cliente:ventaData.cliente||'Público en general', telefono:telefonoCliente||existente?.telefono||'',
     descripcion:ventaData.producto||'',
+    canal:ventaData.canal||existente?.canal||'',
     total:+ventaData.total||0, anticipo:+ventaData.anticipo||0, saldo:+ventaData.saldo||0,
     formaPago:ventaData.metodoPago||'',
     estatus,
@@ -5552,6 +5577,7 @@ window.eliminarProveedor=async function(id){
 
 // ─── PEDIDOS ───
 let pedidos = [], gastosLocales = [], pedidosFiltro = 'todos', abonos = [];
+let pedidosSeleccionados = new Set();
 let domicilios = [], repartidorSolicitudes = [];
 onSnapshot(collection(db,'pl_domicilios'),s=>{domicilios=s.docs.map(d=>d.data());renderRepartidor();});
 onSnapshot(collection(db,'pl_repartidor_solicitudes'),s=>{repartidorSolicitudes=s.docs.map(d=>d.data());renderRepartidor();});
@@ -5564,7 +5590,7 @@ let pedidosFechaFiltro = 'todos'; // 'todos' | 'hoy' | 'ayer' | 'semana' | 'mes'
 onSnapshot(collection(db,'pl_pedidos'),s=>{pedidos=s.docs.map(d=>d.data());renderPedidos();renderCaja();});
 onSnapshot(collection(db,'pl_gastos_locales'),s=>{gastosLocales=s.docs.map(d=>d.data());renderCaja();renderDashboard();renderGastos();});
 // Abonos: pagos de saldo cobrados en una fecha distinta a la de la venta.
-onSnapshot(collection(db,'pl_abonos'),s=>{abonos=s.docs.map(d=>d.data());renderCaja();});
+onSnapshot(collection(db,'pl_abonos'),s=>{abonos=s.docs.map(d=>d.data());renderCaja();renderPedidos();});
 
 window.openPedidoModal=function(id){
   if(!id){
@@ -5622,6 +5648,7 @@ window.guardarPedido=async function(){
     // origen/ventaId/folio, dejando huérfano al pedido espejo (ya no se podía
     // ligar de vuelta a su venta). Ahora se conservan.
     origen:previo?.origen||'', ventaId:previo?.ventaId||'', folio:previo?.folio||'',
+    canal:previo?.canal||'',
     ultimoPago:previo?.ultimoPago||null,
     creado:previo?.creado||new Date().toISOString()};
   await setDoc(doc(db,'pl_pedidos',id),data);
@@ -5663,8 +5690,22 @@ function rangoFechaPedidos(){
   return null; // 'todos'
 }
 
+// Un pedido "cuenta" para este módulo solo si su historia fue con anticipo
+// (se cobró parte primero y el resto días después), no si se liquidó
+// completo en una sola exhibición al momento de la venta.
+// - Si todavía tiene saldo pendiente → es de anticipo (obvio, aún falta cobrar).
+// - Si ya está en saldo $0, solo cuenta como anticipo si existe al menos un
+//   abono registrado (pl_abonos) para ese pedido o su venta de origen — un
+//   abono solo se genera cuando se cobra un pago DESPUÉS de la venta inicial
+//   (botón 💰 Pago), nunca cuando se liquida todo desde el primer momento.
+function esPedidoConAnticipo(p){
+  if((+p.saldo||0)>0) return true;
+  return (abonos||[]).some(a=>a.pedidoId===p.id || (p.ventaId && a.ventaId===p.ventaId));
+}
+
 function renderPedidos(){
-  let lista=pedidosFiltro==='todos'?[...pedidos]:pedidos.filter(p=>p.estatus===pedidosFiltro);
+  let lista=pedidos.filter(esPedidoConAnticipo);
+  lista=pedidosFiltro==='todos'?lista:lista.filter(p=>p.estatus===pedidosFiltro);
   const rango=rangoFechaPedidos();
   if(rango && (rango.desde||rango.hasta)){
     lista=lista.filter(p=>{
@@ -5672,6 +5713,11 @@ function renderPedidos(){
       if(rango.hasta && p.fecha>rango.hasta) return false;
       return true;
     });
+  }
+  // Filtro por canal de venta (Local, Foráneo, Mercado Libre, Amazon, Shopify, Otro)
+  const canalFiltro=document.getElementById('ped-filter-canal')?.value||'';
+  if(canalFiltro){
+    lista=lista.filter(p=>p.canal===canalFiltro);
   }
   // Búsqueda por texto: cliente, descripción o folio. Se normaliza para que
   // "magaña" encuentre "Magana" y viceversa (acentos y mayúsculas dan igual).
@@ -5687,15 +5733,22 @@ function renderPedidos(){
   const tbody=document.getElementById('tabla-pedidos');
   const empty=document.getElementById('pedidos-empty');
   const contador=document.getElementById('ped-contador');
-  if(contador) contador.textContent=termino?`${lista.length} resultado(s)`:`${lista.length} pedido(s)`;
+  if(contador) contador.textContent=(termino||canalFiltro)?`${lista.length} resultado(s)`:`${lista.length} pedido(s)`;
   if(!tbody)return;
-  if(lista.length===0){tbody.innerHTML='';empty.style.display='block';return;}
+  // Quitar de la selección cualquier id que ya no esté visible en esta lista
+  // (evita aplicar un cambio de estatus a un pedido que el usuario ya no ve).
+  const idsVisibles=new Set(lista.map(p=>p.id));
+  [...pedidosSeleccionados].forEach(id=>{ if(!idsVisibles.has(id)) pedidosSeleccionados.delete(id); });
+  if(lista.length===0){tbody.innerHTML='';empty.style.display='block';actualizarBarraPedidosSeleccionados();return;}
   empty.style.display='none';
   const estatusColor={'En elaboración':'badge-gold','Listo':'badge-blue','Entregado':'badge-green','Liquidado':'badge-gray'};
+  const canalColor={Local:'badge-blue','Foráneo':'badge-gold','Mercado Libre':'badge-gold',Amazon:'badge-green',Shopify:'badge-green',Otro:'badge-gray'};
   tbody.innerHTML=lista.map(p=>`<tr>
+    <td><input type="checkbox" class="ped-check-item" data-id="${p.id}" ${pedidosSeleccionados.has(p.id)?'checked':''} onchange="togglePedidoSeleccionado('${p.id}', this.checked)" style="width:15px;height:15px;cursor:pointer;"></td>
     <td>${fmtFecha(p.fecha)}</td>
     <td style="font-weight:600;">${p.cliente}${p.origen==='venta'?' <span class="badge badge-blue" style="font-size:9px;" title="Generado automáticamente desde Ventas">🔗 Venta</span>':''}</td>
     <td style="font-size:12px;max-width:180px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${p.descripcion}</td>
+    <td>${p.canal?`<span class="badge ${canalColor[p.canal]||'badge-gray'}" style="font-size:10px;">${p.canal}</span>`:'—'}</td>
     <td style="font-weight:700;">${fmtMoney(p.total)}</td>
     <td style="color:var(--green);font-weight:600;">${fmtMoney(p.anticipo)}</td>
     <td style="color:${p.saldo>0?'var(--red)':'var(--green)'};font-weight:700;">${fmtMoney(p.saldo)}</td>
@@ -5718,7 +5771,65 @@ function renderPedidos(){
       ${isAdmin?`<button class="btn btn-danger btn-sm" onclick="eliminarPedido('${p.id}')">🗑</button>`:''}
     </td>
   </tr>`).join('');
+  actualizarBarraPedidosSeleccionados();
 }
+
+// ── Selección múltiple de pedidos (para cambiar estatus en lote) ──
+window.togglePedidoSeleccionado=function(id, checked){
+  if(checked) pedidosSeleccionados.add(id); else pedidosSeleccionados.delete(id);
+  actualizarBarraPedidosSeleccionados();
+};
+
+window.toggleTodosPedidos=function(checked){
+  document.querySelectorAll('.ped-check-item').forEach(chk=>{
+    chk.checked=checked;
+    if(checked) pedidosSeleccionados.add(chk.dataset.id); else pedidosSeleccionados.delete(chk.dataset.id);
+  });
+  actualizarBarraPedidosSeleccionados();
+};
+
+window.deseleccionarTodosPedidos=function(){
+  pedidosSeleccionados.clear();
+  const chkAll=document.getElementById('ped-check-all');
+  if(chkAll) chkAll.checked=false;
+  renderPedidos();
+};
+
+function actualizarBarraPedidosSeleccionados(){
+  const n=pedidosSeleccionados.size;
+  const barra=document.getElementById('ped-bulk-bar');
+  const contador=document.getElementById('ped-bulk-contador');
+  if(contador) contador.textContent=`${n} pedido${n===1?'':'s'} seleccionado${n===1?'':'s'}`;
+  if(barra) barra.style.display=n>0?'flex':'none';
+  const chkAll=document.getElementById('ped-check-all');
+  const totalVisibles=document.querySelectorAll('.ped-check-item').length;
+  if(chkAll) chkAll.checked=totalVisibles>0 && n===totalVisibles;
+}
+
+// Aplica el mismo cambio de estatus que el selector individual, pero a todos
+// los pedidos seleccionados de golpe. Reutiliza cambiarEstatusPedido para
+// respetar la misma validación del saldo pendiente al marcar "Liquidado".
+window.aplicarEstatusMasivoPedidos=async function(){
+  const n=pedidosSeleccionados.size;
+  if(n===0){toast('⚠️ No hay pedidos seleccionados');return;}
+  const nuevoEstatus=document.getElementById('ped-bulk-estatus').value;
+  if(nuevoEstatus==='Liquidado'){
+    const conSaldo=[...pedidosSeleccionados].filter(id=>{
+      const p=pedidos.find(x=>x.id===id);
+      return p && (+p.saldo||0)>0;
+    });
+    if(conSaldo.length>0 && !confirm(`${conSaldo.length} de los ${n} pedidos seleccionados todavía tienen saldo pendiente.\n\nSi continúas, se marcarán como Liquidado sin poner el saldo en cero automáticamente.\n\n¿Aun así quieres continuar?`)) return;
+  } else {
+    if(!confirm(`¿Cambiar el estatus de ${n} pedido${n===1?'':'s'} a "${nuevoEstatus}"?`)) return;
+  }
+  let hechos=0;
+  for(const id of pedidosSeleccionados){
+    await setDoc(doc(db,'pl_pedidos',id),{estatus:nuevoEstatus},{merge:true});
+    hechos++;
+  }
+  pedidosSeleccionados.clear();
+  toast(`✅ Estatus actualizado en ${hechos} pedido(s) a: ${nuevoEstatus}`);
+};
 
 // ═══════════════════════════════════════════════════════════════════
 //  SINCRONIZACIÓN PEDIDOS → VENTAS  (dirección que faltaba)
@@ -5736,6 +5847,8 @@ function normalizarTexto(t){
 window.limpiarBusquedaPedidos=function(){
   const inp=document.getElementById('ped-buscar');
   if(inp) inp.value='';
+  const sel=document.getElementById('ped-filter-canal');
+  if(sel) sel.value='';
   renderPedidos();
 };
 
