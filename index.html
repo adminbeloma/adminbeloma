@@ -999,7 +999,7 @@ tbody td{padding:11px 14px;font-size:13.5px;vertical-align:middle;}
     <div class="topbar">
       <h1>Pedidos</h1>
       <div class="actions">
-        <span style="font-size:12px;color:var(--ink-soft);">Los pedidos se generan automáticamente desde Ventas · Solo se muestran los que se pagan con anticipo y se completan después (no las ventas liquidadas en una sola exhibición)</span>
+        <span style="font-size:12px;color:var(--ink-soft);">Los pedidos se generan automáticamente desde Ventas</span>
       </div>
     </div>
     <div class="content">
@@ -1036,6 +1036,10 @@ tbody td{padding:11px 14px;font-size:13.5px;vertical-align:middle;}
           <option value="Shopify">Shopify</option>
           <option value="Otro">Otro</option>
         </select>
+        <label style="display:flex;align-items:center;gap:5px;font-size:12px;color:var(--ink-soft);cursor:pointer;user-select:none;">
+          <input type="checkbox" id="ped-solo-anticipo" onchange="renderPedidos()" style="width:14px;height:14px;cursor:pointer;">
+          Solo con anticipo (ocultar pagos de una sola exhibición)
+        </label>
         <button class="btn btn-ghost btn-sm" onclick="limpiarBusquedaPedidos()">✖ Limpiar</button>
         <span id="ped-contador" style="font-size:12px;color:var(--ink-soft);"></span>
         <button class="btn btn-sm" style="background:var(--accent);color:#fff;margin-left:auto;"
@@ -5704,7 +5708,9 @@ function esPedidoConAnticipo(p){
 }
 
 function renderPedidos(){
-  let lista=pedidos.filter(esPedidoConAnticipo);
+  let lista=[...pedidos];
+  const soloAnticipo=document.getElementById('ped-solo-anticipo')?.checked||false;
+  if(soloAnticipo) lista=lista.filter(esPedidoConAnticipo);
   lista=pedidosFiltro==='todos'?lista:lista.filter(p=>p.estatus===pedidosFiltro);
   const rango=rangoFechaPedidos();
   if(rango && (rango.desde||rango.hasta)){
@@ -5733,7 +5739,7 @@ function renderPedidos(){
   const tbody=document.getElementById('tabla-pedidos');
   const empty=document.getElementById('pedidos-empty');
   const contador=document.getElementById('ped-contador');
-  if(contador) contador.textContent=(termino||canalFiltro)?`${lista.length} resultado(s)`:`${lista.length} pedido(s)`;
+  if(contador) contador.textContent=(termino||canalFiltro||soloAnticipo)?`${lista.length} resultado(s)`:`${lista.length} pedido(s)`;
   if(!tbody)return;
   // Quitar de la selección cualquier id que ya no esté visible en esta lista
   // (evita aplicar un cambio de estatus a un pedido que el usuario ya no ve).
@@ -5849,6 +5855,8 @@ window.limpiarBusquedaPedidos=function(){
   if(inp) inp.value='';
   const sel=document.getElementById('ped-filter-canal');
   if(sel) sel.value='';
+  const chkAnticipo=document.getElementById('ped-solo-anticipo');
+  if(chkAnticipo) chkAnticipo.checked=false;
   renderPedidos();
 };
 
