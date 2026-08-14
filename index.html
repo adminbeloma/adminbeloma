@@ -3163,6 +3163,10 @@ window.renderItemsVenta=function(){
         <div>
           ${_LABEL('Especifica el tipo')}
           <input type="text" value="${it.tipoPrendaOtro||''}" placeholder="Ej. Manga larga, Crop top..." oninput="window._ventaItems[${idx}].tipoPrendaOtro=this.value" style="${_ESTILO}">
+        </div>
+        <div>
+          ${_LABEL('Descripción / Diseño')}
+          <input type="text" value="${it.descripcion||''}" placeholder="Diseño, notas..." oninput="window._ventaItems[${idx}].descripcion=this.value" style="${_ESTILO}">
         </div>`:`
         <div>
           ${_LABEL('Descripción / Diseño')}
