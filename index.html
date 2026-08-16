@@ -304,6 +304,7 @@ tbody td{padding:11px 14px;font-size:13.5px;vertical-align:middle;}
       <div class="actions">
         <button class="btn btn-ghost" onclick="document.getElementById('input-importar-ventas-ml').click()">📥 Importar Excel ML</button>
         <input type="file" id="input-importar-ventas-ml" accept=".xlsx" style="display:none;" onchange="importarVentasExcelML(this.files[0])">
+        <button class="btn btn-ghost" onclick="abrirTintaPendiente()">🖨️ Tinta pendiente</button>
         <button class="btn btn-accent" onclick="openVentaModal()">+ Nueva Venta</button>
       </div>
     </div>
@@ -501,6 +502,9 @@ tbody td{padding:11px 14px;font-size:13.5px;vertical-align:middle;}
               </label>
               <label style="display:flex;align-items:center;gap:5px;cursor:pointer;font-size:13px;padding:6px 12px;border:1.5px solid var(--border);border-radius:8px;">
                 <input type="radio" name="ps-metodo" value="transferencia"> 📲 Transferencia
+              </label>
+              <label style="display:flex;align-items:center;gap:5px;cursor:pointer;font-size:13px;padding:6px 12px;border:1.5px solid var(--border);border-radius:8px;">
+                <input type="radio" name="ps-metodo" value="deposito"> 🏦 Depósito
               </label>
               <label style="display:flex;align-items:center;gap:5px;cursor:pointer;font-size:13px;padding:6px 12px;border:1.5px solid var(--border);border-radius:8px;">
                 <input type="radio" name="ps-metodo" value="tarjeta"> 💳 Tarjeta
@@ -1080,6 +1084,7 @@ tbody td{padding:11px 14px;font-size:13.5px;vertical-align:middle;}
       </div>
     </div>
     <div class="content">
+      <div id="caja-alerta-corte" style="display:none;background:#fde8e8;border:1px solid var(--red);color:#8a1f1f;padding:12px 14px;border-radius:8px;font-size:13px;font-weight:600;margin-bottom:14px;"></div>
       <div class="stats-row">
         <div class="stat-card stat-blue"><div class="label">Fondo inicial</div><div class="value" id="caja-fondo">$0</div></div>
         <div class="stat-card stat-green">
@@ -2438,6 +2443,7 @@ tbody td{padding:11px 14px;font-size:13.5px;vertical-align:middle;}
       <button class="modal-close" onclick="confirmarCerrarModal('modal-corte-caja')">×</button>
     </div>
     <div class="modal-body">
+      <div id="corte-alerta-faltantes" style="display:none;background:#fde8e8;border:1px solid var(--red);color:#8a1f1f;padding:12px 14px;border-radius:8px;font-size:13px;font-weight:600;margin-bottom:14px;"></div>
       <div class="form-group" style="margin-bottom:12px;">
         <label style="font-size:12px;font-weight:600;color:var(--ink-soft);">📅 Fecha del corte</label>
         <input type="date" id="corte-fecha" style="width:100%;border:1.5px solid var(--border);border-radius:8px;padding:8px 12px;font-size:14px;outline:none;" onchange="recalcCorte()">
@@ -2469,6 +2475,34 @@ tbody td{padding:11px 14px;font-size:13.5px;vertical-align:middle;}
       <button class="btn btn-ghost" onclick="closeModal('modal-corte-caja')">Cancelar</button>
       <button class="btn btn-ghost btn-sm" onclick="copiarCorte()">📋 Copiar</button>
       <button class="btn btn-accent" onclick="guardarCorte()">Guardar Corte</button>
+    </div>
+  </div>
+</div>
+
+<!-- MODAL VENTAS SIN TINTA CAPTURADA -->
+<div class="modal-overlay" id="modal-tinta-pendiente">
+  <div class="modal" style="max-width:820px;">
+    <div class="modal-header">
+      <h2>🖨️ Ventas con proceso DTG sin tinta capturada</h2>
+      <button class="modal-close" onclick="closeModal('modal-tinta-pendiente')">×</button>
+    </div>
+    <div class="modal-body">
+      <p style="font-size:12px;color:var(--ink-soft);margin:-4px 0 12px;">
+        Solo se listan ventas que sí llevan proceso <strong>DTG</strong> (el único que gasta esta tinta) y a las que
+        todavía no se les capturó la cantidad de cc — no aparecen aquí las de DTF, Vinil, Bordado, Serigrafía, etc.
+      </p>
+      <div id="tinta-pendiente-contador" style="font-weight:700;margin-bottom:10px;"></div>
+      <div class="table-wrap" style="max-height:55vh;overflow:auto;">
+        <table>
+          <thead><tr><th>Fecha</th><th>Cliente</th><th>Producto</th><th>Canal</th><th>Cant.</th><th>Acciones</th></tr></thead>
+          <tbody id="tabla-tinta-pendiente"></tbody>
+        </table>
+      </div>
+      <div id="tinta-pendiente-empty" class="empty-state" style="display:none;"><div class="icon">✅</div><p>No hay ventas DTG pendientes de capturar tinta.</p></div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-ghost" onclick="exportarTintaPendienteExcel()">⬇️ Exportar Excel</button>
+      <button class="btn btn-accent" onclick="closeModal('modal-tinta-pendiente')">Cerrar</button>
     </div>
   </div>
 </div>
@@ -2696,7 +2730,7 @@ function renderDashboard(){
   const gastosLocalesMes=gastosLocales.filter(g=>g.fecha>=mesDesde);
   const totalGastosMes=gastosMes.reduce((s,g)=>s+(+g.monto||0),0)+gastosLocalesMes.reduce((s,g)=>s+(+g.monto||0),0);
   const utilidad=totalVentasMes-totalGastosMes;
-  const ventasHoy=ventas.filter(v=>v.fecha===hoy()).reduce((s,v)=>s+(+v.total||0),0);
+  const ventasHoy=montoCobradoEnRango(hoy(),hoy());
   const cfgPrecio=+configPE.precio||0;
   const cfgCostoVar=+configPE.costoVar||0;
   const gastosFijos=gastos.filter(g=>g.tipo==='Fijo'&&g.fecha>=mesDesde).reduce((s,g)=>s+(+g.monto||0),0);
@@ -2719,7 +2753,7 @@ function renderDashboard(){
   const chart=document.getElementById('chart-7dias');
   const dias=[];
   for(let i=6;i>=0;i--){const d=new Date();d.setDate(d.getDate()-i);dias.push(d);}
-  const vals=dias.map(d=>{const ds=fmtFechaLocal(d);return ventas.filter(v=>v.fecha===ds).reduce((s,v)=>s+(+v.total||0),0);});
+  const vals=dias.map(d=>{const ds=fmtFechaLocal(d);return montoCobradoEnRango(ds,ds);});
   const max=Math.max(...vals,1);
   const dias_nombres=['Dom','Lun','Mar','Mié','Jue','Vie','Sáb'];
   chart.innerHTML=vals.map((v,i)=>`
@@ -2864,8 +2898,11 @@ const ITEM_TIPOS=[
   {label:'☕ Taza',value:'Taza'},
   {label:'🧥 Sudadera',value:'Sudadera'},
   {label:'🧢 Gorra',value:'Gorra'},
+  {label:'🎁 Producto libre (lona, stickers, mandil, textil del cliente...)',value:'Libre'},
   {label:'Otro',value:'Otro'},
 ];
+// Nombre amigable para mostrar al cliente/en reportes en vez del valor interno "Libre"
+const TIPO_LABEL_DISPLAY={Libre:'Producto'};
 const ITEM_PROCESOS=['DTG','DTF','Serigrafía','Vinil','Bordado','Sublimado','Sin Estampado','Otro'];
 // Qué técnicas de impresión tiene sentido ofrecer según el tipo de producto.
 // Si el tipo no aparece aquí (Playera, Sudadera, Otro), se muestran TODAS.
@@ -2941,6 +2978,8 @@ window.cambiarTipoItemVenta=function(idx, nuevoTipo){
   const esPañalero=nuevoTipo==='Pañalero';
   const eraTaza=it.tipo==='Taza';
   const esTaza=nuevoTipo==='Taza';
+  const eraLibre=it.tipo==='Libre';
+  const esLibre=nuevoTipo==='Libre';
   it.tipo=nuevoTipo;
   if(eraPañalero!==esPañalero){
     it.talla='';
@@ -2955,6 +2994,15 @@ window.cambiarTipoItemVenta=function(idx, nuevoTipo){
   }
   if(eraTaza && !esTaza){
     it.tipoTaza=''; it.capacidadTaza='';
+  }
+  // "Producto libre" (lonas, stickers, mandiles, textil del cliente...) no
+  // tiene género, talla, color, material, marca ni tipo de prenda — solo
+  // descripción, cantidad, precio y opcionalmente el proceso de impresión.
+  if(esLibre && !eraLibre){
+    it.genero=''; it.talla=''; it.color=''; it._colorModoOtro=false;
+    it.material=''; it.marca=''; it._marcaModoOtro=false;
+    it.tipoPrenda=''; it.tipoPrendaOtro=''; it.tipoGorra=''; it.tipoGorraOtro='';
+    it.multiTG=false; it.desglose=[];
   }
   const procesos=PROCESOS_POR_TIPO[nuevoTipo];
   if(procesos && !procesos.includes(it.proceso)) it.proceso=procesos[0];
@@ -3010,10 +3058,14 @@ window.renderItemsVenta=function(){
   // Una taza no tiene género, talla, material, marca ni tipo de prenda. Esos
   // campos se ocultan para no capturar datos que no existen en el producto.
   const esTaza=it.tipo==='Taza';
-  const gridFila1=esTaza?'1fr 1fr 80px 100px 32px':'1fr 1fr 1fr 1fr 80px 100px 32px';
+  // "Producto libre" (lonas, stickers, mandiles, textil que trae el cliente...)
+  // tampoco tiene género, talla, color, material ni marca — es solo un
+  // renglón simple con descripción, cantidad y precio.
+  const esLibre=it.tipo==='Libre';
+  const gridFila1=esTaza?'1fr 1fr 80px 100px 32px':esLibre?'1fr 80px 100px 32px':'1fr 1fr 1fr 1fr 80px 100px 32px';
   return `
     <div style="background:var(--bg);border:1px solid var(--border);border-radius:10px;padding:12px;margin-bottom:4px;">
-      ${esTaza?'':`
+      ${(esTaza||esLibre)?'':`
       <div style="display:flex;align-items:center;gap:6px;margin-bottom:10px;">
         <input type="checkbox" id="multiTG-${idx}" ${it.multiTG?'checked':''} onchange="toggleMultiTG(${idx}, this.checked)">
         <label for="multiTG-${idx}" style="font-size:11px;font-weight:600;color:var(--ink-soft);cursor:pointer;">🎨 Mismo diseño, varias tallas/géneros (captura la tinta y el resto una sola vez)</label>
@@ -3025,7 +3077,7 @@ window.renderItemsVenta=function(){
             ${ITEM_TIPOS.map(t=>`<option value="${t.value}"${it.tipo===t.value?' selected':''}>${t.label}</option>`).join('')}
           </select>
         </div>
-        ${esTaza?'':(it.multiTG?`
+        ${(esTaza||esLibre)?'':(it.multiTG?`
         <div>
           ${_LABEL('Género')}
           <input type="text" value="Varios (ver abajo)" disabled style="${_ESTILO}background:var(--border);color:var(--ink-soft);">
@@ -3048,6 +3100,7 @@ window.renderItemsVenta=function(){
             ${opcionesTallaVenta(it.genero,it.tipoPrenda,it.talla,it.tipo)}
           </select>
         </div>`)}
+        ${esLibre?'':`
         <div>
           ${_LABEL('Color')}
           ${(()=>{const listaColoresGenero=coloresParaGenero(it.genero);const colorEsOtro=it._colorModoOtro||(it.color&&!listaColoresGenero.includes(it.color));return `
@@ -3056,7 +3109,7 @@ window.renderItemsVenta=function(){
             ${listaColoresGenero.map(c=>`<option value="${c}"${(c==='Otro'?colorEsOtro:it.color===c)?' selected':''}>${c}</option>`).join('')}
           </select>
           ${colorEsOtro?`<input type="text" value="${it.color||''}" placeholder="Especifica el color" oninput="window._ventaItems[${idx}].color=this.value" style="${_ESTILO}margin-top:4px;">`:''}`;})()}
-        </div>
+        </div>`}
         <div>
           ${_LABEL('Cant.')}
           ${it.multiTG?
@@ -3071,7 +3124,7 @@ window.renderItemsVenta=function(){
           <button type="button" onclick="eliminarItemVenta(${idx})" title="Quitar" style="background:none;border:none;font-size:18px;cursor:pointer;color:var(--red);">🗑</button>
         </div>
       </div>
-      ${(it.multiTG && !esTaza)?`
+      ${(it.multiTG && !esTaza && !esLibre)?`
       <div style="margin-top:8px;padding:10px;background:var(--bg-card);border:1px dashed var(--border);border-radius:8px;">
         <div style="font-size:11px;font-weight:600;color:var(--ink-soft);margin-bottom:8px;">Desglose por género/talla (mismo diseño, mismo color, misma tinta)</div>
         ${(it.desglose||[]).map((d,dIdx)=>`
@@ -3135,6 +3188,11 @@ window.renderItemsVenta=function(){
           ${_LABEL('Descripción / Diseño')}
           <input type="text" value="${it.descripcion||''}" placeholder="Diseño, notas..." oninput="window._ventaItems[${idx}].descripcion=this.value" style="${_ESTILO}">
         </div>`}
+        `:esLibre?`
+        <div style="grid-column:span 3;">
+          ${_LABEL('Descripción *')}
+          <input type="text" value="${it.descripcion||''}" placeholder="Ej. Lona 1x2m, Stickers redondos 5cm, Mandil bordado, Toalla del cliente..." oninput="window._ventaItems[${idx}].descripcion=this.value" style="${_ESTILO}">
+        </div>
         `:`
         <div>
           ${_LABEL('Material')}
@@ -3368,6 +3426,10 @@ window.guardarVenta=async function(){
     if(it.tipo==='Taza'){
       return `${it.cantidad}x Taza${it.tipoTaza?' '+it.tipoTaza:''}${it.capacidadTaza?' '+it.capacidadTaza:''}${it.color?' '+it.color:''}${it.descripcion?' ('+it.descripcion+')':''}`.replace(/\s+/g,' ').trim();
     }
+    // Un producto libre se describe solo con su descripción (sin género/talla/marca)
+    if(it.tipo==='Libre'){
+      return `${it.cantidad}x ${it.descripcion||'Producto'}`.replace(/\s+/g,' ').trim();
+    }
     return `${it.cantidad}x ${it.genero||''} ${it.tipo}${it.talla?' Talla '+it.talla:''}${it.color?' '+it.color:''}${it.marca?' ['+it.marca+']':''}${it.descripcion?' ('+it.descripcion+')':''}`.replace(/\s+/g,' ').trim();
   }).join(', ');
   // Preservar fecha de creación si es edición
@@ -3539,7 +3601,7 @@ window.enviarTicketWA=function(){
   const lineas=window._ventaItems.map(it=>{
     const subtotal=(+it.cantidad||0)*(+it.precio||0);
     const esSinTinta=PROCESOS_SIN_TINTA.includes(it.proceso);
-    return `▪️ *${it.tipo}* — ${it.proceso}\n` +
+    return `▪️ *${TIPO_LABEL_DISPLAY[it.tipo]||it.tipo}* — ${it.proceso}\n` +
       (it.descripcion?`   ${it.descripcion}\n`:'')+
       `   Cant: ${it.cantidad}  |  Precio: ${fmtMoney(subtotal)}`;
   }).join('\n\n');
@@ -3683,6 +3745,88 @@ window.setRango=async function(tipo){
   renderVentas();
 };
 
+// ── Dinero realmente cobrado en un rango de fechas (no lo facturado) ──
+// Cada venta puede tener varios "momentos de cobro": el anticipo inicial
+// (el día de la venta) y, si se completó después, uno o más abonos (cada
+// uno en su propia fecha, vía el botón 💰 Pago). Esta función reconstruye
+// esos momentos y suma solo el dinero que efectivamente entró dentro del
+// rango pedido — así un pago que llega 3 días después cuenta como ingreso
+// de ESE día, no del día de la venta original.
+function montoCobradoEnRango(desde,hasta){
+  const enRango=f=>(!desde||f>=desde)&&(!hasta||f<=hasta);
+  let total=0;
+  ventas.forEach(v=>{
+    const abonosVenta=(abonos||[]).filter(a=>a.ventaId===v.id);
+    const sumaAbonos=abonosVenta.reduce((s,a)=>s+(+a.monto||0),0);
+    // Lo que se cobró justo el día de la venta = anticipo actual menos todo
+    // lo que se sabe que llegó después vía abonos.
+    const cobroInicial=Math.max(0,+((+v.anticipo||0)-sumaAbonos).toFixed(2));
+    if(enRango(v.fecha)) total+=cobroInicial;
+    abonosVenta.forEach(a=>{ if(enRango(a.fecha)) total+=(+a.monto||0); });
+  });
+  return +total.toFixed(2);
+}
+
+// ── Ventas con proceso DTG a las que aún no se les captura la tinta ──
+// Solo aplica a ventas que de verdad llevan DTG (el único proceso que gasta
+// esta tinta); DTF, Vinil, Bordado, Serigrafía, Sublimado, etc. no cuentan.
+function ventaLeFaltaTinta(v){
+  const procesos=(v.tipoProceso||'').toString().split(',').map(s=>s.trim());
+  const tieneDTG = procesos.includes('DTG') || (Array.isArray(v.items) && v.items.some(it=>it.proceso==='DTG'));
+  if(!tieneDTG) return false;
+  const cc=(+v.tintaBlanca||0)+(+v.tintaColor||0);
+  return cc<=0;
+}
+
+window.abrirTintaPendiente=function(){
+  const lista=ventas.filter(ventaLeFaltaTinta).sort((a,b)=>b.fecha>a.fecha?1:-1);
+  const tbody=document.getElementById('tabla-tinta-pendiente');
+  const empty=document.getElementById('tinta-pendiente-empty');
+  const contador=document.getElementById('tinta-pendiente-contador');
+  contador.textContent=`${lista.length} venta(s) con DTG sin tinta capturada`;
+  window._tintaPendienteCache=lista;
+  if(lista.length===0){
+    tbody.innerHTML=''; empty.style.display='block';
+  } else {
+    empty.style.display='none';
+    const canalColor={Local:'badge-blue','Foráneo':'badge-gold','Mercado Libre':'badge-gold',Amazon:'badge-green',Shopify:'badge-green',WhatsApp:'badge-green',Otro:'badge-gray'};
+    tbody.innerHTML=lista.map(v=>{
+      let productoTxt=v.producto||'—';
+      if(Array.isArray(v.items)&&v.items.length>0){
+        productoTxt=v.items.map(it=>`${it.cantidad}x ${TIPO_LABEL_DISPLAY[it.tipo]||it.tipo}${it.descripcion?' ('+it.descripcion+')':''}`).join(', ');
+      }
+      return `<tr>
+        <td>${fmtFecha(v.fecha)}</td>
+        <td>${v.cliente||'—'}</td>
+        <td style="font-size:12px;max-width:260px;">${productoTxt}</td>
+        <td><span class="badge ${canalColor[v.canal]||'badge-gray'}">${v.canal||'—'}</span></td>
+        <td>${v.cantidad||'—'}</td>
+        <td><button class="btn btn-ghost btn-sm" onclick="closeModal('modal-tinta-pendiente');openVentaModal('edit','${v.id}')">✏️ Capturar tinta</button></td>
+      </tr>`;
+    }).join('');
+  }
+  openModal('modal-tinta-pendiente');
+};
+
+window.exportarTintaPendienteExcel=function(){
+  const lista=window._tintaPendienteCache||[];
+  if(!window.XLSX){toast('⚠️ Librería Excel no disponible');return;}
+  if(lista.length===0){toast('No hay ventas pendientes para exportar');return;}
+  const wb=XLSX.utils.book_new();
+  const ws=XLSX.utils.aoa_to_sheet([
+    ['Fecha','Cliente','Producto','Canal','Cantidad','Folio'],
+    ...lista.map(v=>{
+      let productoTxt=v.producto||'—';
+      if(Array.isArray(v.items)&&v.items.length>0){
+        productoTxt=v.items.map(it=>`${it.cantidad}x ${TIPO_LABEL_DISPLAY[it.tipo]||it.tipo}${it.descripcion?' ('+it.descripcion+')':''}`).join(', ');
+      }
+      return [v.fecha,v.cliente||'—',productoTxt,v.canal||'—',v.cantidad||0,v.folio||'—'];
+    })
+  ]);
+  XLSX.utils.book_append_sheet(wb,ws,'Tinta pendiente');
+  XLSX.writeFile(wb,`tinta_pendiente_${hoy()}.xlsx`);
+};
+
 window.renderVentas=function renderVentas(){
   const search=(document.getElementById('search-ventas')||{value:''}).value.toLowerCase();
   const canal=(document.getElementById('filter-canal')||{value:''}).value;
@@ -3708,7 +3852,12 @@ window.renderVentas=function renderVentas(){
   // acumulado (Total período/Unidades/Ticket) siempre debe reflejar SOLO
   // el día de hoy, nunca el acumulado del rango que esté viendo.
   const listaParaTotales = isAdmin ? lista : lista.filter(v=>v.fecha===hoy());
-  const totalPer=listaParaTotales.reduce((s,v)=>s+(+v.total||0),0);
+  // El monto ($) se calcula por DINERO COBRADO en el rango visible (no por lo
+  // facturado): si un pedido se paga en partes en días distintos, cada parte
+  // cuenta como ingreso del día en que realmente entró ese dinero.
+  const totalPer = isAdmin
+    ? montoCobradoEnRango(desde||null, hasta||null)
+    : montoCobradoEnRango(hoy(), hoy());
   const unidadesPer=listaParaTotales.reduce((s,v)=>s+(+v.cantidad||0),0);
   document.getElementById('ventas-total-periodo').textContent=fmtMoney(totalPer);
   document.getElementById('ventas-unidades-periodo').textContent=unidadesPer;
@@ -3728,7 +3877,7 @@ window.renderVentas=function renderVentas(){
     let procesoTxt=v.tipoProceso||'—';
     let generoTxt='—', tallaTxt='—', colorTxt='—';
     if(Array.isArray(v.items)&&v.items.length>0){
-      productoTxt=v.items.map(it=>`${it.cantidad}x ${it.tipo}${it.descripcion?' ('+it.descripcion+')':''}`).join(', ');
+      productoTxt=v.items.map(it=>`${it.cantidad}x ${TIPO_LABEL_DISPLAY[it.tipo]||it.tipo}${it.descripcion?' ('+it.descripcion+')':''}`).join(', ');
       procesoTxt=[...new Set(v.items.map(it=>it.proceso).filter(Boolean))].join(', ')||v.tipoProceso||'—';
       generoTxt=[...new Set(v.items.flatMap(it=>(it.multiTG&&it.desglose&&it.desglose.length)?it.desglose.map(d=>d.genero):[it.genero]).filter(Boolean))].join(', ')||v.genero||'—';
       tallaTxt=[...new Set(v.items.flatMap(it=>(it.multiTG&&it.desglose&&it.desglose.length)?it.desglose.map(d=>d.talla):[it.talla]).filter(Boolean))].join(', ')||v.talla||'—';
@@ -6125,6 +6274,7 @@ window.guardarGastoLocal=async function(){
 };
 
 function renderCaja(){
+  actualizarCajaConFondo();
   const h=hoy();
   // Solo canales locales para operación diaria (excluir ML, Amazon, Shopify)
   const CANALES_LOCAL = ['Local','Foráneo'];
@@ -6855,7 +7005,8 @@ window.openPagoSaldoModal=function(id){
       <span>💰 Total: <strong>${fmtMoney(p.total)}</strong></span>
       <span>✅ Anticipo: <strong style="color:var(--green);">${fmtMoney(p.anticipo||0)}</strong></span>
       <span>⏳ Saldo: <strong style="color:var(--red);">${fmtMoney(p.saldo||0)}</strong></span>
-    </div>`;
+    </div>
+    ${p.formaPago?`<div style="font-size:11px;color:var(--ink-soft);margin-top:6px;">💳 El pago inicial fue con: <strong>${p.formaPago}</strong> — este nuevo pago puede tener un método diferente ⬇️</div>`:''}`;
   openModal('modal-pago-saldo');
 };
 
@@ -7402,10 +7553,42 @@ window.guardarFondoCaja = async function() {
   actualizarCajaConFondo();
 };
 
+// Días con actividad de caja (ventas Local/Foráneo, gastos locales o pedidos
+// directos con anticipo) que NO tienen un corte guardado. Solo se revisan
+// fechas a partir del primer corte que se haya hecho alguna vez — así no se
+// marcan como "faltantes" los días de antes de empezar a usar esta función.
+function cortesFaltantesAntesDe(fechaLimite){
+  if(!cortesCaja.length) return [];
+  const primerCorte=cortesCaja.reduce((min,c)=>c.fecha<min?c.fecha:min, cortesCaja[0].fecha);
+  const diasConCorte=new Set(cortesCaja.map(c=>c.fecha));
+  const CANALES_LOCAL=['Local','Foráneo'];
+  const diasConActividad=new Set();
+  ventas.forEach(v=>{ if(CANALES_LOCAL.includes(v.canal) && v.fecha>=primerCorte && v.fecha<fechaLimite) diasConActividad.add(v.fecha); });
+  (gastosLocales||[]).forEach(g=>{ if(g.fecha>=primerCorte && g.fecha<fechaLimite) diasConActividad.add(g.fecha); });
+  (pedidos||[]).forEach(p=>{ if(p.origen!=='venta' && p.fecha>=primerCorte && p.fecha<fechaLimite) diasConActividad.add(p.fecha); });
+  return [...diasConActividad].filter(f=>!diasConCorte.has(f)).sort();
+}
+
 function actualizarCajaConFondo() {
   const fondo = fondosCaja.find(f => f.fecha === hoy());
   const el = document.getElementById('caja-fondo');
   if(el) el.textContent = fmtMoney(fondo ? fondo.monto : 0);
+  // Avisar si el fondo de hoy está en $0 porque nunca se guardó (no porque
+  // de verdad se haya dejado la caja en ceros) — pasa cuando no se hizo el
+  // corte de un día anterior con actividad.
+  const alerta=document.getElementById('caja-alerta-corte');
+  if(alerta){
+    const faltantes=cortesFaltantesAntesDe(hoy());
+    if(!fondo && faltantes.length>0){
+      alerta.style.display='block';
+      alerta.innerHTML=`⚠️ El "Fondo inicial" de hoy aparece en $0 porque no se ha hecho el corte de: <strong>${faltantes.map(fmtFecha).join(', ')}</strong>. `+
+        `El efectivo en caja de hoy puede no ser real hasta que hagas esos cortes pendientes. `+
+        `<button class="btn btn-sm" style="background:#8a1f1f;color:#fff;margin-left:6px;" onclick="abrirCorteCaja('${faltantes[0]}')">Hacer corte de ${fmtFecha(faltantes[0])}</button>`;
+    } else {
+      alerta.style.display='none';
+      alerta.innerHTML='';
+    }
+  }
 }
 
 // ═══════════════════════════════════════════════════════════════════
@@ -7414,7 +7597,7 @@ function actualizarCajaConFondo() {
 let cortesCaja = [];
 let _corteActualData = {};
 
-window.abrirCorteCaja = async function() {
+window.abrirCorteCaja = async function(fechaPreset) {
   // Si fondosCaja aún no cargó, traerlo directo de Firestore
   if(!fondosCaja.length){
     try{
@@ -7423,7 +7606,10 @@ window.abrirCorteCaja = async function() {
       window.fondosCaja = fondosCaja;
     }catch(e){console.error('Error cargando fondos:',e);}
   }
-  document.getElementById('corte-fecha').value = hoy();
+  // Refrescar cortesCaja siempre que se abre, para detectar cortes faltantes
+  // con datos frescos (no solo lo que se cargó al abrir la app).
+  await cargarCortesCaja();
+  document.getElementById('corte-fecha').value = fechaPreset||hoy();
   document.getElementById('corte-notas').value = '';
   if(document.getElementById('corte-fondo-manana')) document.getElementById('corte-fondo-manana').value='';
   recalcCorte();
@@ -7455,10 +7641,24 @@ window.recalcCorte=function(){
   const h=document.getElementById('corte-fecha').value||hoy();
   const d=calcCorteParaFecha(h);
   _corteActualData=d;
+  // Cortes de días anteriores a ESTA fecha que quedaron pendientes.
+  const faltantes=cortesFaltantesAntesDe(h);
+  const alertaEl=document.getElementById('corte-alerta-faltantes');
+  if(alertaEl){
+    if(faltantes.length>0){
+      alertaEl.style.display='block';
+      alertaEl.innerHTML=`⚠️ Todavía no se ha hecho el corte de: <strong>${faltantes.map(fmtFecha).join(', ')}</strong>.<br>`+
+        `El "Fondo inicial" que ves abajo puede no ser real hasta que hagas esos cortes primero (en orden, del más viejo al más nuevo).`;
+    } else {
+      alertaEl.style.display='none';
+      alertaEl.innerHTML='';
+    }
+  }
+  const fondoSospechoso = d.fondo===0 && faltantes.length>0;
   document.getElementById('corte-resumen').innerHTML=`
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;font-size:13px;">
       <span style="color:var(--ink-soft);">📅 Fecha:</span><strong>${h}</strong>
-      <span style="color:var(--ink-soft);">💰 Fondo inicial:</span><strong>${fmtMoney(d.fondo)}</strong>
+      <span style="color:var(--ink-soft);">💰 Fondo inicial:</span><strong style="${fondoSospechoso?'color:var(--red);':''}">${fmtMoney(d.fondo)}${fondoSospechoso?' ⚠️ sin confirmar':''}</strong>
       <span style="color:var(--ink-soft);">💚 Ingresos Local+Foráneo:</span><strong style="color:var(--green);">${fmtMoney(d.ingresos)}</strong>
       <span></span>
       ${d.enEfectivo>0?`<span style="color:var(--ink-soft);padding-left:12px;">└ 💵 Efectivo:</span><span>${fmtMoney(d.enEfectivo)}</span>`:''}
@@ -7489,6 +7689,12 @@ window.guardarCorte = async function() {
     toast('⚠️ Debes contar e ingresar el efectivo real en caja antes de guardar el corte.');
     document.getElementById('corte-real').focus();
     return;
+  }
+  // Si hay cortes de días anteriores sin hacer, el fondo de este corte puede
+  // estar mal (aparece en $0 sin serlo de verdad) — se avisa antes de guardar.
+  const faltantes=cortesFaltantesAntesDe(_corteActualData.fecha);
+  if(faltantes.length>0){
+    if(!confirm(`⚠️ Todavía no se ha hecho el corte de: ${faltantes.map(fmtFecha).join(', ')}.\n\nEl fondo inicial de este corte (${fmtMoney(_corteActualData.fondo)}) puede no ser real.\n\nLo recomendable es hacer primero el corte de ${fmtFecha(faltantes[0])}.\n\n¿Aun así quieres guardar este corte?`)) return;
   }
   const real = +realInput;
   const notas = document.getElementById('corte-notas').value;
