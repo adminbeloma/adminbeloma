@@ -1343,7 +1343,8 @@ async function exportarExcel(origen){
         color: (it.color||"").toUpperCase(),
         genero: GENERO_EXPORT[it.genero] || (it.genero||"").toUpperCase(),
         descripcion: (it.descripcion||"").toUpperCase(),
-        cliente: p.cliente || p.canal || "",
+        cliente: p.cliente || "",
+        canal: p.canal || "",
         piezasPaquete: p.piezasPaquete || 0
       });
     });
@@ -1408,11 +1409,18 @@ async function exportarExcel(origen){
     const filaTop = filaInicio + g.inicio;
     const filaBottom = filaInicio + g.fin;
     const l0 = lineas[g.inicio];
-    let texto = l0.cliente;
     const numPiezas = g.fin - g.inicio + 1;
-    if(l0.piezasPaquete > 1 || numPiezas > 1){
-      const n = Math.max(l0.piezasPaquete || 0, numPiezas);
-      texto += ` LAS ${n} PLAYERAS EN EL MISMO PAQUETE`;
+    const n = Math.max(l0.piezasPaquete || 0, numPiezas);
+    // Etiqueta según canal: Mercado Libre / Shopify / Amazon SIEMPRE muestran
+    // el nombre del canal (nunca el nombre del cliente), Local/Foráneo (y
+    // cualquier otro canal) muestran el nombre real del cliente en MAYÚSCULAS.
+    const CANAL_LABEL = {MercadoLibre:"MERCADO LIBRE", Shopify:"SHOPIFY", Amazon:"AMAZON"};
+    let texto;
+    if(CANAL_LABEL[l0.canal]){
+      texto = CANAL_LABEL[l0.canal];
+      if(l0.canal === "MercadoLibre" && n > 1) texto += ` LAS ${n} PLAYERAS EN EL MISMO PAQUETE`;
+    } else {
+      texto = (l0.cliente || l0.canal || "").toString().toUpperCase();
     }
     if(filaBottom > filaTop) ws.mergeCells(`G${filaTop}:G${filaBottom}`);
     const celda = ws.getCell(`G${filaTop}`);
