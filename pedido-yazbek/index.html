@@ -84,8 +84,8 @@
       </div>
       <div>
         <label>Color</label>
-        <input type="text" id="fColor" list="listaColores" placeholder="Escribe o elige...">
-        <datalist id="listaColores"></datalist>
+        <select id="fColor" onchange="onColorSelectChange()"></select>
+        <input type="text" id="fColorOtro" placeholder="Escribe el color" style="display:none;margin-top:4px;">
       </div>
       <div>
         <label>Talla</label>
@@ -348,15 +348,35 @@ function actualizarListaColores(){
   const oficiales = p ? p.colores : [];
   const guardados = coloresGuardados[slug] || [];
   const todos = [...new Set([...oficiales, ...guardados])].sort();
-  document.getElementById("listaColores").innerHTML =
-    todos.map(c=>`<option value="${c}">`).join("");
+  const sel = document.getElementById("fColor");
+  const valActual = sel.value;
+  sel.innerHTML = todos.map(c=>`<option value="${c}">${c}</option>`).join("")
+    + `<option value="__otro__">✏️ Otro (escribir)</option>`;
+  // Si el color que estaba elegido sigue existiendo en la nueva lista, se
+  // conserva; si no, se regresa al primero disponible.
+  sel.value = todos.includes(valActual) ? valActual : (todos[0]||"__otro__");
+  onColorSelectChange();
+}
+
+function onColorSelectChange(){
+  const sel = document.getElementById("fColor");
+  const otro = document.getElementById("fColorOtro");
+  const esOtro = sel.value === "__otro__";
+  otro.style.display = esOtro ? "block" : "none";
+  if(esOtro) otro.focus();
+}
+
+function obtenerColorActual(){
+  const sel = document.getElementById("fColor");
+  if(sel.value === "__otro__") return document.getElementById("fColorOtro").value.trim();
+  return sel.value.trim();
 }
 
 /* ---------- agregar / editar renglón ---------- */
 function agregarRenglon(){
   const prov = proveedorActual();
   const p = productoActual();
-  const color = document.getElementById("fColor").value.trim();
+  const color = obtenerColorActual();
   const talla = document.getElementById("fTalla").value;
   const cantidad = parseInt(document.getElementById("fCantidad").value)||1;
 
@@ -394,7 +414,17 @@ function editarRenglon(idx){
   onProveedorChange();
   document.getElementById("fProducto").value = r.codigo;
   onProductoChange();
-  document.getElementById("fColor").value = r.color;
+  // Si el color del renglón sigue existiendo en la lista se selecciona tal
+  // cual; si ya no está (o nunca estuvo en el catálogo), se usa "Otro".
+  const sel = document.getElementById("fColor");
+  const opciones = [...sel.options].map(o=>o.value);
+  if(opciones.includes(r.color)){
+    sel.value = r.color;
+  } else {
+    sel.value = "__otro__";
+    document.getElementById("fColorOtro").value = r.color;
+  }
+  onColorSelectChange();
   document.getElementById("fTalla").value = r.talla;
   document.getElementById("fCantidad").value = r.cantidad;
 
@@ -414,7 +444,7 @@ function cancelarEdicion(limpiarCampos = true){
   document.getElementById("btnCancelarEdicion").style.display = "none";
   document.getElementById("bannerEdicion").style.display = "none";
   if(limpiarCampos){
-    document.getElementById("fColor").value = "";
+    document.getElementById("fColorOtro").value = "";
     document.getElementById("fCantidad").value = "1";
   }
   renderPedido();
