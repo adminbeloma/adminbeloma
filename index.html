@@ -304,6 +304,9 @@ tbody td{padding:11px 14px;font-size:13.5px;vertical-align:middle;}
       <div class="actions">
         <button class="btn btn-ghost" onclick="document.getElementById('input-importar-ventas-ml').click()">📥 Importar Excel ML</button>
         <input type="file" id="input-importar-ventas-ml" accept=".xlsx" style="display:none;" onchange="importarVentasExcelML(this.files[0])">
+        <button class="btn btn-ghost" onclick="document.getElementById('input-actualizar-totales-ml').click()">🔄 Actualizar totales desde Excel</button>
+        <input type="file" id="input-actualizar-totales-ml" accept=".xlsx" style="display:none;" onchange="actualizarTotalesVentasExcelML(this.files[0])">
+        <button class="btn btn-sm" style="background:#8a1f1f;color:#fff;" onclick="abrirVentasMLSinProducto()">🧹 Revisar ventas ML sin producto</button>
         <button class="btn btn-ghost" onclick="abrirTintaPendiente()">🖨️ Tinta pendiente</button>
         <button class="btn btn-accent" onclick="openVentaModal()">+ Nueva Venta</button>
       </div>
@@ -2575,6 +2578,44 @@ tbody td{padding:11px 14px;font-size:13.5px;vertical-align:middle;}
   </div>
 </div>
 
+<!-- MODAL VENTAS DE MERCADO LIBRE SIN PRODUCTO (importadas mal en su momento) -->
+<div class="modal-overlay" id="modal-ventas-ml-sin-producto">
+  <div class="modal" style="max-width:900px;">
+    <div class="modal-header">
+      <h2>🧹 Ventas de Mercado Libre sin producto</h2>
+      <button class="modal-close" onclick="closeModal('modal-ventas-ml-sin-producto')">×</button>
+    </div>
+    <div class="modal-body">
+      <p style="font-size:12px;color:var(--ink-soft);margin:-4px 0 12px;">
+        Estas son ventas de canal Mercado Libre donde <strong>ninguna pieza tiene género, talla ni color</strong> —
+        el patrón típico de cuando se coló por error un renglón "cabecera de paquete" (los que Mercado Libre usa
+        solo para reportar el dinero de un paquete de varios productos, sin describir ningún producto en sí).
+        Revisa la lista, marca las que quieras borrar y dale "Eliminar seleccionadas".
+        <strong>Revisa bien antes de borrar</strong> — no se puede deshacer.
+      </p>
+      <div id="vmlsp-contador" style="font-weight:700;margin-bottom:10px;"></div>
+      <div id="vmlsp-bulk-bar" style="display:none;align-items:center;gap:10px;margin-bottom:10px;padding:8px 12px;background:var(--bg-card);border:1px solid var(--red);border-radius:8px;flex-wrap:wrap;">
+        <span id="vmlsp-bulk-contador" style="font-size:12px;font-weight:700;"></span>
+        <button class="btn btn-danger btn-sm" onclick="eliminarVentasMLSinProductoSeleccionadas()">🗑 Eliminar seleccionadas</button>
+        <button class="btn btn-ghost btn-sm" onclick="deseleccionarTodasVentasMLSinProducto()">✖ Quitar selección</button>
+      </div>
+      <div class="table-wrap" style="max-height:55vh;overflow:auto;">
+        <table>
+          <thead><tr>
+            <th style="width:28px;"><input type="checkbox" id="vmlsp-check-all" onchange="toggleTodasVentasMLSinProducto(this.checked)" style="width:15px;height:15px;cursor:pointer;"></th>
+            <th>Fecha</th><th>Folio</th><th>Cliente</th><th>Ciudad</th><th>Total</th><th>Acciones</th>
+          </tr></thead>
+          <tbody id="tabla-ventas-ml-sin-producto"></tbody>
+        </table>
+      </div>
+      <div id="vmlsp-empty" class="empty-state" style="display:none;"><div class="icon">✅</div><p>No hay ventas de Mercado Libre sin producto — no hay nada que limpiar.</p></div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-accent" onclick="closeModal('modal-ventas-ml-sin-producto')">Cerrar</button>
+    </div>
+  </div>
+</div>
+
 <!-- MODAL AGREGAR VARIOS GASTOS DE GOLPE -->
 <div class="modal-overlay" id="modal-gastos-lote">
   <div class="modal" style="max-width:980px;">
@@ -3628,7 +3669,7 @@ function mapGeneroImportado(txt){
 }
 window.importarVentasExcelML=async function(file){
   if(!file) return;
-  if(!confirm(`¿Importar "${file.name}" como ventas nuevas?\n\nSe creará una venta por cada folio que no exista ya en tu sistema (canal Mercado Libre). Precio, tinta y proceso quedan en 0 para que los completes tú.`)) {
+  if(!confirm(`¿Importar "${file.name}" como ventas nuevas?\n\nSe creará una venta por cada folio que no exista ya en tu sistema (canal Mercado Libre). El total se toma de la columna "Total (MXN)" del Excel (se marca como ya cobrado, porque Mercado Libre ya retiene y liquida el pago). Tinta y proceso quedan en 0 para que los completes tú.`)) {
     document.getElementById('input-importar-ventas-ml').value='';
     return;
   }
@@ -3675,14 +3716,26 @@ window.importarVentasExcelML=async function(file){
       if(foliosExistentes.has(folio)){ saltadas++; continue; }
       const grupo=porFolio[folio];
       const primero=grupo[0];
-      const items=grupo.map(f=>({
-        tipo:'Playera', genero:mapGeneroImportado(f['Género']), talla:String(f.Talla||''),
-        color:String(f.Color||''), material:'', tipoPrenda:'', tipoPrendaOtro:'',
-        tipoGorra:'', tipoGorraOtro:'', marca:'Yazbek', descripcion:String(f['Descripción']||''),
-        proceso:'DTG', cantidad:+f.Unidades||1, precio:0, tintaBlanca:0, tintaColor:0,
-        multiTG:false, desglose:[]
-      }));
+      const items=grupo.map(f=>{
+        const cantidad=+f.Unidades||1;
+        // Total (MXN) del reporte de ML es el neto de ESE renglón (ya con
+        // descuento de comisión/cargos) — se reparte entre las piezas de esa
+        // línea para tener un precio unitario aproximado.
+        const totalRenglon=+f.Total||0;
+        return {
+          tipo:'Playera', genero:mapGeneroImportado(f['Género']), talla:String(f.Talla||''),
+          color:String(f.Color||''), material:'', tipoPrenda:'', tipoPrendaOtro:'',
+          tipoGorra:'', tipoGorraOtro:'', marca:'Yazbek', descripcion:String(f['Descripción']||''),
+          proceso:'DTG', cantidad, precio:cantidad>0?+(totalRenglon/cantidad).toFixed(2):0,
+          tintaBlanca:0, tintaColor:0, multiTG:false, desglose:[]
+        };
+      });
       const cantTotal=items.reduce((s,it)=>s+(+it.cantidad||1),0);
+      // Total de la venta = suma del "Total (MXN)" de todos los renglones de
+      // este folio. Como Mercado Libre ya retiene y liquida el pago por su
+      // cuenta, la venta se marca como cobrada por completo desde el
+      // principio (anticipo = total, saldo = 0) — no queda pendiente de cobro.
+      const totalVenta=+grupo.reduce((s,f)=>s+(+f.Total||0),0).toFixed(2);
       const productoResumen=items.map(it=>
         `${it.cantidad}x ${it.genero||''} ${it.tipo}${it.talla?' Talla '+it.talla:''}${it.color?' '+it.color:''}${it.descripcion?' ('+it.descripcion+')':''}`.replace(/\s+/g,' ').trim()
       ).join(', ');
@@ -3695,8 +3748,8 @@ window.importarVentasExcelML=async function(file){
         tipoProceso:'DTG', sinTinta:false,
         ciudad:[primero.Ciudad,primero.Estado].filter(Boolean).join(', '),
         paqueteria:'', guia:'', costoGuia:0, domicilioEnvio:'',
-        cantidad:cantTotal, precio:0, descuento:0, total:0, anticipo:0, saldo:0,
-        proveedor:'Yazbek', folio, notas:'Importado de Excel de Mercado Libre — falta completar precio, tinta y proceso.',
+        cantidad:cantTotal, precio:0, descuento:0, total:totalVenta, anticipo:totalVenta, saldo:0,
+        proveedor:'Yazbek', folio, notas:'Importado de Excel de Mercado Libre — falta completar tinta y proceso. El total se tomó de la columna "Total (MXN)" del reporte de ML.',
         tintaBlanca:0, tintaColor:0, costoTinta:0,
         metodoPago:'', lugDeposito:'', tipoTarjeta:'', bancoOrigen:'', pagoCon:0,
         pendienteCompletar:true,
@@ -3724,6 +3777,108 @@ window.importarVentasExcelML=async function(file){
     console.error(err);
     ocultarProgreso();
     toast('⚠️ Error al importar: '+err.message);
+  }
+};
+
+// A diferencia de importarVentasExcelML (que solo CREA ventas nuevas y se
+// salta cualquier folio que ya exista), esta función hace lo contrario:
+// busca por folio las ventas que YA EXISTEN en el sistema (canal Mercado
+// Libre) y les corrige el total/anticipo — nunca crea ventas nuevas. Sirve
+// para arreglar ventas viejas que se importaron cuando el total todavía se
+// dejaba en $0, usando el mismo tipo de Excel (con columna "Total").
+window.actualizarTotalesVentasExcelML=async function(file){
+  if(!file) return;
+  if(!confirm(`¿Actualizar totales desde "${file.name}"?\n\nEsto NO crea ventas nuevas: solo busca por folio las que YA EXISTEN en tu sistema (canal Mercado Libre) y les corrige el total/anticipo con la columna "Total" del Excel. También completa el Género de cada pieza si está en blanco (sin tocar los que ya tengan algo capturado). Los folios que no encuentre en tu sistema se ignoran sin tocar nada.`)) {
+    document.getElementById('input-actualizar-totales-ml').value='';
+    return;
+  }
+  mostrarProgreso('⏳ Leyendo Excel...', 'Esto puede tardar un momento si el archivo es grande');
+  try{
+    const buf=await file.arrayBuffer();
+    const wb=XLSX.read(buf,{type:'array'});
+    const hojasOmitir=['Resumen','Léeme','Leeme','Excluidas','Sin monto'];
+    let filas=[];
+    wb.SheetNames.forEach(nombre=>{
+      if(hojasOmitir.includes(nombre)) return;
+      const ws=wb.Sheets[nombre];
+      const datos=XLSX.utils.sheet_to_json(ws,{defval:''});
+      filas=filas.concat(datos);
+    });
+    if(filas.length===0){ ocultarProgreso(); toast('⚠️ No se encontraron filas en el Excel'); return; }
+
+    // Agrupar renglones por folio (igual que hace importarVentasExcelML), para
+    // poder cruzar cada renglón del Excel con su item correspondiente dentro
+    // de la venta ya guardada — no solo para sumar el total.
+    const renglonesPorFolio={};
+    filas.forEach(f=>{
+      const folio=String(f.Folio||'').trim();
+      if(!folio) return;
+      if(!renglonesPorFolio[folio]) renglonesPorFolio[folio]=[];
+      renglonesPorFolio[folio].push(f);
+    });
+    const totalPorFolio={};
+    Object.keys(renglonesPorFolio).forEach(folio=>{
+      totalPorFolio[folio]=renglonesPorFolio[folio].reduce((s,f)=>s+(+f.Total||0),0);
+    });
+    const folios=Object.keys(totalPorFolio);
+
+    actualizarProgreso('⏳ Buscando tus ventas de Mercado Libre ya guardadas...', `${folios.length} folio(s) en el Excel`);
+    const snapExistentes=await getDocs(query(collection(db,'pl_ventas'), where('canal','==','Mercado Libre')));
+    const porFolioExistente={};
+    snapExistentes.forEach(d=>{
+      const data=d.data();
+      const folio=String(data.folio||'').trim();
+      if(folio) porFolioExistente[folio]=data;
+    });
+
+    let actualizadas=0, noEncontradas=0, sinCambio=0, procesados=0, generosCompletados=0;
+    let batch=writeBatch(db);
+    let enBatch=0;
+    for(const folio of folios){
+      procesados++;
+      if(procesados%25===0 || procesados===folios.length){
+        actualizarProgreso('💾 Actualizando totales...', `${procesados} de ${folios.length} folios revisados (${actualizadas} actualizados)`);
+      }
+      const existente=porFolioExistente[folio];
+      if(!existente){ noEncontradas++; continue; }
+      const nuevoTotal=+totalPorFolio[folio].toFixed(2);
+
+      // Completar el Género de cada pieza si en el sistema está en blanco y
+      // el Excel sí lo trae — SIN tocar los que ya tengan algo capturado.
+      // Se cruza por posición (renglón 1 del Excel = item 1 de la venta, y
+      // así sucesivamente), que es el mismo orden en que se crearon.
+      const renglones=renglonesPorFolio[folio]||[];
+      const items=Array.isArray(existente.items)?existente.items.slice():[];
+      let itemsCambiaron=false;
+      items.forEach((it,idx)=>{
+        if(!it.genero && renglones[idx]){
+          const generoExcel=mapGeneroImportado(renglones[idx]['Género']);
+          if(generoExcel){ items[idx]={...it, genero:generoExcel}; itemsCambiaron=true; generosCompletados++; }
+        }
+      });
+
+      const hayCambioTotal=Math.abs((+existente.total||0)-nuevoTotal)>=0.01;
+      if(!hayCambioTotal && !itemsCambiaron){ sinCambio++; continue; }
+      const cambios={actualizado:new Date().toISOString()};
+      if(hayCambioTotal){ cambios.total=nuevoTotal; cambios.anticipo=nuevoTotal; cambios.saldo=0; }
+      if(itemsCambiaron) cambios.items=items;
+      batch.set(doc(db,'pl_ventas',existente.id),cambios,{merge:true});
+      enBatch++; actualizadas++;
+      if(enBatch>=450){ await batch.commit(); batch=writeBatch(db); enBatch=0; }
+    }
+    if(enBatch>0) await batch.commit();
+
+    document.getElementById('input-actualizar-totales-ml').value='';
+    ocultarProgreso();
+    toast(`✅ ${actualizadas} venta(s) actualizada(s) · ${generosCompletados} género(s) completado(s) · ${sinCambio} ya estaban correctas · ${noEncontradas} folio(s) no encontrados en tu sistema`);
+    await cargarVentas(true);
+    _statsVentasKey=null;
+    renderVentas();
+    renderDashboard();
+  }catch(err){
+    console.error(err);
+    ocultarProgreso();
+    toast('⚠️ Error al actualizar totales: '+err.message);
   }
 };
 
@@ -4153,6 +4308,117 @@ window.eliminarVenta=async function(id){
   }
   toast('🗑 Venta eliminada');
   await cargarVentas(true);
+};
+
+// ── Limpieza de ventas de Mercado Libre que se colaron mal en importaciones
+// viejas (renglones "cabecera de paquete" sin producto real: sin género,
+// talla ni color en ninguna pieza) ──
+let ventasMLSinProductoCache=[];
+let ventasMLSinProductoSeleccionadas=new Set();
+
+function ventaSinProducto(v){
+  if(v.canal!=='Mercado Libre') return false;
+  if(Array.isArray(v.items) && v.items.length>0){
+    return v.items.every(it=>!it.genero && !it.talla && !it.color);
+  }
+  // Ventas antiguas sin arreglo items (formato de un solo producto)
+  return !v.genero && !v.talla && !v.color;
+}
+
+window.abrirVentasMLSinProducto=async function(){
+  mostrarProgreso('⏳ Buscando ventas de Mercado Libre sin producto...', 'Revisando toda la colección, no solo lo cargado en pantalla');
+  try{
+    const snap=await getDocs(query(collection(db,'pl_ventas'), where('canal','==','Mercado Libre')));
+    const todas=snap.docs.map(d=>({...d.data(), id:d.id}));
+    ventasMLSinProductoCache=todas.filter(ventaSinProducto).sort((a,b)=>b.fecha>a.fecha?1:-1);
+  }catch(err){
+    console.error(err);
+    ocultarProgreso();
+    toast('⚠️ Error al buscar: '+err.message);
+    return;
+  }
+  ocultarProgreso();
+  ventasMLSinProductoSeleccionadas.clear();
+  renderVentasMLSinProducto();
+  openModal('modal-ventas-ml-sin-producto');
+};
+
+function renderVentasMLSinProducto(){
+  const lista=ventasMLSinProductoCache;
+  const tbody=document.getElementById('tabla-ventas-ml-sin-producto');
+  const empty=document.getElementById('vmlsp-empty');
+  const contador=document.getElementById('vmlsp-contador');
+  contador.textContent=`${lista.length} venta(s) de Mercado Libre sin producto encontradas`;
+  if(lista.length===0){
+    tbody.innerHTML=''; empty.style.display='block';
+  } else {
+    empty.style.display='none';
+    tbody.innerHTML=lista.map(v=>`<tr>
+      <td><input type="checkbox" class="vmlsp-check-item" data-id="${v.id}" ${ventasMLSinProductoSeleccionadas.has(v.id)?'checked':''} onchange="toggleVentaMLSinProductoSeleccionada('${v.id}', this.checked)" style="width:15px;height:15px;cursor:pointer;"></td>
+      <td>${fmtFecha(v.fecha)}</td>
+      <td style="font-size:12px;">${v.folio||'—'}</td>
+      <td>${v.cliente||'—'}</td>
+      <td style="font-size:12px;">${v.ciudad||'—'}</td>
+      <td style="font-weight:700;">${fmtMoney(v.total)}</td>
+      <td><button class="btn btn-ghost btn-sm" onclick="closeModal('modal-ventas-ml-sin-producto');openVentaModal('edit','${v.id}')">👁️ Ver</button></td>
+    </tr>`).join('');
+  }
+  actualizarBarraVentasMLSinProducto();
+}
+
+window.toggleVentaMLSinProductoSeleccionada=function(id, checked){
+  if(checked) ventasMLSinProductoSeleccionadas.add(id); else ventasMLSinProductoSeleccionadas.delete(id);
+  actualizarBarraVentasMLSinProducto();
+};
+
+window.toggleTodasVentasMLSinProducto=function(checked){
+  document.querySelectorAll('.vmlsp-check-item').forEach(chk=>{
+    chk.checked=checked;
+    if(checked) ventasMLSinProductoSeleccionadas.add(chk.dataset.id); else ventasMLSinProductoSeleccionadas.delete(chk.dataset.id);
+  });
+  actualizarBarraVentasMLSinProducto();
+};
+
+window.deseleccionarTodasVentasMLSinProducto=function(){
+  ventasMLSinProductoSeleccionadas.clear();
+  const chkAll=document.getElementById('vmlsp-check-all');
+  if(chkAll) chkAll.checked=false;
+  renderVentasMLSinProducto();
+};
+
+function actualizarBarraVentasMLSinProducto(){
+  const n=ventasMLSinProductoSeleccionadas.size;
+  const barra=document.getElementById('vmlsp-bulk-bar');
+  const contador=document.getElementById('vmlsp-bulk-contador');
+  if(contador) contador.textContent=`${n} venta${n===1?'':'s'} seleccionada${n===1?'':'s'}`;
+  if(barra) barra.style.display=n>0?'flex':'none';
+  const chkAll=document.getElementById('vmlsp-check-all');
+  const totalVisibles=document.querySelectorAll('.vmlsp-check-item').length;
+  if(chkAll) chkAll.checked=totalVisibles>0 && n===totalVisibles;
+}
+
+window.eliminarVentasMLSinProductoSeleccionadas=async function(){
+  const n=ventasMLSinProductoSeleccionadas.size;
+  if(n===0){toast('⚠️ Marca primero las ventas que quieres eliminar');return;}
+  if(!confirm(`¿Eliminar ${n} venta(s) de Mercado Libre sin producto? Esto no se puede deshacer.`)) return;
+  mostrarProgreso('🗑 Eliminando...', `0 de ${n}`);
+  let hechas=0;
+  for(const id of ventasMLSinProductoSeleccionadas){
+    await deleteDoc(doc(db,'pl_ventas',id));
+    const pedidoEspejo=pedidos.find(p=>p.id==='venta_'+id);
+    if(pedidoEspejo) await deleteDoc(doc(db,'pl_pedidos','venta_'+id));
+    hechas++;
+    actualizarProgreso('🗑 Eliminando...', `${hechas} de ${n}`);
+  }
+  ocultarProgreso();
+  ventasMLSinProductoCache=ventasMLSinProductoCache.filter(v=>!ventasMLSinProductoSeleccionadas.has(v.id));
+  ventasMLSinProductoSeleccionadas.clear();
+  renderVentasMLSinProducto();
+  toast(`✅ ${hechas} venta(s) eliminada(s)`);
+  await cargarVentas(true);
+  _statsVentasKey=null;
+  renderVentas();
+  renderDashboard();
 };
 
 // ─── GASTOS ───
