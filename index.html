@@ -394,6 +394,7 @@ tbody td{padding:11px 14px;font-size:13.5px;vertical-align:middle;}
         <button class="btn btn-ghost btn-sm" onclick="setRangoGastos('todo')">Todo</button>
         <button class="btn btn-primary btn-sm" onclick="renderGastos()" style="margin-left:4px;">🔍 Buscar</button>
         <button class="btn btn-ghost btn-sm" onclick="limpiarFiltrosGastos()">✕ Limpiar</button>
+        <button class="btn btn-sm" style="background:#8a1f1f;color:#fff;margin-left:auto;" onclick="abrirGastosIncompletos()">⚠️ Gastos incompletos</button>
       </div>
       <div style="display:flex;gap:14px;margin-bottom:16px;flex-wrap:wrap;">
         <div style="background:var(--bg-card);border:1px solid var(--border);border-radius:8px;padding:12px 16px;"><div style="font-size:11px;color:var(--ink-soft);font-weight:600;text-transform:uppercase;">Total Fijos</div><div style="font-size:20px;font-weight:700;color:var(--red);" id="gastos-fijos-total">$0</div></div>
@@ -2515,6 +2516,34 @@ tbody td{padding:11px 14px;font-size:13.5px;vertical-align:middle;}
   </div>
 </div>
 
+<!-- MODAL GASTOS INCOMPLETOS -->
+<div class="modal-overlay" id="modal-gastos-incompletos">
+  <div class="modal" style="max-width:900px;">
+    <div class="modal-header">
+      <h2>⚠️ Gastos incompletos</h2>
+      <button class="modal-close" onclick="closeModal('modal-gastos-incompletos')">×</button>
+    </div>
+    <div class="modal-body">
+      <p style="font-size:12px;color:var(--ink-soft);margin:-4px 0 12px;">
+        Gastos que les falta algún dato clave — casi siempre el <strong>método de pago</strong>
+        (típico de las facturas importadas desde el Lector de Facturas, donde se deja en blanco a propósito
+        para que tú lo confirmes). Elige el método y dale "Guardar" en cada renglón, sin salir de aquí.
+      </p>
+      <div id="gastos-incompletos-contador" style="font-weight:700;margin-bottom:10px;"></div>
+      <div class="table-wrap" style="max-height:55vh;overflow:auto;">
+        <table>
+          <thead><tr><th>Fecha</th><th>Concepto</th><th>Proveedor</th><th>Monto</th><th>Falta</th><th>Método de pago</th><th>Acciones</th></tr></thead>
+          <tbody id="tabla-gastos-incompletos"></tbody>
+        </table>
+      </div>
+      <div id="gastos-incompletos-empty" class="empty-state" style="display:none;"><div class="icon">✅</div><p>No hay gastos incompletos.</p></div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-accent" onclick="closeModal('modal-gastos-incompletos')">Cerrar</button>
+    </div>
+  </div>
+</div>
+
 <!-- MODAL VISOR DE IMÁGENES DRIVE -->
 <div id="modal-visor-drive" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.92);
   z-index:2000;align-items:center;justify-content:center;flex-direction:column;">
@@ -2573,6 +2602,15 @@ tbody td{padding:11px 14px;font-size:13.5px;vertical-align:middle;}
 </div>
 
 <div id="toast"></div>
+<div id="import-progreso-overlay" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.55);z-index:9999;align-items:center;justify-content:center;">
+  <div style="background:#fff;border-radius:12px;padding:28px 36px;min-width:320px;max-width:90vw;text-align:center;box-shadow:0 10px 40px rgba(0,0,0,.3);">
+    <div style="font-size:34px;animation:girar 1s linear infinite;display:inline-block;">⏳</div>
+    <div id="import-progreso-texto" style="font-weight:700;font-size:15px;margin-top:12px;">Procesando...</div>
+    <div id="import-progreso-contador" style="font-size:13px;color:var(--ink-soft);margin-top:4px;"></div>
+    <div style="font-size:11px;color:var(--ink-soft);margin-top:12px;">No cierres ni recargues esta pestaña hasta que termine.</div>
+  </div>
+</div>
+<style>@keyframes girar{from{transform:rotate(0deg);}to{transform:rotate(360deg);}}</style>
 
 <script type="module">
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
@@ -2679,6 +2717,24 @@ setTimeout(()=>{document.getElementById('loading-overlay').style.display='none';
 // ─── UTILS ───
 function uid(){return Date.now().toString(36)+Math.random().toString(36).substr(2);}
 function toast(msg){const t=document.getElementById('toast');t.textContent=msg;t.classList.add('show');setTimeout(()=>t.classList.remove('show'),2500);}
+
+// Overlay de progreso para procesos largos (importaciones de Excel, etc.)
+// que NO se desvanece solo — se queda fijo hasta que se llama a ocultarProgreso().
+// Así, si el proceso tarda, siempre hay algo visible confirmando que sigue trabajando.
+function mostrarProgreso(texto, contador){
+  const ov=document.getElementById('import-progreso-overlay');
+  document.getElementById('import-progreso-texto').textContent=texto||'Procesando...';
+  document.getElementById('import-progreso-contador').textContent=contador||'';
+  if(ov) ov.style.display='flex';
+}
+function actualizarProgreso(texto, contador){
+  if(texto!==undefined) document.getElementById('import-progreso-texto').textContent=texto;
+  if(contador!==undefined) document.getElementById('import-progreso-contador').textContent=contador;
+}
+function ocultarProgreso(){
+  const ov=document.getElementById('import-progreso-overlay');
+  if(ov) ov.style.display='none';
+}
 function openModal(id){document.getElementById(id).classList.add('open');}
 function closeModal(id){document.getElementById(id).classList.remove('open');}
 window.closeModal=closeModal;
@@ -3508,7 +3564,7 @@ window.importarVentasExcelML=async function(file){
     document.getElementById('input-importar-ventas-ml').value='';
     return;
   }
-  toast('⏳ Leyendo Excel...');
+  mostrarProgreso('⏳ Leyendo Excel...', 'Esto puede tardar un momento si el archivo es grande');
   try{
     const buf=await file.arrayBuffer();
     const wb=XLSX.read(buf,{type:'array'});
@@ -3520,7 +3576,7 @@ window.importarVentasExcelML=async function(file){
       const datos=XLSX.utils.sheet_to_json(ws,{defval:''});
       filas=filas.concat(datos);
     });
-    if(filas.length===0){ toast('⚠️ No se encontraron filas de ventas en el Excel'); return; }
+    if(filas.length===0){ ocultarProgreso(); toast('⚠️ No se encontraron filas de ventas en el Excel'); return; }
 
     // Agrupar por Folio
     const porFolio={};
@@ -3533,7 +3589,7 @@ window.importarVentasExcelML=async function(file){
     });
 
     // Traer folios ya existentes de Mercado Libre para no duplicar
-    toast('⏳ Revisando folios ya importados...');
+    actualizarProgreso('⏳ Revisando folios ya importados...', `${ordenFolios.length} folio(s) encontrados en el Excel`);
     const snapExistentes=await getDocs(query(collection(db,'pl_ventas'), where('canal','==','Mercado Libre')));
     const foliosExistentes=new Set();
     snapExistentes.forEach(d=> foliosExistentes.add(String(d.data().folio||'').trim()));
@@ -3541,7 +3597,13 @@ window.importarVentasExcelML=async function(file){
     let creadas=0, saltadas=0;
     let batch=writeBatch(db);
     let enBatch=0;
+    let procesados=0;
+    const totalFolios=ordenFolios.length;
     for(const folio of ordenFolios){
+      procesados++;
+      if(procesados%15===0 || procesados===totalFolios){
+        actualizarProgreso('💾 Guardando ventas...', `${procesados} de ${totalFolios} folios procesados (${creadas} nuevas, ${saltadas} ya existían)`);
+      }
       if(foliosExistentes.has(folio)){ saltadas++; continue; }
       const grupo=porFolio[folio];
       const primero=grupo[0];
@@ -3574,17 +3636,25 @@ window.importarVentasExcelML=async function(file){
       };
       batch.set(doc(db,'pl_ventas',id), data);
       enBatch++; creadas++;
-      if(enBatch>=450){ await batch.commit(); batch=writeBatch(db); enBatch=0; }
+      if(enBatch>=450){
+        actualizarProgreso('💾 Guardando ventas...', `Guardando lote en la base de datos (${procesados} de ${totalFolios} folios)...`);
+        await batch.commit(); batch=writeBatch(db); enBatch=0;
+      }
     }
-    if(enBatch>0) await batch.commit();
+    if(enBatch>0){
+      actualizarProgreso('💾 Guardando el último lote...', `${procesados} de ${totalFolios} folios`);
+      await batch.commit();
+    }
 
     document.getElementById('input-importar-ventas-ml').value='';
+    ocultarProgreso();
     toast(`✅ Importadas ${creadas} ventas nuevas (${saltadas} ya existían y se saltaron)`);
     await cargarVentas(true);
     renderVentas();
     renderDashboard();
   }catch(err){
     console.error(err);
+    ocultarProgreso();
     toast('⚠️ Error al importar: '+err.message);
   }
 };
@@ -4095,6 +4165,64 @@ function gastosCombinados(){
   return [...deGastos, ...deCaja];
 }
 
+// Detecta qué le falta a un gasto para considerarse "completo". Por ahora
+// solo se revisan gastos capturados en Gastos (no los de Caja, que siempre
+// piden forma de pago al capturarlos y nunca quedan incompletos).
+function camposFaltantesGasto(g){
+  const faltan=[];
+  if(!g.metodoPago) faltan.push('Método de pago');
+  if(!g.proveedor) faltan.push('Proveedor');
+  if(!(+g.monto>0)) faltan.push('Monto');
+  return faltan;
+}
+
+window.abrirGastosIncompletos=function(){
+  const lista=gastosCombinados()
+    .filter(g=>g.origen==='gastos')
+    .map(g=>({...g, _faltan:camposFaltantesGasto(g)}))
+    .filter(g=>g._faltan.length>0)
+    .sort((a,b)=>b.fecha>a.fecha?1:-1);
+  const tbody=document.getElementById('tabla-gastos-incompletos');
+  const empty=document.getElementById('gastos-incompletos-empty');
+  const contador=document.getElementById('gastos-incompletos-contador');
+  contador.textContent=`${lista.length} gasto(s) incompleto(s)`;
+  if(lista.length===0){
+    tbody.innerHTML=''; empty.style.display='block';
+  } else {
+    empty.style.display='none';
+    tbody.innerHTML=lista.map(g=>`<tr>
+      <td>${fmtFecha(g.fecha)}</td>
+      <td style="font-weight:500;font-size:13px;max-width:220px;">${g.concepto||'—'}</td>
+      <td style="font-size:12px;">${g.proveedor||'—'}</td>
+      <td style="font-weight:700;">${fmtMoney(g.monto)}</td>
+      <td style="font-size:11px;color:var(--red);">${g._faltan.join(', ')}</td>
+      <td>
+        <select id="gi-metodo-${g.id}" style="padding:5px 8px;border:1px solid var(--border);border-radius:6px;font-size:12px;">
+          <option value="">— Elegir —</option>
+          <option value="Efectivo">💵 Efectivo</option>
+          <option value="Transferencia">📲 Transferencia</option>
+          <option value="Depósito">🏦 Depósito</option>
+          <option value="Tarjeta">💳 Tarjeta</option>
+        </select>
+      </td>
+      <td style="display:flex;gap:4px;">
+        <button class="btn btn-sm" style="background:var(--accent);color:#fff;" onclick="guardarMetodoPagoIncompleto('${g.id}')">💾 Guardar</button>
+        <button class="btn btn-ghost btn-sm" onclick="closeModal('modal-gastos-incompletos');openGastoModal('${g.id}')">✏️ Editar todo</button>
+      </td>
+    </tr>`).join('');
+  }
+  openModal('modal-gastos-incompletos');
+};
+
+window.guardarMetodoPagoIncompleto=async function(id){
+  const sel=document.getElementById(`gi-metodo-${id}`);
+  const metodo=sel?.value||'';
+  if(!metodo){ toast('⚠️ Elige un método de pago primero'); return; }
+  await setDoc(doc(db,'pl_gastos',id),{metodoPago:metodo},{merge:true});
+  toast('✅ Método de pago guardado');
+  abrirGastosIncompletos(); // refresca la lista (ese renglón ya debería salir si quedó completo)
+};
+
 window.setRangoGastos=function(tipo){
   const r=getRango(tipo);
   document.getElementById('filter-gasto-desde').value=r.desde;
@@ -4137,7 +4265,7 @@ window.renderGastos=function renderGastos(){
   empty.style.display='none';
   tbody.innerHTML=lista.map(g=>`<tr>
     <td>${fmtFecha(g.fecha)}</td>
-    <td style="font-weight:500;">${g.concepto}${g.origen==='caja'?' <span class="badge badge-blue" style="font-size:9px;" title="Registrado en Caja">🔗 Caja</span>':''}${g.origen==='compra'?' <span class="badge badge-blue" style="font-size:9px;" title="Generado desde Compras">🔗 Compra</span>':''}${g.esMSI?` <span class="badge badge-gold" style="font-size:9px;" title="Meses sin intereses — total ${fmtMoney(g.montoTotalMSI)}">💳 MSI ${g.mesMSI}/${g.totalMesesMSI}</span>`:''}</td>
+    <td style="font-weight:500;">${g.concepto}${g.origen==='caja'?' <span class="badge badge-blue" style="font-size:9px;" title="Registrado en Caja">🔗 Caja</span>':''}${g.origen==='compra'?' <span class="badge badge-blue" style="font-size:9px;" title="Generado desde Compras">🔗 Compra</span>':''}${g.origenFactura?' <span class="badge badge-blue" style="font-size:9px;" title="Importado del Lector de Facturas">🔗 Factura</span>':''}${g.esMSI?` <span class="badge badge-gold" style="font-size:9px;" title="Meses sin intereses — total ${fmtMoney(g.montoTotalMSI)}">💳 MSI ${g.mesMSI}/${g.totalMesesMSI}</span>`:''}</td>
     <td>${g.categoria}</td>
     <td><span class="badge ${g.tipo==='Fijo'?'badge-blue':'badge-gold'}">${g.tipo}</span></td>
     <td style="font-size:12px;">${METODO_ICONO[g.metodoPago]||''} ${g.metodoPago||'—'}</td>
