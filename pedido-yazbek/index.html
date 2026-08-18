@@ -548,10 +548,11 @@ function renderBotonesEnvio(){
   cont.innerHTML = slugsPresentes.map(slug=>{
     const prov = PROVEEDORES[slug];
     const nombre = prov ? prov.nombre : slug;
+    const guardando = guardandoProveedor.has(slug);
     const botones = [];
-    botones.push(`<button class="btn btn-secundario" onclick="guardarPedidoProveedor('${slug}', false)">💾 Guardar ${nombre}</button>`);
+    botones.push(`<button class="btn btn-secundario" ${guardando?'disabled':''} onclick="guardarPedidoProveedor('${slug}', false)">${guardando?'⏳ Guardando...':'💾 Guardar '+nombre}</button>`);
     if(prov && prov.contacto_whatsapp){
-      botones.push(`<button class="btn btn-verde" onclick="guardarPedidoProveedor('${slug}', true)">📱 Enviar a ${nombre}</button>`);
+      botones.push(`<button class="btn btn-verde" ${guardando?'disabled':''} onclick="guardarPedidoProveedor('${slug}', true)">${guardando?'⏳ Guardando...':'📱 Enviar a '+nombre}</button>`);
     }
     botones.push(`<button class="btn btn-gris btn-chico" onclick="configurarWhatsApp('${slug}')">📞 ${prov && prov.contacto_whatsapp ? 'Cambiar' : 'Configurar'} WhatsApp</button>`);
     return botones.join("");
@@ -592,7 +593,31 @@ async function generarFolio(){
 }
 
 /* ---------- guardar pedido en historial (con o sin enviar por WhatsApp) ---------- */
+// Evita duplicados por doble clic (o clics repetidos "por si no guardó"):
+// mientras un proveedor se está guardando, sus botones se deshabilitan; y
+// antes de guardar se compara contra el historial de HOY para ese mismo
+// proveedor por si el contenido es idéntico a uno que ya se guardó.
+const guardandoProveedor = new Set();
+
+function pedidoIdenticoYaGuardadoHoy(slug, itemsNuevos, referencia){
+  const hoyStr = hoyISO();
+  const itemsOrdenados = its => JSON.stringify(
+    [...its].map(r=>({c:r.codigo,co:r.color,t:r.talla,p:r.cantidad}))
+             .sort((a,b)=> (a.c+a.co+a.t).localeCompare(b.c+b.co+b.t))
+  );
+  const firmaNueva = itemsOrdenados(itemsNuevos);
+  return (historial||[]).find(h=>
+    h.proveedor===slug && h.fecha===hoyStr &&
+    (h.referencia||"")===(referencia||"") &&
+    itemsOrdenados(h.items||[])===firmaNueva
+  );
+}
+
 async function guardarPedidoProveedor(slug, enviarWhatsApp){
+  if(guardandoProveedor.has(slug)){
+    mostrarMsg("Ya se está guardando este pedido, espera un momento...", "error");
+    return;
+  }
   const msg = construirMensajePorProveedor(slug);
   if(!msg){ mostrarMsg("No hay productos de este proveedor en el pedido.", "error"); return; }
   const prov = PROVEEDORES[slug];
@@ -602,6 +627,17 @@ async function guardarPedidoProveedor(slug, enviarWhatsApp){
     return;
   }
 
+  const itemsProveedor = pedidoActual.filter(r=>r.proveedor===slug);
+  const referencia = document.getElementById("fReferencia").value.trim();
+  const duplicado = pedidoIdenticoYaGuardadoHoy(slug, itemsProveedor, referencia);
+  if(duplicado){
+    const seguir = confirm(`⚠️ Ya guardaste un pedido igual a este para ${prov ? prov.nombre : slug} hoy (folio #${duplicado.folio}).\n\n¿Seguro que quieres guardarlo otra vez y crear un duplicado?`);
+    if(!seguir) return;
+  }
+
+  guardandoProveedor.add(slug);
+  renderBotonesEnvio();
+
   let folio = null;
   try{
     folio = await generarFolio();
@@ -610,8 +646,8 @@ async function guardarPedidoProveedor(slug, enviarWhatsApp){
       fecha: hoyISO(),
       proveedor: slug,
       proveedorNombre: prov ? prov.nombre : slug,
-      items: pedidoActual.filter(r=>r.proveedor===slug),
-      referencia: document.getElementById("fReferencia").value.trim(),
+      items: itemsProveedor,
+      referencia,
       mensaje: msg,
       estado: enviarWhatsApp ? "enviado_whatsapp" : "guardado",
       creado: new Date().toISOString()
@@ -621,6 +657,9 @@ async function guardarPedidoProveedor(slug, enviarWhatsApp){
     console.error("Error guardando pedido:", err);
     mostrarMsg("⚠️ No se pudo guardar el pedido: " + err.message, "error");
     return;
+  }finally{
+    guardandoProveedor.delete(slug);
+    renderBotonesEnvio();
   }
 
   if(enviarWhatsApp){
