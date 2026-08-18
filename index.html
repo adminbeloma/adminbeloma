@@ -402,9 +402,24 @@ tbody td{padding:11px 14px;font-size:13.5px;vertical-align:middle;}
         <div style="background:var(--bg-card);border:1px solid var(--border);border-radius:8px;padding:12px 16px;"><div style="font-size:11px;color:var(--ink-soft);font-weight:600;text-transform:uppercase;">Total Variables</div><div style="font-size:20px;font-weight:700;color:var(--gold);" id="gastos-variables-total">$0</div></div>
         <div style="background:var(--bg-card);border:1px solid var(--border);border-radius:8px;padding:12px 16px;"><div style="font-size:11px;color:var(--ink-soft);font-weight:600;text-transform:uppercase;">Total Gastos</div><div style="font-size:20px;font-weight:700;color:var(--red);" id="gastos-total">$0</div></div>
       </div>
+      <div id="g-bulk-bar" style="display:none;align-items:center;gap:10px;margin-bottom:12px;padding:8px 12px;background:var(--bg-card);border:1px solid var(--accent);border-radius:8px;flex-wrap:wrap;">
+        <span id="g-bulk-contador" style="font-size:12px;font-weight:700;"></span>
+        <select id="g-bulk-metodo" style="padding:6px 10px;border:1px solid var(--border);border-radius:8px;font-size:12px;">
+          <option value="">— Elegir método —</option>
+          <option value="Efectivo">💵 Efectivo</option>
+          <option value="Transferencia">📲 Transferencia</option>
+          <option value="Depósito">🏦 Depósito</option>
+          <option value="Tarjeta">💳 Tarjeta</option>
+        </select>
+        <button class="btn btn-sm" style="background:var(--accent);color:#fff;" onclick="aplicarMetodoPagoGastosSeleccionados()">💾 Aplicar a seleccionados</button>
+        <button class="btn btn-ghost btn-sm" onclick="deseleccionarTodosGastos()">✖ Quitar selección</button>
+      </div>
       <div class="table-wrap">
         <table>
-          <thead><tr><th>Fecha</th><th>Concepto</th><th>Categoría</th><th>Tipo</th><th>Método pago</th><th>Proveedor</th><th>Factura</th><th>Monto</th><th>Acciones</th></tr></thead>
+          <thead><tr>
+            <th style="width:28px;"><input type="checkbox" id="g-check-all" onchange="toggleTodosGastos(this.checked)" style="width:15px;height:15px;cursor:pointer;"></th>
+            <th>Fecha</th><th>Concepto</th><th>Categoría</th><th>Tipo</th><th>Método pago</th><th>Proveedor</th><th>Factura</th><th>Monto</th><th>Acciones</th>
+          </tr></thead>
           <tbody id="tabla-gastos"></tbody>
         </table>
       </div>
@@ -4571,9 +4586,13 @@ window.renderGastos=function renderGastos(){
   const tbody=document.getElementById('tabla-gastos');
   const empty=document.getElementById('gastos-empty');
   if(!tbody)return;
-  if(lista.length===0){tbody.innerHTML='';empty.style.display='block';return;}
+  // Limpia de la selección cualquier gasto que ya no esté visible con este filtro
+  const idsVisibles=new Set(lista.map(g=>g.id));
+  [...gastosSeleccionados].forEach(id=>{ if(!idsVisibles.has(id)) gastosSeleccionados.delete(id); });
+  if(lista.length===0){tbody.innerHTML='';empty.style.display='block';actualizarBarraGastosSeleccionados();return;}
   empty.style.display='none';
   tbody.innerHTML=lista.map(g=>`<tr>
+    <td>${g.origen==='gastos'?`<input type="checkbox" class="g-check-item" data-id="${g.id}" ${gastosSeleccionados.has(g.id)?'checked':''} onchange="toggleGastoSeleccionado('${g.id}', this.checked)" style="width:15px;height:15px;cursor:pointer;">`:''}</td>
     <td>${fmtFecha(g.fecha)}</td>
     <td style="font-weight:500;">${g.concepto}${g.origen==='caja'?' <span class="badge badge-blue" style="font-size:9px;" title="Registrado en Caja">🔗 Caja</span>':''}${g.origen==='compra'?' <span class="badge badge-blue" style="font-size:9px;" title="Generado desde Compras">🔗 Compra</span>':''}${g.origenFactura?' <span class="badge badge-blue" style="font-size:9px;" title="Importado del Lector de Facturas">🔗 Factura</span>':''}${g.esMSI?` <span class="badge badge-gold" style="font-size:9px;" title="Meses sin intereses — total ${fmtMoney(g.montoTotalMSI)}">💳 MSI ${g.mesMSI}/${g.totalMesesMSI}</span>`:''}</td>
     <td>${g.categoria}</td>
@@ -4587,10 +4606,64 @@ window.renderGastos=function renderGastos(){
       <button class="btn btn-danger btn-sm" onclick="${g.origen==='caja'?`eliminarGastoLocal('${g.id}')`:`eliminarGasto('${g.id}')`}">🗑</button>
     </td>
   </tr>`).join('');
+  actualizarBarraGastosSeleccionados();
 
   // Generar reportes de gastos
   generarReporteGastos(lista);
 }
+
+// ── Selección múltiple en la tabla principal de Gastos (para corregir el
+// método de pago de varios de golpe, aunque ya tengan uno puesto) ──
+let gastosSeleccionados=new Set();
+
+window.toggleGastoSeleccionado=function(id, checked){
+  if(checked) gastosSeleccionados.add(id); else gastosSeleccionados.delete(id);
+  actualizarBarraGastosSeleccionados();
+};
+
+window.toggleTodosGastos=function(checked){
+  document.querySelectorAll('.g-check-item').forEach(chk=>{
+    chk.checked=checked;
+    if(checked) gastosSeleccionados.add(chk.dataset.id); else gastosSeleccionados.delete(chk.dataset.id);
+  });
+  actualizarBarraGastosSeleccionados();
+};
+
+window.deseleccionarTodosGastos=function(){
+  gastosSeleccionados.clear();
+  const chkAll=document.getElementById('g-check-all');
+  if(chkAll) chkAll.checked=false;
+  renderGastos();
+};
+
+function actualizarBarraGastosSeleccionados(){
+  const n=gastosSeleccionados.size;
+  const barra=document.getElementById('g-bulk-bar');
+  const contador=document.getElementById('g-bulk-contador');
+  if(contador) contador.textContent=`${n} gasto${n===1?'':'s'} seleccionado${n===1?'':'s'}`;
+  if(barra) barra.style.display=n>0?'flex':'none';
+  const chkAll=document.getElementById('g-check-all');
+  const totalVisibles=document.querySelectorAll('.g-check-item').length;
+  if(chkAll) chkAll.checked=totalVisibles>0 && n===totalVisibles;
+}
+
+// Cambia el método de pago de todos los gastos marcados de golpe — sirve
+// tanto para completar los que no tenían nada, como para CORREGIR los que
+// ya tenían un método puesto pero está mal.
+window.aplicarMetodoPagoGastosSeleccionados=async function(){
+  const n=gastosSeleccionados.size;
+  if(n===0){toast('⚠️ Marca primero los gastos que quieres corregir');return;}
+  const metodo=document.getElementById('g-bulk-metodo').value;
+  if(!metodo){toast('⚠️ Elige un método de pago primero');return;}
+  if(!confirm(`¿Poner "${metodo}" como método de pago en ${n} gasto(s) seleccionado(s)? Esto reemplaza el método que tuvieran antes.`)) return;
+  const batch=writeBatch(db);
+  gastosSeleccionados.forEach(id=>{
+    batch.set(doc(db,'pl_gastos',id),{metodoPago:metodo},{merge:true});
+  });
+  await batch.commit();
+  gastosSeleccionados.clear();
+  toast(`✅ Método de pago actualizado en ${n} gasto(s)`);
+};
 
 function generarReporteGastos(lista) {
   // Por categoría
