@@ -402,7 +402,7 @@ tbody td{padding:11px 14px;font-size:13.5px;vertical-align:middle;}
       </div>
       <div class="table-wrap">
         <table>
-          <thead><tr><th>Fecha</th><th>Concepto</th><th>Categoría</th><th>Tipo</th><th>Proveedor</th><th>Factura</th><th>Monto</th><th>Acciones</th></tr></thead>
+          <thead><tr><th>Fecha</th><th>Concepto</th><th>Categoría</th><th>Tipo</th><th>Método pago</th><th>Proveedor</th><th>Factura</th><th>Monto</th><th>Acciones</th></tr></thead>
           <tbody id="tabla-gastos"></tbody>
         </table>
       </div>
@@ -1657,6 +1657,14 @@ tbody td{padding:11px 14px;font-size:13.5px;vertical-align:middle;}
           <input type="text" id="g-cat-nueva" placeholder="Escribe la nueva categoría">
         </div>
         <div class="form-group"><label>Monto ($) *</label><input type="number" id="g-monto" placeholder="0.00" step="0.01" oninput="actualizarPreviewMSI()"></div>
+        <div class="form-group"><label>Método de pago *</label>
+          <select id="g-metodo-pago">
+            <option value="Efectivo">💵 Efectivo</option>
+            <option value="Transferencia">📲 Transferencia</option>
+            <option value="Depósito">🏦 Depósito</option>
+            <option value="Tarjeta">💳 Tarjeta</option>
+          </select>
+        </div>
         <div class="form-group full">
           <label style="display:flex;align-items:center;gap:8px;cursor:pointer;font-weight:600;">
             <input type="checkbox" id="g-es-msi" onchange="toggleMSI()" style="width:16px;height:16px;">
@@ -3936,6 +3944,8 @@ window.openGastoModal=function(id){
   document.getElementById('g-proveedor').value='';
   document.getElementById('g-factura').value='';
   document.getElementById('g-notas').value='';
+  document.getElementById('g-metodo-pago').value='Efectivo';
+  document.getElementById('g-metodo-pago').disabled=false;
   document.getElementById('g-es-msi').checked=false;
   document.getElementById('g-msi-meses').value='';
   document.getElementById('g-msi-meses-wrap').style.display='none';
@@ -3978,6 +3988,7 @@ window.openGastoModal=function(id){
       document.getElementById('g-proveedor').value=g.proveedor||'';
       document.getElementById('g-factura').value=g.factura||'';
       document.getElementById('g-notas').value=g.notas||'';
+      document.getElementById('g-metodo-pago').value=g.metodoPago||(g.esMSI?'Tarjeta':'Efectivo');
     }
   }
   openModal('modal-gasto');
@@ -3998,6 +4009,9 @@ window.toggleMSI=function(){
   const on=document.getElementById('g-es-msi').checked;
   document.getElementById('g-msi-meses-wrap').style.display=on?'block':'none';
   if(!on) document.getElementById('g-msi-preview').style.display='none';
+  // MSI solo existe con tarjeta de crédito, así que se fuerza ese método.
+  const metodoSel=document.getElementById('g-metodo-pago');
+  if(metodoSel){ metodoSel.disabled=on; if(on) metodoSel.value='Tarjeta'; }
   actualizarPreviewMSI();
 };
 
@@ -4034,6 +4048,7 @@ window.guardarGasto=async function(){
   const notas=document.getElementById('g-notas').value;
   const esMSI=document.getElementById('g-es-msi').checked;
   const mesesMSI=esMSI?(parseInt(document.getElementById('g-msi-meses').value)||0):0;
+  const metodoPago=esMSI?'Tarjeta':(document.getElementById('g-metodo-pago').value||'Efectivo');
 
   if(esMSI && mesesMSI>=2){
     const pagoMensual=+(monto/mesesMSI).toFixed(2);
@@ -4044,7 +4059,7 @@ window.guardarGasto=async function(){
       await setDoc(doc(db,'pl_gastos',idMes),{
         id:idMes, fecha:fechaMes, tipo, categoria,
         concepto:`${concepto} (MSI ${i+1}/${mesesMSI})`,
-        monto:pagoMensual, proveedor, factura, notas,
+        monto:pagoMensual, proveedor, factura, notas, metodoPago,
         esMSI:true, mesMSI:i+1, totalMesesMSI:mesesMSI, grupoMSI, montoTotalMSI:monto,
         creado:new Date().toISOString()
       });
@@ -4054,7 +4069,7 @@ window.guardarGasto=async function(){
     return;
   }
 
-  const data={id,fecha,tipo,concepto,categoria,monto,proveedor,factura,notas,creado:new Date().toISOString()};
+  const data={id,fecha,tipo,concepto,categoria,monto,proveedor,factura,notas,metodoPago,creado:new Date().toISOString()};
   await setDoc(doc(db,'pl_gastos',id),data);
   closeModal('modal-gasto');
   toast('✅ Gasto guardado');
@@ -4096,6 +4111,7 @@ window.limpiarFiltrosGastos=function(){
 };
 
 window.renderGastos=function renderGastos(){
+  const METODO_ICONO={Efectivo:'💵',Transferencia:'📲','Depósito':'🏦',Tarjeta:'💳'};
   const desde=(document.getElementById('filter-gasto-desde')||{value:''}).value;
   const hasta=(document.getElementById('filter-gasto-hasta')||{value:''}).value;
   const catFG=(document.getElementById('filter-gasto-categoria')||{value:''}).value;
@@ -4124,6 +4140,7 @@ window.renderGastos=function renderGastos(){
     <td style="font-weight:500;">${g.concepto}${g.origen==='caja'?' <span class="badge badge-blue" style="font-size:9px;" title="Registrado en Caja">🔗 Caja</span>':''}${g.origen==='compra'?' <span class="badge badge-blue" style="font-size:9px;" title="Generado desde Compras">🔗 Compra</span>':''}${g.esMSI?` <span class="badge badge-gold" style="font-size:9px;" title="Meses sin intereses — total ${fmtMoney(g.montoTotalMSI)}">💳 MSI ${g.mesMSI}/${g.totalMesesMSI}</span>`:''}</td>
     <td>${g.categoria}</td>
     <td><span class="badge ${g.tipo==='Fijo'?'badge-blue':'badge-gold'}">${g.tipo}</span></td>
+    <td style="font-size:12px;">${METODO_ICONO[g.metodoPago]||''} ${g.metodoPago||'—'}</td>
     <td style="font-size:12px;">${g.proveedor||'—'}</td>
     <td style="font-size:12px;">${g.factura||'—'}</td>
     <td style="font-weight:700;color:var(--red);">${fmtMoney(g.monto)}</td>
