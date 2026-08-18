@@ -336,7 +336,7 @@ tbody td{padding:11px 14px;font-size:13.5px;vertical-align:middle;}
         <button class="btn btn-ghost btn-sm" onclick="limpiarFiltrosVentas()">✕ Limpiar</button>
       </div>
       <div style="display:flex;gap:14px;margin-bottom:16px;flex-wrap:wrap;">
-        <div style="background:var(--bg-card);border:1px solid var(--border);border-radius:8px;padding:12px 16px;"><div id="ventas-total-periodo-label" style="font-size:11px;color:var(--ink-soft);font-weight:600;text-transform:uppercase;">Total período</div><div style="font-size:20px;font-weight:700;color:var(--green);" id="ventas-total-periodo">$0</div></div>
+        <div style="background:var(--bg-card);border:1px solid var(--border);border-radius:8px;padding:12px 16px;"><div id="ventas-total-periodo-label" style="font-size:11px;color:var(--ink-soft);font-weight:600;text-transform:uppercase;">Total período <span id="ventas-stats-cargando" style="display:none;color:var(--accent);" title="Verificando el total real contra todos los registros, no solo los que ya se cargaron en pantalla">⏳</span></div><div style="font-size:20px;font-weight:700;color:var(--green);" id="ventas-total-periodo">$0</div></div>
         <div style="background:var(--bg-card);border:1px solid var(--border);border-radius:8px;padding:12px 16px;"><div id="ventas-unidades-periodo-label" style="font-size:11px;color:var(--ink-soft);font-weight:600;text-transform:uppercase;">Unidades</div><div style="font-size:20px;font-weight:700;" id="ventas-unidades-periodo">0</div></div>
         <div style="background:var(--bg-card);border:1px solid var(--border);border-radius:8px;padding:12px 16px;"><div id="ventas-ticket-periodo-label" style="font-size:11px;color:var(--ink-soft);font-weight:600;text-transform:uppercase;">Ticket promedio</div><div style="font-size:20px;font-weight:700;" id="ventas-ticket-periodo">$0</div></div>
       </div>
@@ -2527,12 +2527,28 @@ tbody td{padding:11px 14px;font-size:13.5px;vertical-align:middle;}
       <p style="font-size:12px;color:var(--ink-soft);margin:-4px 0 12px;">
         Gastos que les falta algún dato clave — casi siempre el <strong>método de pago</strong>
         (típico de las facturas importadas desde el Lector de Facturas, donde se deja en blanco a propósito
-        para que tú lo confirmes). Elige el método y dale "Guardar" en cada renglón, sin salir de aquí.
+        para que tú lo confirmes). Puedes arreglarlos uno por uno, o marcar varios con los checkboxes y
+        aplicarles el mismo método de pago de golpe con la barra que aparece arriba de la tabla.
       </p>
       <div id="gastos-incompletos-contador" style="font-weight:700;margin-bottom:10px;"></div>
+      <div id="gi-bulk-bar" style="display:none;align-items:center;gap:10px;margin-bottom:10px;padding:8px 12px;background:var(--bg-card);border:1px solid var(--accent);border-radius:8px;flex-wrap:wrap;">
+        <span id="gi-bulk-contador" style="font-size:12px;font-weight:700;"></span>
+        <select id="gi-bulk-metodo" style="padding:6px 10px;border:1px solid var(--border);border-radius:8px;font-size:12px;">
+          <option value="">— Elegir método —</option>
+          <option value="Efectivo">💵 Efectivo</option>
+          <option value="Transferencia">📲 Transferencia</option>
+          <option value="Depósito">🏦 Depósito</option>
+          <option value="Tarjeta">💳 Tarjeta</option>
+        </select>
+        <button class="btn btn-sm" style="background:var(--accent);color:#fff;" onclick="aplicarMetodoPagoMasivo()">💾 Aplicar a seleccionados</button>
+        <button class="btn btn-ghost btn-sm" onclick="deseleccionarTodosGastosIncompletos()">✖ Quitar selección</button>
+      </div>
       <div class="table-wrap" style="max-height:55vh;overflow:auto;">
         <table>
-          <thead><tr><th>Fecha</th><th>Concepto</th><th>Proveedor</th><th>Monto</th><th>Falta</th><th>Método de pago</th><th>Acciones</th></tr></thead>
+          <thead><tr>
+            <th style="width:28px;"><input type="checkbox" id="gi-check-all" onchange="toggleTodosGastosIncompletos(this.checked)" style="width:15px;height:15px;cursor:pointer;"></th>
+            <th>Fecha</th><th>Concepto</th><th>Proveedor</th><th>Monto</th><th>Falta</th><th>Método de pago</th><th>Acciones</th>
+          </tr></thead>
           <tbody id="tabla-gastos-incompletos"></tbody>
         </table>
       </div>
@@ -2739,6 +2755,7 @@ onSnapshot(query(collection(db,'pl_ventas'), orderBy('creado','desc'), limit(5))
     if(idx>=0) ventas[idx]=v;
     else if(ventas.length<50) ventas.unshift(v);
   });
+  _statsVentasKey=null; // los totales exactos de Ventas ya no están al día, hay que recalcularlos
   renderVentas();
   renderDashboard();
 });
@@ -3941,6 +3958,60 @@ window.exportarTintaPendienteExcel=function(){
   XLSX.writeFile(wb,`tinta_pendiente_${hoy()}.xlsx`);
 };
 
+// ── Totales EXACTOS de Ventas (Total período / Unidades / Ticket) ──
+// La tabla de Ventas se carga por páginas (botón "Cargar más"), así que el
+// array `ventas` en memoria puede no tener TODOS los registros del filtro
+// activo todavía. Para que las cajas de arriba siempre muestren el total
+// real (no solo el de lo ya cargado en pantalla), se consulta aparte,
+// directo a Firestore, nada más lo necesario para el rango de fechas actual
+// (más rápido que traer toda la colección) y se cruza con `abonos`, que
+// siempre está completo (no es paginado).
+let _statsVentasKey=null;
+let _statsVentasToken=0;
+
+async function actualizarStatsVentasCompletos(canal, desde, hasta){
+  const key=`${canal}|${desde}|${hasta}`;
+  if(_statsVentasKey===key) return;
+  const miToken=++_statsVentasToken;
+  const elCargando=document.getElementById('ventas-stats-cargando');
+  if(elCargando) elCargando.style.display='inline';
+  try{
+    let q;
+    if(desde && hasta) q=query(collection(db,'pl_ventas'), where('fecha','>=',desde), where('fecha','<=',hasta));
+    else if(desde) q=query(collection(db,'pl_ventas'), where('fecha','>=',desde));
+    else if(hasta) q=query(collection(db,'pl_ventas'), where('fecha','<=',hasta));
+    else q=query(collection(db,'pl_ventas'));
+    const snap=await getDocs(q);
+    // Si mientras esperábamos la respuesta el filtro cambió (se disparó otra
+    // consulta más nueva), esta ya no aplica — se descarta sin pisar nada.
+    if(miToken!==_statsVentasToken) return;
+
+    let docsRango=snap.docs.map(d=>d.data());
+    if(canal) docsRango=docsRango.filter(v=>v.canal===canal);
+
+    const enRango=f=>(!desde||f>=desde)&&(!hasta||f<=hasta);
+    let totalDinero=0;
+    docsRango.forEach(v=>{
+      const abonosVenta=(abonos||[]).filter(a=>a.ventaId===v.id);
+      const sumaAbonos=abonosVenta.reduce((s,a)=>s+(+a.monto||0),0);
+      totalDinero+=Math.max(0,+((+v.anticipo||0)-sumaAbonos).toFixed(2));
+    });
+    (abonos||[]).forEach(a=>{ if(enRango(a.fecha)) totalDinero+=(+a.monto||0); });
+
+    const unidades=docsRango.reduce((s,v)=>s+(+v.cantidad||0),0);
+    const cantidadVentas=docsRango.length;
+
+    _statsVentasKey=key;
+    document.getElementById('ventas-total-periodo').textContent=fmtMoney(+totalDinero.toFixed(2));
+    document.getElementById('ventas-unidades-periodo').textContent=unidades;
+    document.getElementById('ventas-ticket-periodo').textContent=cantidadVentas>0?fmtMoney(totalDinero/cantidadVentas):'$0';
+  }catch(err){
+    console.error('Error calculando totales completos de ventas:', err);
+  }finally{
+    if(miToken===_statsVentasToken && elCargando) elCargando.style.display='none';
+  }
+}
+
 window.renderVentas=function renderVentas(){
   const search=(document.getElementById('search-ventas')||{value:''}).value.toLowerCase();
   const canal=(document.getElementById('filter-canal')||{value:''}).value;
@@ -3976,6 +4047,16 @@ window.renderVentas=function renderVentas(){
   document.getElementById('ventas-total-periodo').textContent=fmtMoney(totalPer);
   document.getElementById('ventas-unidades-periodo').textContent=unidadesPer;
   document.getElementById('ventas-ticket-periodo').textContent=listaParaTotales.length>0?fmtMoney(totalPer/listaParaTotales.length):'$0';
+  // Lo de arriba es un cálculo INSTANTÁNEO con lo que ya está cargado en
+  // memoria (puede no ser el total real si faltan páginas por cargar). Acto
+  // seguido se dispara la consulta exacta contra Firestore, que sobreescribe
+  // estos números en cuanto responde — así el usuario ve algo de inmediato
+  // y luego se corrige solo si hacía falta.
+  actualizarStatsVentasCompletos(
+    isAdmin ? canal : canal,
+    isAdmin ? (desde||'') : hoy(),
+    isAdmin ? (hasta||'') : hoy()
+  );
   const labelTotal=document.getElementById('ventas-total-periodo-label');
   if(labelTotal) labelTotal.textContent = isAdmin ? 'Total período' : 'Total de hoy';
   const labelUnidades=document.getElementById('ventas-unidades-periodo-label');
@@ -4347,12 +4428,15 @@ function camposFaltantesGasto(g){
   return faltan;
 }
 
+let gastosIncompletosSeleccionados=new Set();
+
 window.abrirGastosIncompletos=function(){
   const lista=gastosCombinados()
     .filter(g=>g.origen==='gastos')
     .map(g=>({...g, _faltan:camposFaltantesGasto(g)}))
     .filter(g=>g._faltan.length>0)
     .sort((a,b)=>b.fecha>a.fecha?1:-1);
+  gastosIncompletosSeleccionados.clear();
   const tbody=document.getElementById('tabla-gastos-incompletos');
   const empty=document.getElementById('gastos-incompletos-empty');
   const contador=document.getElementById('gastos-incompletos-contador');
@@ -4362,6 +4446,7 @@ window.abrirGastosIncompletos=function(){
   } else {
     empty.style.display='none';
     tbody.innerHTML=lista.map(g=>`<tr>
+      <td><input type="checkbox" class="gi-check-item" data-id="${g.id}" onchange="toggleGastoIncompletoSeleccionado('${g.id}', this.checked)" style="width:15px;height:15px;cursor:pointer;"></td>
       <td>${fmtFecha(g.fecha)}</td>
       <td style="font-weight:500;font-size:13px;max-width:220px;">${g.concepto||'—'}</td>
       <td style="font-size:12px;">${g.proveedor||'—'}</td>
@@ -4382,7 +4467,57 @@ window.abrirGastosIncompletos=function(){
       </td>
     </tr>`).join('');
   }
+  actualizarBarraGastosIncompletos();
   openModal('modal-gastos-incompletos');
+};
+
+window.toggleGastoIncompletoSeleccionado=function(id, checked){
+  if(checked) gastosIncompletosSeleccionados.add(id); else gastosIncompletosSeleccionados.delete(id);
+  actualizarBarraGastosIncompletos();
+};
+
+window.toggleTodosGastosIncompletos=function(checked){
+  document.querySelectorAll('.gi-check-item').forEach(chk=>{
+    chk.checked=checked;
+    if(checked) gastosIncompletosSeleccionados.add(chk.dataset.id); else gastosIncompletosSeleccionados.delete(chk.dataset.id);
+  });
+  actualizarBarraGastosIncompletos();
+};
+
+window.deseleccionarTodosGastosIncompletos=function(){
+  gastosIncompletosSeleccionados.clear();
+  document.querySelectorAll('.gi-check-item').forEach(chk=>chk.checked=false);
+  const chkAll=document.getElementById('gi-check-all');
+  if(chkAll) chkAll.checked=false;
+  actualizarBarraGastosIncompletos();
+};
+
+function actualizarBarraGastosIncompletos(){
+  const n=gastosIncompletosSeleccionados.size;
+  const barra=document.getElementById('gi-bulk-bar');
+  const contador=document.getElementById('gi-bulk-contador');
+  if(contador) contador.textContent=`${n} gasto${n===1?'':'s'} seleccionado${n===1?'':'s'}`;
+  if(barra) barra.style.display=n>0?'flex':'none';
+  const chkAll=document.getElementById('gi-check-all');
+  const totalVisibles=document.querySelectorAll('.gi-check-item').length;
+  if(chkAll) chkAll.checked=totalVisibles>0 && n===totalVisibles;
+}
+
+// Aplica el mismo método de pago a todos los gastos marcados con checkbox
+// de un solo golpe, en vez de tener que elegirlo renglón por renglón.
+window.aplicarMetodoPagoMasivo=async function(){
+  const n=gastosIncompletosSeleccionados.size;
+  if(n===0){toast('⚠️ Marca primero los gastos a los que les quieres poner el método de pago');return;}
+  const metodo=document.getElementById('gi-bulk-metodo').value;
+  if(!metodo){toast('⚠️ Elige un método de pago primero');return;}
+  if(!confirm(`¿Poner "${metodo}" como método de pago en ${n} gasto(s) seleccionado(s)?`)) return;
+  const batch=writeBatch(db);
+  gastosIncompletosSeleccionados.forEach(id=>{
+    batch.set(doc(db,'pl_gastos',id),{metodoPago:metodo},{merge:true});
+  });
+  await batch.commit();
+  toast(`✅ Método de pago aplicado a ${n} gasto(s)`);
+  abrirGastosIncompletos(); // refresca: los que quedaron completos ya no salen
 };
 
 window.guardarMetodoPagoIncompleto=async function(id){
@@ -6063,7 +6198,7 @@ let pedidosFechaFiltro = 'todos'; // 'todos' | 'hoy' | 'ayer' | 'semana' | 'mes'
 onSnapshot(collection(db,'pl_pedidos'),s=>{pedidos=s.docs.map(d=>d.data());renderPedidos();renderCaja();});
 onSnapshot(collection(db,'pl_gastos_locales'),s=>{gastosLocales=s.docs.map(d=>d.data());renderCaja();renderDashboard();renderGastos();});
 // Abonos: pagos de saldo cobrados en una fecha distinta a la de la venta.
-onSnapshot(collection(db,'pl_abonos'),s=>{abonos=s.docs.map(d=>d.data());renderCaja();renderPedidos();});
+onSnapshot(collection(db,'pl_abonos'),s=>{abonos=s.docs.map(d=>d.data());_statsVentasKey=null;renderCaja();renderPedidos();renderVentas();});
 
 window.openPedidoModal=function(id){
   if(!id){
