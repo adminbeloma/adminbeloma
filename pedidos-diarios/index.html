@@ -171,6 +171,7 @@
           <tr>
             <th class="col-chk"><input type="checkbox" id="chkTodosItems" onchange="toggleTodosCaptura(this,'it')" title="Seleccionar todos"></th>
             <th style="min-width:120px;">Folio</th>
+            <th style="min-width:120px;">Canal</th>
             <th style="min-width:130px;">Cliente</th>
             <th style="min-width:110px;">Ciudad</th>
             <th style="min-width:100px;">Género</th>
@@ -567,6 +568,14 @@ function agregarFilaItem(valores){
   tr.innerHTML = `
     <td class="col-chk"><input type="checkbox" class="it-chk" onchange="actualizarChkMaster('it')"></td>
     <td><input type="text" class="it-folio" placeholder="Ej. ML-123456"></td>
+    <td><select class="it-canal" onchange="onCanalFilaChange('${id}')">
+      <option value="Local">Local</option>
+      <option value="MercadoLibre">MercadoLibre</option>
+      <option value="Shopify">Shopify</option>
+      <option value="TiendaNube">Tienda Nube</option>
+      <option value="Foraneo">Foráneo</option>
+      <option value="Otro">Otro</option>
+    </select></td>
     <td><input type="text" class="it-cliente" placeholder="Nombre / opcional"></td>
     <td><input type="text" class="it-ciudad" placeholder="Ciudad"></td>
     <td><select class="it-genero" onchange="onGeneroFilaChange('${id}')">${opcionesGenero(generoInicial)}</select></td>
@@ -585,6 +594,12 @@ function agregarFilaItem(valores){
     <td><button class="btn btn-rojo btn-chico" onclick="document.getElementById('${id}').remove(); actualizarChkMaster('it');">✕</button></td>
   `;
   document.getElementById("itemsBody").appendChild(tr);
+  // El renglón nace con el Canal que esté elegido arriba en este momento
+  // (por comodidad, para no tener que elegirlo en cada renglón nuevo), pero
+  // a partir de aquí es 100% independiente: cambiarlo aquí NO afecta a los
+  // demás renglones ya agregados, ni cambiarlo arriba afecta a este.
+  tr.querySelector(".it-canal").value = (valores && valores.canal) || document.getElementById("fCanal").value || "Local";
+  onCanalFilaChange(id);
   if(valores){
     tr.querySelector(".it-folio").value = valores.folio || "";
     tr.querySelector(".it-cliente").value = valores.cliente || "";
@@ -593,11 +608,20 @@ function agregarFilaItem(valores){
     tr.querySelector(".it-desc").value = valores.descripcion || "";
     tr.querySelector(".it-cant").value = valores.cantidad || 1;
     tr.querySelector(".it-paquete").value = valores.piezasPaquete || "";
-  } else if(document.getElementById("fTipoCliente").value === "Local"){
-    tr.querySelector(".it-ciudad").value = "Mazatlán, Sinaloa";
   }
 }
 function onGeneroFilaChange(id){ refrescarTallaYColorFila(document.getElementById(id), "it-"); }
+function onCanalFilaChange(id){
+  const tr = document.getElementById(id);
+  if(!tr) return;
+  const ciudadInput = tr.querySelector(".it-ciudad");
+  const canal = tr.querySelector(".it-canal").value;
+  if(canal === "Local" && !ciudadInput.value.trim()){
+    ciudadInput.value = "Mazatlán, Sinaloa";
+  } else if(canal !== "Local" && ciudadInput.value.trim() === "Mazatlán, Sinaloa"){
+    ciudadInput.value = "";
+  }
+}
 function onColorFilaChange(id){ const tr = document.getElementById(id); const esOtro = tr.querySelector(".it-color").value === "Otro"; const otroInput = tr.querySelector(".it-color-otro"); otroInput.style.display = esOtro ? "block" : "none"; if(esOtro) otroInput.focus(); }
 function onMarcaFilaChange(id){ const tr = document.getElementById(id); const esOtro = tr.querySelector(".it-marca").value === "Otro"; const otroInput = tr.querySelector(".it-marca-otro"); otroInput.style.display = esOtro ? "block" : "none"; if(esOtro) otroInput.focus(); }
 
@@ -611,6 +635,7 @@ function leerItems(){
     const marca = marcaSel === "Otro" ? tr.querySelector(".it-marca-otro").value.trim() : marcaSel;
     items.push({
       folio: tr.querySelector(".it-folio").value.trim(),
+      canal: tr.querySelector(".it-canal").value,
       cliente: tr.querySelector(".it-cliente").value.trim(),
       ciudad: tr.querySelector(".it-ciudad").value.trim(),
       genero: tr.querySelector(".it-genero").value,
@@ -696,8 +721,6 @@ function cancelarPedidoExistente(){
 }
 
 async function guardarPedido(){
-  const canal = document.getElementById("fCanal").value;
-  const tipoCliente = document.getElementById("fTipoCliente").value;
   const fecha = document.getElementById("fFecha").value || hoyISO();
   const items = leerItems().filter(it => it.descripcion || it.talla || it.color || it.folio);
   if(items.length === 0){ mostrarMsg("Agrega al menos una prenda.", "error"); return; }
@@ -745,17 +768,23 @@ async function guardarPedido(){
     return;
   }
 
-  // ---- Modo normal: cada prenda es un pedido independiente ----
+  // ---- Modo normal: cada prenda es un pedido independiente, y cada una
+  // usa el Canal que tiene EN SU PROPIO renglón (no uno solo para todos) ----
   try{
     let guardados = 0;
     let ordenBase = Date.now();
     // Folio automático: solo aplica a Local y Foráneo (MercadoLibre/Shopify/etc.
     // ya traen su propio folio real, que se escribe a mano en el campo Folio).
-    let folioAuto = null;
-    if(canal === "Local" || canal === "Foraneo"){
-      folioAuto = await obtenerConsecutivoFolio(canal, fecha);
-    }
+    // Se calcula por separado para cada canal que aparezca en la tabla, ya
+    // que ahora un mismo guardado puede mezclar renglones Local y ML/Foráneo.
+    const folioAutoPorCanal = {};
     for(const it of items){
+      const canalItem = it.canal || "Local";
+      const tipoClienteItem = canalItem === "Local" ? "Local" : "Foraneo";
+      if((canalItem === "Local" || canalItem === "Foraneo") && !folioAutoPorCanal[canalItem]){
+        folioAutoPorCanal[canalItem] = await obtenerConsecutivoFolio(canalItem, fecha);
+      }
+      const folioAuto = folioAutoPorCanal[canalItem];
       let folioFinal = it.folio;
       if(!folioFinal && folioAuto){
         const [yy, mm, dd] = fecha.split("-");
@@ -764,8 +793,8 @@ async function guardarPedido(){
       }
       await db.collection(COLECCION).add({
         folio: folioFinal || "(sin folio)",
-        canal, tipoCliente,
-        cliente: it.cliente || canal,
+        canal: canalItem, tipoCliente: tipoClienteItem,
+        cliente: it.cliente || canalItem,
         ciudad: it.ciudad || "",
         fecha,
         items: [{genero:it.genero, talla:it.talla, color:it.color, marca:it.marca, descripcion:it.descripcion, cantidad:it.cantidad}],
@@ -1076,6 +1105,15 @@ function pintarTablaPedidos(lista, contenedor){
 function barraSeleccionHTML(contexto){
   return `<div class="barra-sel" id="barraSel-${contexto}" style="display:none;">
     <span class="cuenta" id="cuentaSel-${contexto}"></span>
+    <select id="canalMasivo-${contexto}" style="width:auto;display:inline-block;">
+      <option value="Local">Local</option>
+      <option value="MercadoLibre">MercadoLibre</option>
+      <option value="Shopify">Shopify</option>
+      <option value="TiendaNube">Tienda Nube</option>
+      <option value="Foraneo">Foráneo</option>
+      <option value="Otro">Otro</option>
+    </select>
+    <button class="btn btn-secundario btn-chico" onclick="cambiarCanalSeleccionados('${contexto}')">🔄 Cambiar canal</button>
     <button class="btn btn-rojo btn-chico" onclick="borrarSeleccionados('${contexto}')">🗑 Borrar seleccionados</button>
     <button class="btn btn-secundario btn-chico" onclick="limpiarSeleccion('${contexto}')">Quitar selección</button>
   </div>`;
@@ -1128,6 +1166,31 @@ async function borrarSeleccionados(contexto){
   }catch(err){
     console.error(err);
     mostrarMsg("Error al eliminar: " + err.message, "error");
+  }
+}
+
+// Corrige en lote pedidos que quedaron con el canal equivocado (ej. varios
+// pedidos de Mercado Libre que se capturaron como "Foráneo" y por eso salían
+// con el nombre del cliente en el Excel en vez de "MERCADO LIBRE").
+async function cambiarCanalSeleccionados(contexto){
+  const ids = Array.from(document.querySelectorAll(".chk-pedido-"+contexto+":checked")).map(c=>c.value);
+  if(ids.length === 0){ mostrarMsg("Marca primero los renglones a los que les quieres cambiar el canal.", "error"); return; }
+  const nuevoCanal = document.getElementById("canalMasivo-"+contexto).value;
+  if(!confirm(`¿Cambiar el canal de ${ids.length} renglón(es) a "${nuevoCanal}"?`)) return;
+  try{
+    for(let i=0; i<ids.length; i+=450){
+      const batch = db.batch();
+      ids.slice(i, i+450).forEach(id=> batch.update(db.collection(COLECCION).doc(id), {
+        canal: nuevoCanal,
+        tipoCliente: nuevoCanal === "Local" ? "Local" : "Foraneo"
+      }));
+      await batch.commit();
+    }
+    mostrarMsg(`🔄 Canal actualizado en ${ids.length} renglón(es)`, "ok");
+    if(contexto === "hoy") cargarPedidosHoy(); else buscarHistorico();
+  }catch(err){
+    console.error(err);
+    mostrarMsg("Error al cambiar canal: " + err.message, "error");
   }
 }
 
