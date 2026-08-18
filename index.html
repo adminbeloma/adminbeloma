@@ -3983,10 +3983,20 @@ window.exportarTintaPendienteExcel=function(){
 // siempre está completo (no es paginado).
 let _statsVentasKey=null;
 let _statsVentasToken=0;
+let _statsVentasCache=null; // {totalDinero, unidades, cantidadVentas} del último cálculo EXACTO
+
+function pintarStatsVentas(datos){
+  document.getElementById('ventas-total-periodo').textContent=fmtMoney(+datos.totalDinero.toFixed(2));
+  document.getElementById('ventas-unidades-periodo').textContent=datos.unidades;
+  document.getElementById('ventas-ticket-periodo').textContent=datos.cantidadVentas>0?fmtMoney(datos.totalDinero/datos.cantidadVentas):'$0';
+}
 
 async function actualizarStatsVentasCompletos(canal, desde, hasta){
   const key=`${canal}|${desde}|${hasta}`;
-  if(_statsVentasKey===key) return;
+  // Ya teníamos el número EXACTO para este mismo filtro — nada más hay que
+  // volver a pintarlo (por si el cálculo instantáneo de renderVentas lo
+  // pisó al cargar más filas de la tabla), sin ir otra vez a Firestore.
+  if(_statsVentasKey===key && _statsVentasCache){ pintarStatsVentas(_statsVentasCache); return; }
   const miToken=++_statsVentasToken;
   const elCargando=document.getElementById('ventas-stats-cargando');
   if(elCargando){ elCargando.textContent='⏳'; elCargando.style.display='inline'; }
@@ -4017,9 +4027,8 @@ async function actualizarStatsVentasCompletos(canal, desde, hasta){
     const cantidadVentas=docsRango.length;
 
     _statsVentasKey=key;
-    document.getElementById('ventas-total-periodo').textContent=fmtMoney(+totalDinero.toFixed(2));
-    document.getElementById('ventas-unidades-periodo').textContent=unidades;
-    document.getElementById('ventas-ticket-periodo').textContent=cantidadVentas>0?fmtMoney(totalDinero/cantidadVentas):'$0';
+    _statsVentasCache={totalDinero, unidades, cantidadVentas};
+    pintarStatsVentas(_statsVentasCache);
   }catch(err){
     console.error('Error calculando totales completos de ventas:', err);
     if(miToken===_statsVentasToken){
@@ -4055,27 +4064,33 @@ window.renderVentas=function renderVentas(){
   // El operador puede CONSULTAR cualquier rango en la tabla, pero el monto
   // acumulado (Total período/Unidades/Ticket) siempre debe reflejar SOLO
   // el día de hoy, nunca el acumulado del rango que esté viendo.
-  const listaParaTotales = isAdmin ? lista : lista.filter(v=>v.fecha===hoy());
-  // El monto ($) se calcula por DINERO COBRADO en el rango visible (no por lo
-  // facturado): si un pedido se paga en partes en días distintos, cada parte
-  // cuenta como ingreso del día en que realmente entró ese dinero.
-  const totalPer = isAdmin
-    ? montoCobradoEnRango(desde||null, hasta||null)
-    : montoCobradoEnRango(hoy(), hoy());
-  const unidadesPer=listaParaTotales.reduce((s,v)=>s+(+v.cantidad||0),0);
-  document.getElementById('ventas-total-periodo').textContent=fmtMoney(totalPer);
-  document.getElementById('ventas-unidades-periodo').textContent=unidadesPer;
-  document.getElementById('ventas-ticket-periodo').textContent=listaParaTotales.length>0?fmtMoney(totalPer/listaParaTotales.length):'$0';
-  // Lo de arriba es un cálculo INSTANTÁNEO con lo que ya está cargado en
-  // memoria (puede no ser el total real si faltan páginas por cargar). Acto
-  // seguido se dispara la consulta exacta contra Firestore, que sobreescribe
-  // estos números en cuanto responde — así el usuario ve algo de inmediato
-  // y luego se corrige solo si hacía falta.
-  actualizarStatsVentasCompletos(
-    isAdmin ? canal : canal,
-    isAdmin ? (desde||'') : hoy(),
-    isAdmin ? (hasta||'') : hoy()
-  );
+  const canalStats = canal;
+  const desdeStats = isAdmin ? (desde||'') : hoy();
+  const hastaStats = isAdmin ? (hasta||'') : hoy();
+  const keyStats = `${canalStats}|${desdeStats}|${hastaStats}`;
+  if(_statsVentasKey===keyStats && _statsVentasCache){
+    // Ya tenemos el número EXACTO de este mismo filtro guardado — usarlo tal
+    // cual, SIN recalcularlo con lo que haya cargado localmente (si no, cada
+    // "Cargar más ventas" lo pisaría con un número parcial otra vez).
+    pintarStatsVentas(_statsVentasCache);
+  } else {
+    // Todavía no tenemos el número exacto de este filtro: se muestra un
+    // cálculo INSTANTÁNEO con lo que ya está cargado en memoria (puede no
+    // ser el total real si faltan páginas por cargar), mientras se resuelve
+    // la consulta exacta de abajo, que lo corrige en cuanto responde.
+    const listaParaTotales = isAdmin ? lista : lista.filter(v=>v.fecha===hoy());
+    // El monto ($) se calcula por DINERO COBRADO en el rango visible (no por
+    // lo facturado): si un pedido se paga en partes en días distintos, cada
+    // parte cuenta como ingreso del día en que realmente entró ese dinero.
+    const totalPer = isAdmin
+      ? montoCobradoEnRango(desde||null, hasta||null)
+      : montoCobradoEnRango(hoy(), hoy());
+    const unidadesPer=listaParaTotales.reduce((s,v)=>s+(+v.cantidad||0),0);
+    document.getElementById('ventas-total-periodo').textContent=fmtMoney(totalPer);
+    document.getElementById('ventas-unidades-periodo').textContent=unidadesPer;
+    document.getElementById('ventas-ticket-periodo').textContent=listaParaTotales.length>0?fmtMoney(totalPer/listaParaTotales.length):'$0';
+  }
+  actualizarStatsVentasCompletos(canalStats, desdeStats, hastaStats);
   const labelTotal=document.getElementById('ventas-total-periodo-label');
   if(labelTotal) labelTotal.textContent = isAdmin ? 'Total período' : 'Total de hoy';
   const labelUnidades=document.getElementById('ventas-unidades-periodo-label');
