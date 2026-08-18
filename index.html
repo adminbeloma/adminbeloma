@@ -3974,7 +3974,7 @@ async function actualizarStatsVentasCompletos(canal, desde, hasta){
   if(_statsVentasKey===key) return;
   const miToken=++_statsVentasToken;
   const elCargando=document.getElementById('ventas-stats-cargando');
-  if(elCargando) elCargando.style.display='inline';
+  if(elCargando){ elCargando.textContent='⏳'; elCargando.style.display='inline'; }
   try{
     let q;
     if(desde && hasta) q=query(collection(db,'pl_ventas'), where('fecha','>=',desde), where('fecha','<=',hasta));
@@ -4007,8 +4007,12 @@ async function actualizarStatsVentasCompletos(canal, desde, hasta){
     document.getElementById('ventas-ticket-periodo').textContent=cantidadVentas>0?fmtMoney(totalDinero/cantidadVentas):'$0';
   }catch(err){
     console.error('Error calculando totales completos de ventas:', err);
+    if(miToken===_statsVentasToken){
+      toast('⚠️ No se pudo calcular el total exacto: '+err.message);
+      if(elCargando) elCargando.textContent='⚠️';
+    }
   }finally{
-    if(miToken===_statsVentasToken && elCargando) elCargando.style.display='none';
+    if(miToken===_statsVentasToken && elCargando && elCargando.textContent!=='⚠️') elCargando.style.display='none';
   }
 }
 
