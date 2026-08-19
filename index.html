@@ -2518,6 +2518,22 @@ tbody td{padding:11px 14px;font-size:13.5px;vertical-align:middle;}
         Solo se listan ventas que sí llevan proceso <strong>DTG</strong> (el único que gasta esta tinta) y a las que
         todavía no se les capturó la cantidad de cc — no aparecen aquí las de DTF, Vinil, Bordado, Serigrafía, etc.
       </p>
+      <div style="display:flex;align-items:center;gap:8px;margin-bottom:12px;flex-wrap:wrap;">
+        <select id="tp-filter-canal" style="padding:8px 10px;border:1px solid var(--border);border-radius:8px;font-size:13px;">
+          <option value="">Todos los canales</option>
+          <option value="Local">Local</option>
+          <option value="Foráneo">Foráneo</option>
+          <option value="Mercado Libre">Mercado Libre</option>
+          <option value="Amazon">Amazon</option>
+          <option value="Shopify">Shopify</option>
+          <option value="Otro">Otro</option>
+        </select>
+        <input type="date" id="tp-filter-desde" style="padding:7px 10px;border:1px solid var(--border);border-radius:8px;font-size:13px;">
+        <span style="color:var(--ink-soft);font-size:12px;">a</span>
+        <input type="date" id="tp-filter-hasta" style="padding:7px 10px;border:1px solid var(--border);border-radius:8px;font-size:13px;">
+        <button class="btn btn-primary btn-sm" onclick="filtrarTintaPendiente()">🔍 Buscar</button>
+        <button class="btn btn-ghost btn-sm" onclick="limpiarFiltroTintaPendiente()">✕ Limpiar</button>
+      </div>
       <div id="tinta-pendiente-contador" style="font-weight:700;margin-bottom:10px;"></div>
       <div class="table-wrap" style="max-height:55vh;overflow:auto;">
         <table>
@@ -4079,12 +4095,14 @@ function ventaLeFaltaTinta(v){
   return cc<=0;
 }
 
+let _tintaPendienteTodas=[]; // cache sin filtrar, para no re-consultar Firestore cada vez que cambias el filtro
+
 window.abrirTintaPendiente=async function(){
   mostrarProgreso('⏳ Buscando ventas con tinta pendiente...', 'Revisando toda la colección, no solo lo cargado en pantalla');
-  let todas;
   try{
     const snap=await getDocs(collection(db,'pl_ventas'));
-    todas=snap.docs.map(d=>({...d.data(), id:d.id}));
+    const todas=snap.docs.map(d=>({...d.data(), id:d.id}));
+    _tintaPendienteTodas=todas.filter(ventaLeFaltaTinta);
   }catch(err){
     console.error(err);
     ocultarProgreso();
@@ -4092,11 +4110,44 @@ window.abrirTintaPendiente=async function(){
     return;
   }
   ocultarProgreso();
-  const lista=todas.filter(ventaLeFaltaTinta).sort((a,b)=>b.fecha>a.fecha?1:-1);
+  // Se precarga con el mismo canal/rango de fechas que tengas puesto en la
+  // pantalla de Ventas, para comparar peras con peras — pero se puede
+  // cambiar aquí dentro del modal sin afectar el filtro de Ventas.
+  const canalVentas=(document.getElementById('filter-canal')||{value:''}).value;
+  const desdeVentas=(document.getElementById('filter-venta-desde')||{value:''}).value;
+  const hastaVentas=(document.getElementById('filter-venta-hasta')||{value:''}).value;
+  document.getElementById('tp-filter-canal').value=canalVentas;
+  document.getElementById('tp-filter-desde').value=desdeVentas;
+  document.getElementById('tp-filter-hasta').value=hastaVentas;
+  renderTintaPendiente();
+  openModal('modal-tinta-pendiente');
+};
+
+window.limpiarFiltroTintaPendiente=function(){
+  document.getElementById('tp-filter-canal').value='';
+  document.getElementById('tp-filter-desde').value='';
+  document.getElementById('tp-filter-hasta').value='';
+  renderTintaPendiente();
+};
+
+window.filtrarTintaPendiente=function(){ renderTintaPendiente(); };
+
+function renderTintaPendiente(){
+  const canal=document.getElementById('tp-filter-canal').value;
+  const desde=document.getElementById('tp-filter-desde').value;
+  const hasta=document.getElementById('tp-filter-hasta').value;
+  const lista=_tintaPendienteTodas.filter(v=>{
+    const mc=!canal||v.canal===canal;
+    const md=!desde||v.fecha>=desde;
+    const mh=!hasta||v.fecha<=hasta;
+    return mc&&md&&mh;
+  }).sort((a,b)=>b.fecha>a.fecha?1:-1);
   const tbody=document.getElementById('tabla-tinta-pendiente');
   const empty=document.getElementById('tinta-pendiente-empty');
   const contador=document.getElementById('tinta-pendiente-contador');
-  contador.textContent=`${lista.length} venta(s) con DTG sin tinta capturada`;
+  contador.textContent=(canal||desde||hasta)
+    ? `${lista.length} venta(s) con DTG sin tinta capturada (de ${_tintaPendienteTodas.length} en total, filtrado)`
+    : `${lista.length} venta(s) con DTG sin tinta capturada`;
   window._tintaPendienteCache=lista;
   if(lista.length===0){
     tbody.innerHTML=''; empty.style.display='block';
@@ -4118,8 +4169,7 @@ window.abrirTintaPendiente=async function(){
       </tr>`;
     }).join('');
   }
-  openModal('modal-tinta-pendiente');
-};
+}
 
 window.exportarTintaPendienteExcel=function(){
   const lista=window._tintaPendienteCache||[];
