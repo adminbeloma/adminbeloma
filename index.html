@@ -788,6 +788,10 @@ tbody td{padding:11px 14px;font-size:13.5px;vertical-align:middle;}
       <h1>Inventario de Playeras</h1>
       <div class="actions">
         <button class="btn btn-teal admin-only" style="display:none;" onclick="openCompraPlayeraModal()">🛒 Registrar compra</button>
+        <button class="btn btn-ghost admin-only" style="display:none;" onclick="document.getElementById('input-importar-factura-playera').click()">📄 Importar factura (Excel)</button>
+        <input type="file" id="input-importar-factura-playera" accept=".xlsx,.xls,.csv" style="display:none;" onchange="importarFacturaPlayeras(this.files[0])">
+        <button class="btn btn-ghost btn-sm admin-only" style="display:none;" onclick="descargarPlantillaFacturaPlayeras()">⬇️ Plantilla</button>
+        <button class="btn btn-ghost admin-only" style="display:none;" onclick="abrirCatalogoMarcas()">⚙️ Catálogo de Marcas</button>
         <button class="btn btn-accent admin-only" style="display:none;" onclick="openPlayeraModal()">+ Agregar Playera</button>
       </div>
     </div>
@@ -819,7 +823,14 @@ tbody td{padding:11px 14px;font-size:13.5px;vertical-align:middle;}
           <option>Frases / Tipografía</option><option>Abstracto / Arte</option>
           <option>Personalizado</option><option>Sin diseño / Lisa</option><option>Otro</option>
         </select>
+        <select id="filter-proveedor-p" onchange="renderPlayeras()">
+          <option value="">Todos los proveedores</option>
+        </select>
+        <select id="filter-modelo-p" onchange="renderPlayeras()">
+          <option value="">Todos los modelos</option>
+        </select>
       </div>
+      <div id="playeras-resumen" class="card" style="margin-bottom:16px;"></div>
       <div id="playeras-grid" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:14px;"></div>
       <div id="playeras-empty" class="empty-state" style="display:none;"><div class="icon">👕</div><p>No hay playeras en inventario.</p></div>
     </div>
@@ -939,14 +950,17 @@ tbody td{padding:11px 14px;font-size:13.5px;vertical-align:middle;}
         <button class="btn btn-accent btn-sm" onclick="renderClientes()">🔍 Buscar</button>
         <button class="btn btn-ghost btn-sm" onclick="limpiarFiltrosClientes()">✕ Limpiar</button>
       </div>
+      <div style="background:var(--accent-light);border-radius:8px;padding:10px 14px;font-size:13px;margin-bottom:14px;">
+        ℹ️ Los números de esta pantalla ("compras recientes", "facturado") solo cuentan lo más reciente del sistema completo (no el historial completo de cada cliente) — para eso está el botón <strong>👁️ Historial</strong> en cada fila, que sí trae el total real y completo de ese cliente.
+      </div>
       <div style="display:flex;gap:14px;margin-bottom:14px;flex-wrap:wrap;">
         <div style="background:var(--bg-card);border:1px solid var(--border);border-radius:8px;padding:10px 14px;"><div style="font-size:11px;color:var(--ink-soft);font-weight:600;text-transform:uppercase;">Total clientes</div><div style="font-size:18px;font-weight:700;" id="cli-count">0</div></div>
-        <div class="admin-only" style="display:none;background:var(--bg-card);border:1px solid var(--border);border-radius:8px;padding:10px 14px;"><div style="font-size:11px;color:var(--ink-soft);font-weight:600;text-transform:uppercase;">Total facturado</div><div style="font-size:18px;font-weight:700;color:var(--green);" id="cli-total-facturado">$0</div></div>
+        <div class="admin-only" style="display:none;background:var(--bg-card);border:1px solid var(--border);border-radius:8px;padding:10px 14px;"><div style="font-size:11px;color:var(--ink-soft);font-weight:600;text-transform:uppercase;">Facturado (reciente)</div><div style="font-size:18px;font-weight:700;color:var(--green);" id="cli-total-facturado">$0</div></div>
         <div style="background:var(--bg-card);border:1px solid var(--border);border-radius:8px;padding:10px 14px;"><div style="font-size:11px;color:var(--ink-soft);font-weight:600;text-transform:uppercase;">Empresas</div><div style="font-size:18px;font-weight:700;color:var(--gold);" id="cli-count-empresas">0</div></div>
       </div>
       <div class="table-wrap">
         <table>
-          <thead><tr><th>Nombre</th><th>Teléfono</th><th>Canal</th><th>Ciudad</th><th>Tipo</th><th>Registrado</th><th>Compras</th><th>Total gastado</th><th>Acciones</th></tr></thead>
+          <thead><tr><th>Nombre</th><th>Teléfono</th><th>Canal</th><th>Ciudad</th><th>Tipo</th><th>Registrado</th><th title="Solo cuenta lo más reciente del sistema — usa 👁️ Historial para ver el total real de este cliente">Compras recientes ⓘ</th><th title="Solo cuenta lo más reciente del sistema — usa 👁️ Historial para ver el total real de este cliente">Gastado (reciente) ⓘ</th><th>Acciones</th></tr></thead>
           <tbody id="tabla-clientes"></tbody>
         </table>
       </div>
@@ -1771,11 +1785,33 @@ tbody td{padding:11px 14px;font-size:13.5px;vertical-align:middle;}
             <option value="Unisex">Unisex</option>
           </select>
         </div>
+        <div class="form-group"><label>Proveedor / Marca *</label>
+          <select id="p-proveedor" onchange="onCambioMarcaPlayera()">
+            <option value="">— Proveedor / Marca —</option>
+          </select>
+          <div id="p-proveedor-otro-wrap" style="display:none;margin-top:4px;">
+            <input type="text" id="p-proveedor-otro" placeholder="Especifica el proveedor" oninput="onCambioMarcaPlayera()">
+          </div>
+        </div>
+        <div class="form-group"><label>Modelo / Estilo</label>
+          <select id="p-modelo" onchange="onCambioModeloPlayera()">
+            <option value="">— Sin modelo específico —</option>
+          </select>
+          <div id="p-modelo-otro-wrap" style="display:none;margin-top:4px;">
+            <input type="text" id="p-modelo-otro" placeholder="Especifica el modelo">
+          </div>
+        </div>
         <div class="form-group"><label>Talla</label>
-          <select id="p-talla"></select>
+          <select id="p-talla" onchange="onCambioTallaPlayera()"></select>
+          <div id="p-talla-otro-wrap" style="display:none;margin-top:4px;">
+            <input type="text" id="p-talla-otro" placeholder="Especifica la talla">
+          </div>
         </div>
         <div class="form-group"><label>Color</label>
-          <select id="p-color"></select>
+          <select id="p-color" onchange="if(this.value==='Otro')document.getElementById('p-color-otro-wrap').style.display='';else document.getElementById('p-color-otro-wrap').style.display='none';"></select>
+          <div id="p-color-otro-wrap" style="display:none;margin-top:4px;">
+            <input type="text" id="p-color-otro" placeholder="Especifica el color">
+          </div>
         </div>
         <div class="form-group full"><label>Categoría del diseño</label>
           <select id="p-categoria">
@@ -1798,15 +1834,9 @@ tbody td{padding:11px 14px;font-size:13.5px;vertical-align:middle;}
         </div>
         <div class="form-group"><label>Stock actual</label><input type="number" id="p-stock" placeholder="0" min="0"></div>
         <div class="form-group"><label>Stock mínimo</label><input type="number" id="p-stock-min" placeholder="5" min="0"></div>
-        <div class="form-group"><label>Proveedor / Marca</label>
-          <select id="p-proveedor" onchange="document.getElementById('p-proveedor-otro-wrap').style.display=(this.value==='Otro'?'':'none');">
-            <option value="">— Proveedor / Marca —</option>
-          </select>
-          <div id="p-proveedor-otro-wrap" style="display:none;margin-top:4px;">
-            <input type="text" id="p-proveedor-otro" placeholder="Especifica el proveedor">
-          </div>
+        <div class="form-group"><label>Costo unitario ($)</label><input type="number" id="p-costo" placeholder="0" step="0.01">
+          <div id="p-costo-hint" style="font-size:11px;color:var(--ink-soft);margin-top:2px;"></div>
         </div>
-        <div class="form-group"><label>Costo unitario ($)</label><input type="number" id="p-costo" placeholder="0" step="0.01"></div>
         <div class="form-group full"><label>Imagen</label>
           <label class="btn btn-ghost btn-sm" style="cursor:pointer;width:fit-content;">
             📷 Seleccionar imagen
@@ -1850,18 +1880,38 @@ tbody td{padding:11px 14px;font-size:13.5px;vertical-align:middle;}
             <option value="Unisex">Unisex</option>
           </select>
         </div>
-        <div class="form-group"><label>Talla *</label><select id="cp-talla" onchange="actualizarPreviewCompraPlayeraExistente()"></select></div>
-        <div class="form-group"><label>Color *</label><select id="cp-color" onchange="actualizarPreviewCompraPlayeraExistente()"></select></div>
         <div class="form-group"><label>Proveedor / Marca</label>
-          <select id="cp-proveedor" onchange="document.getElementById('cp-proveedor-otro-wrap').style.display=(this.value==='Otro'?'':'none');actualizarPreviewCompraPlayeraExistente();">
+          <select id="cp-proveedor" onchange="onCambioMarcaCompraPlayera()">
             <option value="">— Proveedor / Marca —</option>
           </select>
           <div id="cp-proveedor-otro-wrap" style="display:none;margin-top:4px;">
-            <input type="text" id="cp-proveedor-otro" placeholder="Especifica el proveedor" oninput="actualizarPreviewCompraPlayeraExistente()">
+            <input type="text" id="cp-proveedor-otro" placeholder="Especifica el proveedor" oninput="onCambioMarcaCompraPlayera()">
+          </div>
+        </div>
+        <div class="form-group"><label>Modelo / Estilo</label>
+          <select id="cp-modelo" onchange="onCambioModeloCompraPlayera()">
+            <option value="">— Sin modelo específico —</option>
+          </select>
+          <div id="cp-modelo-otro-wrap" style="display:none;margin-top:4px;">
+            <input type="text" id="cp-modelo-otro" placeholder="Especifica el modelo">
+          </div>
+        </div>
+        <div class="form-group"><label>Talla *</label>
+          <select id="cp-talla" onchange="onCambioTallaCompraPlayera()"></select>
+          <div id="cp-talla-otro-wrap" style="display:none;margin-top:4px;">
+            <input type="text" id="cp-talla-otro" placeholder="Especifica la talla" oninput="actualizarPreviewCompraPlayeraExistente()">
+          </div>
+        </div>
+        <div class="form-group"><label>Color *</label>
+          <select id="cp-color" onchange="if(this.value==='Otro')document.getElementById('cp-color-otro-wrap').style.display='';else document.getElementById('cp-color-otro-wrap').style.display='none';actualizarPreviewCompraPlayeraExistente();"></select>
+          <div id="cp-color-otro-wrap" style="display:none;margin-top:4px;">
+            <input type="text" id="cp-color-otro" placeholder="Especifica el color" oninput="actualizarPreviewCompraPlayeraExistente()">
           </div>
         </div>
         <div class="form-group"><label>Cantidad de piezas *</label><input type="number" id="cp-cantidad" placeholder="12" min="1" value="1" oninput="calcCompraPlayeraTotal()"></div>
-        <div class="form-group"><label>Costo total de la compra ($) *</label><input type="number" id="cp-costo-total" placeholder="0.00" step="0.01" oninput="calcCompraPlayeraTotal()"></div>
+        <div class="form-group"><label>Costo total de la compra ($) *</label><input type="number" id="cp-costo-total" placeholder="0.00" step="0.01" oninput="calcCompraPlayeraTotal()">
+          <div id="cp-costo-hint" style="font-size:11px;color:var(--ink-soft);margin-top:2px;"></div>
+        </div>
         <div class="form-group"><label>Costo por pieza</label><input type="text" id="cp-costo-unidad" readonly style="background:var(--accent-light);font-weight:700;"></div>
         <div id="cp-preview-existente" style="grid-column:1/-1;background:var(--bg);border-radius:8px;padding:10px 12px;font-size:13px;color:var(--ink-soft);display:none;"></div>
         <div class="form-group"><label>No. de factura / referencia</label><input type="text" id="cp-referencia" placeholder="FAC-001"></div>
@@ -1877,6 +1927,92 @@ tbody td{padding:11px 14px;font-size:13.5px;vertical-align:middle;}
     <div class="modal-footer">
       <button class="btn btn-ghost" onclick="closeModal('modal-compra-playera')">Cancelar</button>
       <button class="btn btn-teal" onclick="guardarCompraPlayera()">💾 Guardar Compra</button>
+    </div>
+  </div>
+</div>
+
+<!-- MODAL IMPORTAR FACTURA DE PLAYERAS (bulk desde Excel) -->
+<div class="modal-overlay" id="modal-importar-factura-playera">
+  <div class="modal" style="max-width:920px;">
+    <div class="modal-header"><h2>📄 Importar factura de Playeras</h2><button class="modal-close" onclick="closeModal('modal-importar-factura-playera')">×</button></div>
+    <div class="modal-body">
+      <div class="form-grid" style="margin-bottom:14px;">
+        <div class="form-group"><label>Fecha de la compra *</label><input type="date" id="if-fecha"></div>
+        <div class="form-group"><label>No. de factura / referencia</label><input type="text" id="if-referencia" placeholder="FAC-001"></div>
+      </div>
+      <div class="form-group full" style="margin-bottom:14px;">
+        <label style="display:flex;align-items:center;gap:8px;font-weight:400;cursor:pointer;">
+          <input type="checkbox" id="if-registrar-gasto" checked style="accent-color:var(--accent);width:16px;height:16px;">
+          Registrar también como gasto (salida de dinero) en Gastos, por el total de la factura
+        </label>
+      </div>
+      <div id="if-resumen" style="margin-bottom:14px;"></div>
+      <div id="if-preview" style="max-height:400px;overflow-y:auto;"></div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-ghost" onclick="closeModal('modal-importar-factura-playera')">Cancelar</button>
+      <button class="btn btn-teal" id="if-btn-confirmar" onclick="confirmarImportarFacturaPlayeras()">💾 Confirmar e importar</button>
+    </div>
+  </div>
+</div>
+
+<!-- MODAL CATÁLOGO DE MARCAS (tallas, colores y precio por marca) -->
+<div class="modal-overlay" id="modal-catalogo-marcas">
+  <div class="modal" style="max-width:760px;">
+    <div class="modal-header"><h2>⚙️ Catálogo de Marcas</h2><button class="modal-close" onclick="closeModal('modal-catalogo-marcas')">×</button></div>
+    <div class="modal-body">
+      <div style="background:var(--accent-light);border-radius:8px;padding:10px 14px;font-size:13px;margin-bottom:16px;">
+        Cada marca puede tener varios modelos/estilos (ej. Yazbek → C0300, N0300), y cada modelo tiene sus propios colores y tallas/precio por género — porque el mismo proveedor a veces vende cortes distintos a precios distintos. Al capturar una Playera o una Compra, elegir marca + modelo + talla llena el precio solo.
+      </div>
+      <div class="form-grid" style="margin-bottom:16px;">
+        <div class="form-group">
+          <label>Marca</label>
+          <select id="cm-marca-select" onchange="seleccionarMarcaCatalogo(this.value)"></select>
+        </div>
+        <div class="form-group">
+          <label>...o crear una marca nueva</label>
+          <div style="display:flex;gap:6px;">
+            <input type="text" id="cm-marca-nueva" placeholder="Ej. Blue & White">
+            <button class="btn btn-ghost btn-sm" onclick="crearMarcaCatalogo()">+ Crear</button>
+          </div>
+        </div>
+      </div>
+
+      <div id="cm-marca-detalle" style="display:none;">
+        <div class="form-grid" style="margin-bottom:16px;background:var(--bg);border-radius:10px;padding:14px;">
+          <div class="form-group">
+            <label>Modelo / Estilo</label>
+            <select id="cm-modelo-select" onchange="seleccionarModeloCatalogo(this.value)"></select>
+          </div>
+          <div class="form-group">
+            <label>...o crear un modelo nuevo</label>
+            <div style="display:flex;gap:6px;">
+              <input type="text" id="cm-modelo-nuevo" placeholder="Ej. C0300">
+              <button class="btn btn-ghost btn-sm" onclick="crearModeloCatalogo()">+ Crear</button>
+            </div>
+          </div>
+        </div>
+
+        <div id="cm-detalle" style="display:none;">
+          <div class="form-group" style="margin-bottom:16px;">
+            <label>Colores que maneja este modelo (separados por coma)</label>
+            <textarea id="cm-colores" placeholder="Negro, Blanco, Gris, Rojo..." style="min-height:60px;" oninput="previewColoresCatalogo()"></textarea>
+            <div id="cm-colores-preview" style="margin-top:6px;display:flex;flex-wrap:wrap;gap:4px;"></div>
+          </div>
+
+          <div class="tabs" id="cm-genero-tabs" style="margin-bottom:12px;"></div>
+          <div id="cm-tallas-tabla"></div>
+          <button class="btn btn-ghost btn-sm" style="margin-top:10px;" onclick="agregarFilaTallaCatalogo()">+ Agregar talla</button>
+
+          <div style="margin-top:20px;padding-top:16px;border-top:1px solid var(--border);display:flex;justify-content:space-between;align-items:center;">
+            <button class="btn btn-danger btn-sm" onclick="eliminarModeloCatalogo()">🗑 Eliminar este modelo</button>
+            <button class="btn btn-accent" onclick="guardarMarcaCatalogo()">💾 Guardar</button>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-ghost" onclick="closeModal('modal-catalogo-marcas')">Cerrar</button>
     </div>
   </div>
 </div>
@@ -2662,8 +2798,28 @@ tbody td{padding:11px 14px;font-size:13.5px;vertical-align:middle;}
       <div id="tinta-pendiente-empty" class="empty-state" style="display:none;"><div class="icon">✅</div><p>No hay ventas DTG pendientes de capturar tinta.</p></div>
     </div>
     <div class="modal-footer">
+      <button class="btn btn-ghost" onclick="document.getElementById('input-importar-tinta-desc').click()">📥 Importar por descripción</button>
+      <input type="file" id="input-importar-tinta-desc" accept=".xlsx,.xls,.csv" style="display:none;" onchange="importarTintaPorDescripcion(this.files[0])">
       <button class="btn btn-ghost" onclick="exportarTintaPendienteExcel()">⬇️ Exportar Excel</button>
       <button class="btn btn-accent" onclick="closeModal('modal-tinta-pendiente')">Cerrar</button>
+    </div>
+  </div>
+</div>
+
+<!-- MODAL IMPORTAR TINTA POR DESCRIPCIÓN -->
+<div class="modal-overlay" id="modal-importar-tinta-desc">
+  <div class="modal" style="max-width:820px;">
+    <div class="modal-header"><h2>📥 Importar tinta por descripción</h2><button class="modal-close" onclick="closeModal('modal-importar-tinta-desc')">×</button></div>
+    <div class="modal-body">
+      <div style="background:var(--accent-light);border-radius:8px;padding:10px 14px;font-size:13px;margin-bottom:14px;">
+        Busca, entre las ventas DTG con tinta pendiente, aquellas cuya descripción coincida <strong>exactamente</strong> (sin importar mayúsculas) con alguna fila del Excel, y les llena el cc de tinta blanca/color automáticamente — incluyendo el descuento del stock de tinta que corresponde.
+      </div>
+      <div id="itd-resumen" style="margin-bottom:14px;"></div>
+      <div id="itd-preview" style="max-height:420px;overflow-y:auto;"></div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-ghost" onclick="closeModal('modal-importar-tinta-desc')">Cancelar</button>
+      <button class="btn btn-accent" id="itd-btn-confirmar" onclick="confirmarImportarTintaPorDescripcion()">💾 Confirmar y aplicar</button>
     </div>
   </div>
 </div>
@@ -3499,7 +3655,7 @@ window.cambiarTipoItemVenta=function(idx, nuevoTipo){
 };
 
 window.agregarItemVenta=function(item){
-  const it=item||{tipo:'Hombre',genero:'',talla:'',color:'',material:'',tipoPrenda:'',tipoPrendaOtro:'',tipoGorra:'',tipoGorraOtro:'',tipoTaza:'',capacidadTaza:'',marca:'',descripcion:'',proceso:'DTG',cantidad:1,precio:0,tintaBlanca:0,tintaColor:0,multiTG:false,desglose:[]};
+  const it=item||{tipo:'Hombre',genero:'',talla:'',color:'',material:'',tipoPrenda:'',tipoPrendaOtro:'',tipoGorra:'',tipoGorraOtro:'',tipoTaza:'',capacidadTaza:'',marca:'',modelo:'',descripcion:'',proceso:'DTG',cantidad:1,precio:0,tintaBlanca:0,tintaColor:0,multiTG:false,desglose:[]};
   window._ventaItems.push(it);
   renderItemsVenta();
 };
@@ -3693,11 +3849,25 @@ window.renderItemsVenta=function(){
         <div>
           ${_LABEL('Marca')}
           ${(()=>{const marcaEsOtro=it._marcaModoOtro||(it.marca&&!ITEM_MARCAS.includes(it.marca));return `
-          <select onchange="window._ventaItems[${idx}]._marcaModoOtro=(this.value==='Otro');window._ventaItems[${idx}].marca=(this.value==='Otro'?'':this.value);renderItemsVenta()" style="${_ESTILO}">
+          <select onchange="window._ventaItems[${idx}]._marcaModoOtro=(this.value==='Otro');window._ventaItems[${idx}].marca=(this.value==='Otro'?'':this.value);window._ventaItems[${idx}].modelo='';window._ventaItems[${idx}]._modeloModoOtro=false;renderItemsVenta()" style="${_ESTILO}">
             <option value="">— Marca —</option>
             ${ITEM_MARCAS.map(m=>`<option value="${m}"${(m==='Otro'?marcaEsOtro:it.marca===m)?' selected':''}>${m}</option>`).join('')}
           </select>
           ${marcaEsOtro?`<input type="text" value="${it.marca||''}" placeholder="Especifica la marca" oninput="window._ventaItems[${idx}].marca=this.value" style="${_ESTILO}margin-top:4px;">`:''}`;})()}
+        </div>
+        <div>
+          ${_LABEL('Modelo / Estilo')}
+          ${(()=>{
+            const catMarca=catalogoDeMarca(it.marca);
+            const modelosMarca=(catMarca?.modelos||[]).map(m=>m.nombre);
+            const modeloEsOtro=it._modeloModoOtro||(it.modelo&&!modelosMarca.includes(it.modelo));
+            return `
+          <select onchange="window._ventaItems[${idx}]._modeloModoOtro=(this.value==='Otro');window._ventaItems[${idx}].modelo=(this.value==='Otro'?'':this.value);renderItemsVenta()" style="${_ESTILO}">
+            <option value="">— Sin modelo específico —</option>
+            ${modelosMarca.map(m=>`<option value="${m}"${it.modelo===m?' selected':''}>${m}</option>`).join('')}
+            <option value="Otro"${modeloEsOtro?' selected':''}>Otro</option>
+          </select>
+          ${modeloEsOtro?`<input type="text" value="${it.modelo||''}" placeholder="Ej. C0300" oninput="window._ventaItems[${idx}].modelo=this.value" style="${_ESTILO}margin-top:4px;">`:''}`;})()}
         </div>
         <div>
           ${_LABEL('Tipo de prenda')}
@@ -3864,24 +4034,25 @@ async function ajustarStockInsumoAuto(tipo, deltaCc){
 
 // ═══ DESCUENTO AUTOMÁTICO DE STOCK DE PLAYERAS EN BLANCO (inventario Playeras) ═══
 // A partir de los items de una venta, arma la lista de "consumos de prenda en
-// blanco": uno por cada combinación tipo+género+talla+color+marca, expandiendo
-// el desglose de "mismo diseño, varias tallas/géneros" cuando aplica.
-// Taza y Producto libre no consumen prenda en blanco, así que se excluyen.
+// blanco": uno por cada combinación tipo+género+talla+color+marca+modelo,
+// expandiendo el desglose de "mismo diseño, varias tallas/géneros" cuando
+// aplica. Taza y Producto libre no consumen prenda en blanco, así que se excluyen.
 function expandirConsumosTela(items){
   const consumos=[];
   (items||[]).forEach(it=>{
     if(!it||it.tipo==='Taza'||it.tipo==='Libre') return;
     const marca=it.marca||'';
+    const modelo=it.modelo||'';
     const color=it.color||'';
     const tipo=it.tipo||'Playera';
     if(it.multiTG && Array.isArray(it.desglose) && it.desglose.length){
       it.desglose.forEach(d=>{
         if(!d.genero||!d.talla||!(+d.cantidad>0)) return;
-        consumos.push({tipo,genero:d.genero,talla:d.talla,color,marca,cantidad:+d.cantidad});
+        consumos.push({tipo,genero:d.genero,talla:d.talla,color,marca,modelo,cantidad:+d.cantidad});
       });
     } else {
       if(!it.genero||!it.talla||!(+it.cantidad>0)) return;
-      consumos.push({tipo,genero:it.genero,talla:it.talla,color,marca,cantidad:+it.cantidad});
+      consumos.push({tipo,genero:it.genero,talla:it.talla,color,marca,modelo,cantidad:+it.cantidad});
     }
   });
   return consumos;
@@ -3889,8 +4060,12 @@ function expandirConsumosTela(items){
 
 // Busca en el inventario de Playeras (colección pl_playeras) el producto que
 // coincide con un consumo. Comparación insensible a mayúsculas/espacios extra.
-// Color y marca son opcionales en el consumo: si la venta no los capturó, se
-// empareja por tipo+género+talla nada más (toma el primero que encuentre).
+// Color, marca y modelo son opcionales en el consumo: si la venta no los
+// capturó, se empareja sin ese filtro (toma el primero que encuentre). Ojo:
+// si hay dos modelos de la misma marca con el mismo género/talla/color (ej.
+// Yazbek C0300 y N0300, ambos Hombre M Negro) y el consumo no trae modelo
+// (como las Ventas, que no lo capturan), esta función toma el PRIMERO que
+// encuentre — no distingue cuál de los dos se vendió.
 function buscarPlayeraStock(c){
   const norm=s=>(s||'').toString().trim().toLowerCase();
   return playeras.find(p=>
@@ -3898,7 +4073,8 @@ function buscarPlayeraStock(c){
     norm(p.genero)===norm(c.genero) &&
     norm(p.talla)===norm(c.talla) &&
     (!c.color || norm(p.color)===norm(c.color)) &&
-    (!c.marca || norm(p.proveedor)===norm(c.marca))
+    (!c.marca || norm(p.proveedor)===norm(c.marca)) &&
+    (!c.modelo || norm(p.modelo)===norm(c.modelo))
   );
 }
 
@@ -3928,7 +4104,7 @@ async function descontarStockPlayerasDeVenta(itemsNuevos, itemsAnteriores){
   const consumosNuevos=expandirConsumosTela(itemsNuevos);
   const sinMatch=await ajustarStockPlayerasPorConsumos(consumosNuevos,1);
   if(sinMatch.length){
-    const detalle=sinMatch.map(c=>`${c.cantidad}× ${c.tipo} ${c.genero} ${c.talla}${c.color?' '+c.color:''}${c.marca?' ['+c.marca+']':''}`).join(', ');
+    const detalle=sinMatch.map(c=>`${c.cantidad}× ${c.tipo} ${c.genero} ${c.talla}${c.color?' '+c.color:''}${c.marca?' ['+c.marca+(c.modelo?' '+c.modelo:'')+']':''}`).join(', ');
     toast(`⚠️ No se descontó stock de Playeras (no existe ese producto en inventario): ${detalle}`);
   }
 }
@@ -4574,6 +4750,176 @@ window.exportarTintaPendienteExcel=function(){
   ]);
   XLSX.utils.book_append_sheet(wb,ws,'Tinta pendiente');
   XLSX.writeFile(wb,`tinta_pendiente_${hoy()}.xlsx`);
+};
+
+// ═══ IMPORTAR TINTA POR DESCRIPCIÓN (Excel) ═══
+// Formato esperado: Descripcion | TintaBlanca | TintaColor (cc por UNA pieza,
+// igual que se captura a mano en el renglón DTG de una venta). Busca, entre
+// las ventas DTG con tinta pendiente, los items cuya descripción coincida
+// EXACTA (sin distinguir mayúsculas/espacios) con alguna fila del Excel.
+let _tintaDescMatches=[];
+
+window.importarTintaPorDescripcion=async function(file){
+  if(!file) return;
+  if(!window.XLSX){toast('⚠️ Librería Excel no disponible');document.getElementById('input-importar-tinta-desc').value='';return;}
+  let lookup={};
+  try{
+    const buf=await file.arrayBuffer();
+    const wb=XLSX.read(buf,{type:'array'});
+    const ws=wb.Sheets[wb.SheetNames[0]];
+    const filas=XLSX.utils.sheet_to_json(ws,{defval:''});
+    const norm=s=>(s||'').toString().trim().toLowerCase();
+    const buscarCampo=(fila,posibles)=>{
+      const claves=Object.keys(fila);
+      for(const p of posibles){
+        const k=claves.find(k2=>norm(k2)===norm(p));
+        if(k!==undefined) return fila[k];
+      }
+      return '';
+    };
+    filas.forEach(f=>{
+      const desc=String(buscarCampo(f,['Descripcion','Descripción'])||'').trim();
+      if(!desc) return;
+      const tintaBlanca=+buscarCampo(f,['TintaBlanca','Tinta Blanca','Tinta blanca (cc)'])||0;
+      const tintaColor=+buscarCampo(f,['TintaColor','Tinta Color','Tinta color (cc)'])||0;
+      lookup[norm(desc)]={desc,tintaBlanca,tintaColor};
+    });
+  }catch(err){
+    console.error('Error leyendo Excel de tinta por descripción:', err);
+    toast('⚠️ No se pudo leer el archivo');
+    document.getElementById('input-importar-tinta-desc').value='';
+    return;
+  }
+  document.getElementById('input-importar-tinta-desc').value='';
+  if(Object.keys(lookup).length===0){
+    toast('⚠️ No se encontraron filas con descripción en el Excel');
+    return;
+  }
+
+  // Recorre las ventas DTG pendientes (ya cargadas al abrir el modal de
+  // Tinta pendiente) buscando, item por item, coincidencia exacta de descripción.
+  const norm=s=>(s||'').toString().trim().toLowerCase();
+  _tintaDescMatches=[];
+  (_tintaPendienteTodas||[]).forEach(v=>{
+    if(!Array.isArray(v.items)) return;
+    let algunItemCoincide=false;
+    v.items.forEach(it=>{
+      if(it.proceso!=='DTG') return;
+      const ccActual=(+it.tintaBlanca||0)+(+it.tintaColor||0);
+      if(ccActual>0) return; // ya tiene tinta capturada, no se toca
+      const match=lookup[norm(it.descripcion)];
+      if(match) algunItemCoincide=true;
+    });
+    if(algunItemCoincide){
+      _tintaDescMatches.push({venta:v, lookup});
+    }
+  });
+
+  renderPreviewImportarTintaDesc();
+  openModal('modal-importar-tinta-desc');
+};
+
+function renderPreviewImportarTintaDesc(){
+  const norm=s=>(s||'').toString().trim().toLowerCase();
+  const filas=[];
+  _tintaDescMatches.forEach(({venta,lookup})=>{
+    (venta.items||[]).forEach(it=>{
+      if(it.proceso!=='DTG') return;
+      const ccActual=(+it.tintaBlanca||0)+(+it.tintaColor||0);
+      if(ccActual>0) return;
+      const match=lookup[norm(it.descripcion)];
+      if(!match) return;
+      filas.push({
+        folio:venta.folio||'—', fecha:venta.fecha, descripcion:it.descripcion,
+        cantidad:it.cantidad||0, tintaBlanca:match.tintaBlanca, tintaColor:match.tintaColor
+      });
+    });
+  });
+
+  document.getElementById('itd-resumen').innerHTML=`
+    <div style="display:flex;gap:24px;flex-wrap:wrap;background:var(--bg);border-radius:8px;padding:12px 16px;">
+      <div><div style="font-size:11px;color:var(--ink-soft);">Ventas afectadas</div><strong>${_tintaDescMatches.length}</strong></div>
+      <div><div style="font-size:11px;color:var(--ink-soft);">Líneas que van a llenarse</div><strong>${filas.length}</strong></div>
+    </div>`;
+
+  if(filas.length===0){
+    document.getElementById('itd-preview').innerHTML='<div class="empty-state"><div class="icon">🤷</div><p>Ninguna descripción del Excel coincidió con ventas pendientes de tinta.</p></div>';
+    document.getElementById('itd-btn-confirmar').disabled=true;
+    return;
+  }
+  document.getElementById('itd-btn-confirmar').disabled=false;
+  document.getElementById('itd-preview').innerHTML=`<div class="table-wrap"><table><thead><tr>
+    <th>Folio</th><th>Fecha</th><th>Descripción</th><th>Cant.</th><th>Tinta blanca/pza</th><th>Tinta color/pza</th>
+  </tr></thead><tbody>`+
+    filas.map(f=>`<tr>
+      <td>${f.folio}</td><td>${fmtFecha(f.fecha)}</td>
+      <td style="font-size:12px;">${f.descripcion}</td><td>${f.cantidad}</td>
+      <td>${f.tintaBlanca} cc</td><td>${f.tintaColor} cc</td>
+    </tr>`).join('')+
+    `</tbody></table></div>`;
+}
+
+window.confirmarImportarTintaPorDescripcion=async function(){
+  const norm=s=>(s||'').toString().trim().toLowerCase();
+  const btn=document.getElementById('itd-btn-confirmar');
+  btn.disabled=true; btn.textContent='⏳ Aplicando...';
+  const precioTintaB=+configTinta.blanca||0;
+  const precioTintaC=+configTinta.color||0;
+  let ventasActualizadas=0, deltaBlancaTotal=0, deltaColorTotal=0;
+  try{
+    for(const {venta,lookup} of _tintaDescMatches){
+      const v=venta;
+      let cambio=false;
+      const itemsActualizados=(v.items||[]).map(it=>{
+        if(it.proceso!=='DTG') return it;
+        const ccActual=(+it.tintaBlanca||0)+(+it.tintaColor||0);
+        if(ccActual>0) return it;
+        const match=lookup[norm(it.descripcion)];
+        if(!match) return it;
+        cambio=true;
+        return {...it, tintaBlanca:match.tintaBlanca, tintaColor:match.tintaColor};
+      });
+      if(!cambio) continue;
+
+      // Recalcular totales de la venta con los items ya actualizados —
+      // mismo cálculo que usa guardarVenta.
+      const cantTotal=itemsActualizados.reduce((s,it)=>s+(+it.cantidad||1),0);
+      let totalCcBlanca=0, totalCcColor=0;
+      itemsActualizados.forEach(it=>{
+        if(it.proceso==='DTG'){
+          totalCcBlanca+=(+it.tintaBlanca||0)*(+it.cantidad||1);
+          totalCcColor+=(+it.tintaColor||0)*(+it.cantidad||1);
+        }
+      });
+      const prevTotalCcBlanca=(+v.tintaBlanca||0)*(+v.cantidad||0);
+      const prevTotalCcColor=(+v.tintaColor||0)*(+v.cantidad||0);
+      const costoTinta=totalCcBlanca*precioTintaB+totalCcColor*precioTintaC;
+      const tintaBlanca=cantTotal>0?totalCcBlanca/cantTotal:0;
+      const tintaColor=cantTotal>0?totalCcColor/cantTotal:0;
+      const sinTinta=totalCcBlanca===0&&totalCcColor===0;
+
+      await setDoc(doc(db,'pl_ventas',v.id),{
+        ...v, items:itemsActualizados, tintaBlanca, tintaColor, costoTinta, sinTinta,
+        actualizado:new Date().toISOString()
+      });
+
+      // Descontar del stock de tinta lo que recién se supo que se había gastado
+      deltaBlancaTotal+=(totalCcBlanca-prevTotalCcBlanca);
+      deltaColorTotal+=(totalCcColor-prevTotalCcColor);
+      ventasActualizadas++;
+    }
+    if(deltaBlancaTotal) await ajustarStockInsumoAuto('blanca', deltaBlancaTotal);
+    if(deltaColorTotal) await ajustarStockInsumoAuto('cmyk', deltaColorTotal);
+
+    toast(`✅ Tinta completada en ${ventasActualizadas} venta(s)`);
+    closeModal('modal-importar-tinta-desc');
+    // Refrescar la lista de Tinta pendiente (algunas ventas ya no deberían salir)
+    if(typeof abrirTintaPendiente==='function') await abrirTintaPendiente();
+  }catch(err){
+    console.error('Error aplicando tinta por descripción:', err);
+    toast('⚠️ Ocurrió un error — revisa la consola');
+  }
+  btn.disabled=false; btn.textContent='💾 Confirmar y aplicar';
 };
 
 // ── Totales EXACTOS de Ventas (Total período / Unidades / Ticket) ──
@@ -5581,15 +5927,19 @@ window.generarReporte=function(){
 // ─── PLAYERAS ───
 window.openPlayeraModal=function(id){
   document.getElementById('p-id').value='';
-  ['p-nombre','p-stock','p-stock-min','p-proveedor-otro','p-costo','p-notas'].forEach(f=>document.getElementById(f).value='');
+  ['p-nombre','p-stock','p-stock-min','p-proveedor-otro','p-modelo-otro','p-talla-otro','p-color-otro','p-costo','p-notas'].forEach(f=>document.getElementById(f).value='');
   document.getElementById('p-imagen-preview').style.display='none';
   document.getElementById('p-tipo').value='Playera';
   document.getElementById('p-genero').value='Hombre';
   document.getElementById('p-categoria').value='';
-  // Llenar el select de Proveedor/Marca con la MISMA lista que usa Ventas (ITEM_MARCAS)
+  // Llenar el select de Proveedor/Marca con ITEM_MARCAS + cualquier marca que
+  // ya esté en el catálogo (por si se creó una que no estaba en la lista base)
+  const marcasTodas=[...new Set([...ITEM_MARCAS.filter(m=>m!=='Otro'), ...catalogoMarcas.map(c=>c.marca)])].sort();
   const selProv=document.getElementById('p-proveedor');
-  selProv.innerHTML='<option value="">— Proveedor / Marca —</option>'+ITEM_MARCAS.map(m=>`<option value="${m}">${m}</option>`).join('');
+  selProv.innerHTML='<option value="">— Proveedor / Marca —</option>'+marcasTodas.map(m=>`<option value="${m}">${m}</option>`).join('')+'<option value="Otro">Otro</option>';
   document.getElementById('p-proveedor-otro-wrap').style.display='none';
+  document.getElementById('p-modelo-otro-wrap').style.display='none';
+  refrescarModelosDeMarca('p');
   actualizarTallasPlayera();
   if(id){
     const p=playeras.find(x=>x.id===id);
@@ -5598,14 +5948,8 @@ window.openPlayeraModal=function(id){
       document.getElementById('p-nombre').value=p.nombre||'';
       document.getElementById('p-tipo').value=p.tipo||'Playera';
       document.getElementById('p-genero').value=p.genero||'Hombre';
-      actualizarTallasPlayera();
-      document.getElementById('p-categoria').value=p.categoria||'';
-      document.getElementById('p-talla').value=p.talla||'';
-      document.getElementById('p-color').value=p.color||'';
-      document.getElementById('p-stock').value=p.stock||0;
-      document.getElementById('p-stock-min').value=p.stockMin||0;
       // El proveedor guardado puede ser uno de la lista o uno personalizado ("Otro")
-      if(p.proveedor && ITEM_MARCAS.includes(p.proveedor)){
+      if(p.proveedor && marcasTodas.includes(p.proveedor)){
         selProv.value=p.proveedor;
         document.getElementById('p-proveedor-otro-wrap').style.display='none';
       } else if(p.proveedor){
@@ -5613,9 +5957,43 @@ window.openPlayeraModal=function(id){
         document.getElementById('p-proveedor-otro-wrap').style.display='';
         document.getElementById('p-proveedor-otro').value=p.proveedor;
       }
+      refrescarModelosDeMarca('p');
+      // El modelo guardado puede ser uno de los del catálogo o uno personalizado
+      const selModelo=document.getElementById('p-modelo');
+      if(p.modelo && [...selModelo.options].some(o=>o.value===p.modelo)){
+        selModelo.value=p.modelo;
+        document.getElementById('p-modelo-otro-wrap').style.display='none';
+      } else if(p.modelo){
+        selModelo.value='Otro';
+        document.getElementById('p-modelo-otro-wrap').style.display='';
+        document.getElementById('p-modelo-otro').value=p.modelo;
+      }
+      actualizarTallasPlayera();
+      document.getElementById('p-categoria').value=p.categoria||'';
+      // Talla y color: si el valor guardado no está en las opciones (catálogo
+      // configurado después con otras tallas/colores), se cae a "Otro"
+      const selTalla=document.getElementById('p-talla');
+      if([...selTalla.options].some(o=>o.value===p.talla)){
+        selTalla.value=p.talla||'';
+      } else if(p.talla){
+        selTalla.value='Otro';
+        document.getElementById('p-talla-otro-wrap').style.display='';
+        document.getElementById('p-talla-otro').value=p.talla;
+      }
+      const selColor=document.getElementById('p-color');
+      if([...selColor.options].some(o=>o.value===p.color)){
+        selColor.value=p.color||'';
+      } else if(p.color){
+        selColor.value='Otro';
+        document.getElementById('p-color-otro-wrap').style.display='';
+        document.getElementById('p-color-otro').value=p.color;
+      }
+      document.getElementById('p-stock').value=p.stock||0;
+      document.getElementById('p-stock-min').value=p.stockMin||0;
       document.getElementById('p-costo').value=p.costo||0;
       document.getElementById('p-notas').value=p.notas||'';
       if(p.imagen){const img=document.getElementById('p-imagen-preview');img.src=p.imagen;img.style.display='block';}
+      actualizarPrecioSugeridoPlayera();
     }
   }
   openModal('modal-playera');
@@ -5653,8 +6031,14 @@ window.guardarPlayera=async function(){
   }
   const provSel=document.getElementById('p-proveedor').value;
   const proveedorFinal=provSel==='Otro'?document.getElementById('p-proveedor-otro').value.trim():provSel;
+  const modeloSel=document.getElementById('p-modelo').value;
+  const modeloFinal=modeloSel==='Otro'?document.getElementById('p-modelo-otro').value.trim():modeloSel;
+  const tallaSel=document.getElementById('p-talla').value;
+  const tallaFinal=tallaSel==='Otro'?document.getElementById('p-talla-otro').value.trim():tallaSel;
+  const colorSel=document.getElementById('p-color').value;
+  const colorFinal=colorSel==='Otro'?document.getElementById('p-color-otro').value.trim():colorSel;
   const existentePrev=playeras.find(x=>x.id===id);
-  const data={id,nombre,tipo:document.getElementById('p-tipo').value,genero:document.getElementById('p-genero').value,categoria:document.getElementById('p-categoria').value,talla:document.getElementById('p-talla').value,color:document.getElementById('p-color').value,stock:+document.getElementById('p-stock').value||0,stockMin:+document.getElementById('p-stock-min').value||0,proveedor:proveedorFinal,costo:+document.getElementById('p-costo').value||0,notas:document.getElementById('p-notas').value,imagen:imagenUrl,creado:existentePrev?.creado||new Date().toISOString()};
+  const data={id,nombre,tipo:document.getElementById('p-tipo').value,genero:document.getElementById('p-genero').value,categoria:document.getElementById('p-categoria').value,talla:tallaFinal,color:colorFinal,stock:+document.getElementById('p-stock').value||0,stockMin:+document.getElementById('p-stock-min').value||0,proveedor:proveedorFinal,modelo:modeloFinal,costo:+document.getElementById('p-costo').value||0,notas:document.getElementById('p-notas').value,imagen:imagenUrl,creado:existentePrev?.creado||new Date().toISOString()};
   await setDoc(doc(db,'pl_playeras',id),data);
   closeModal('modal-playera');
   toast('✅ Playera guardada');
@@ -5666,14 +6050,61 @@ window.renderPlayeras=function renderPlayeras(){
   const color=(document.getElementById('filter-color-p')||{value:''}).value;
   const genero=(document.getElementById('filter-genero-p')||{value:''}).value;
   const catFiltro=(document.getElementById('filter-categoria-p')||{value:''}).value;
+  const provFiltro=(document.getElementById('filter-proveedor-p')||{value:''}).value;
+  const modeloFiltro=(document.getElementById('filter-modelo-p')||{value:''}).value;
+
+  // Refrescar las opciones de los filtros de proveedor y modelo con los que
+  // realmente hay en inventario (sin perder el que esté seleccionado)
+  const selProvFiltro=document.getElementById('filter-proveedor-p');
+  if(selProvFiltro){
+    const proveedoresEnInventario=[...new Set(playeras.map(p=>p.proveedor).filter(Boolean))].sort();
+    const actual=selProvFiltro.value;
+    selProvFiltro.innerHTML='<option value="">Todos los proveedores</option>'+proveedoresEnInventario.map(p=>`<option${p===actual?' selected':''}>${p}</option>`).join('');
+  }
+  const selModeloFiltro=document.getElementById('filter-modelo-p');
+  if(selModeloFiltro){
+    const modelosEnInventario=[...new Set(playeras.map(p=>p.modelo).filter(Boolean))].sort();
+    const actualM=selModeloFiltro.value;
+    selModeloFiltro.innerHTML='<option value="">Todos los modelos</option>'+modelosEnInventario.map(m=>`<option${m===actualM?' selected':''}>${m}</option>`).join('');
+  }
+
   let lista=playeras.filter(p=>{
-    const ms=!search||p.nombre?.toLowerCase().includes(search)||p.color?.toLowerCase().includes(search)||p.talla?.toLowerCase().includes(search)||p.proveedor?.toLowerCase().includes(search)||p.genero?.toLowerCase().includes(search)||(p.categoria||'').toLowerCase().includes(search);
+    const ms=!search||p.nombre?.toLowerCase().includes(search)||p.color?.toLowerCase().includes(search)||p.talla?.toLowerCase().includes(search)||p.proveedor?.toLowerCase().includes(search)||p.genero?.toLowerCase().includes(search)||(p.modelo||'').toLowerCase().includes(search)||(p.categoria||'').toLowerCase().includes(search);
     const mt=!talla||p.talla===talla;
     const mc=!color||p.color===color;
     const mg=!genero||p.genero===genero;
     const mcat=!catFiltro||p.categoria===catFiltro;
-    return ms&&mt&&mc&&mg&&mcat;
+    const mprov=!provFiltro||p.proveedor===provFiltro;
+    const mmod=!modeloFiltro||p.modelo===modeloFiltro;
+    return ms&&mt&&mc&&mg&&mcat&&mprov&&mmod;
   });
+
+  // Resumen: total en dinero del inventario (según los filtros activos) y
+  // desglose de piezas/valor por proveedor — se recalcula con cada filtro.
+  const resumenEl=document.getElementById('playeras-resumen');
+  if(resumenEl){
+    const totalPiezas=lista.reduce((s,p)=>s+(+p.stock||0),0);
+    const totalValor=lista.reduce((s,p)=>s+(+p.stock||0)*(+p.costo||0),0);
+    const porProveedor={};
+    lista.forEach(p=>{
+      const prov=p.proveedor||'Sin proveedor';
+      if(!porProveedor[prov]) porProveedor[prov]={piezas:0,valor:0};
+      porProveedor[prov].piezas+=+p.stock||0;
+      porProveedor[prov].valor+=(+p.stock||0)*(+p.costo||0);
+    });
+    const filasProveedor=Object.entries(porProveedor).sort((a,b)=>b[1].valor-a[1].valor);
+    resumenEl.innerHTML=`
+      <div style="display:flex;flex-wrap:wrap;gap:24px;margin-bottom:${filasProveedor.length?'14px':'0'};">
+        <div><div style="font-size:11px;color:var(--ink-soft);text-transform:uppercase;font-weight:600;">Piezas (con estos filtros)</div><div style="font-size:22px;font-weight:700;">${totalPiezas}</div></div>
+        <div><div style="font-size:11px;color:var(--ink-soft);text-transform:uppercase;font-weight:600;">Valor del inventario</div><div style="font-size:22px;font-weight:700;color:var(--green);">${isAdmin?fmtMoney(totalValor):'—'}</div></div>
+      </div>
+      ${filasProveedor.length?`<div style="display:flex;flex-wrap:wrap;gap:8px;">${filasProveedor.map(([prov,d])=>
+        `<div style="background:var(--bg);border-radius:8px;padding:8px 12px;font-size:12px;">
+          <strong>${prov}</strong> — ${d.piezas} pzas ${isAdmin?'· '+fmtMoney(d.valor):''}
+        </div>`).join('')}</div>`:''}
+    `;
+  }
+
   const grid=document.getElementById('playeras-grid');
   const empty=document.getElementById('playeras-empty');
   if(!grid)return;
@@ -5688,7 +6119,7 @@ window.renderPlayeras=function renderPlayeras(){
       <div style="font-weight:600;font-size:14px;margin-bottom:4px;">${p.nombre}</div>
       <div style="font-size:12px;color:var(--ink-soft);margin-bottom:4px;">${p.tipo&&p.tipo!=='Playera'?p.tipo+' · ':''}${p.genero||''} · ${p.talla} · ${p.color}</div>
       ${p.categoria?`<div style="margin-bottom:6px;"><span class="badge badge-blue" style="font-size:10px;">${p.categoria}</span></div>`:''}
-      <div style="font-size:11px;color:var(--ink-soft);margin-bottom:8px;">${p.proveedor||''}</div>
+      <div style="font-size:11px;color:var(--ink-soft);margin-bottom:8px;">${p.proveedor||''}${p.modelo?' · '+p.modelo:''}</div>
       <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;">
         <span class="badge ${stockOk?'badge-green':'badge-red'}">Stock: ${p.stock}</span>
         <span style="font-size:12px;color:var(--ink-soft);">Min: ${p.stockMin}</span>
@@ -5709,18 +6140,74 @@ window.eliminarPlayera=async function(id){
 };
 
 // ═══ COMPRA DE PLAYERAS EN BLANCO (suma stock automático al registrar la compra/factura) ═══
+// Si la marca elegida tiene catálogo, tallas y colores salen de ahí; si no,
+// se usan las listas genéricas de siempre. Siempre se agrega "Otro" al final.
 window.actualizarTallasCompraPlayera=function(){
   const genero=document.getElementById('cp-genero').value;
   const tipo=document.getElementById('cp-tipo').value;
+  const marca=document.getElementById('cp-proveedor').value==='Otro'?document.getElementById('cp-proveedor-otro').value.trim():document.getElementById('cp-proveedor').value;
+  const cat=catalogoDeMarca(marca);
+  const modelo=modeloDeCatalogo(cat, modeloSeleccionadoEnFormulario('cp'));
+
   const selTalla=document.getElementById('cp-talla');
   const tallaActual=selTalla.value;
-  const tallas=tipo==='Pañalero'?TALLAS_PAÑALERO:(TALLAS_POR_GENERO_VENTA[genero]||[]);
-  selTalla.innerHTML=tallas.map(t=>`<option${t===tallaActual?' selected':''}>${t}</option>`).join('');
+  let tallas;
+  if(modelo && modelo.tallasPorGenero && modelo.tallasPorGenero[genero]?.length){
+    tallas=modelo.tallasPorGenero[genero].map(t=>t.talla);
+  } else {
+    tallas=tipo==='Pañalero'?TALLAS_PAÑALERO:(TALLAS_POR_GENERO_VENTA[genero]||[]);
+  }
+  selTalla.innerHTML=tallas.map(t=>`<option${t===tallaActual?' selected':''}>${t}</option>`).join('')+'<option value="Otro">Otro</option>';
+  document.getElementById('cp-talla-otro-wrap').style.display=tallaActual==='Otro'?'':'none';
+
   const selColor=document.getElementById('cp-color');
   const colorActual=selColor.value;
-  const colores=coloresParaGenero(genero);
+  const colores=(modelo && modelo.colores?.length)?modelo.colores:coloresParaGenero(genero);
   selColor.innerHTML=colores.map(c=>`<option${c===colorActual?' selected':''}>${c}</option>`).join('');
+  if(!colores.includes('Otro')) selColor.innerHTML+='<option value="Otro">Otro</option>';
+  document.getElementById('cp-color-otro-wrap').style.display=colorActual==='Otro'?'':'none';
+
   actualizarPreviewCompraPlayeraExistente();
+  actualizarPrecioSugeridoCompraPlayera();
+};
+
+window.onCambioMarcaCompraPlayera=function(){
+  const sel=document.getElementById('cp-proveedor').value;
+  document.getElementById('cp-proveedor-otro-wrap').style.display=sel==='Otro'?'':'none';
+  refrescarModelosDeMarca('cp');
+  actualizarTallasCompraPlayera();
+};
+
+window.onCambioModeloCompraPlayera=function(){
+  const sel=document.getElementById('cp-modelo').value;
+  document.getElementById('cp-modelo-otro-wrap').style.display=sel==='Otro'?'':'none';
+  actualizarTallasCompraPlayera();
+};
+
+window.onCambioTallaCompraPlayera=function(){
+  const sel=document.getElementById('cp-talla').value;
+  document.getElementById('cp-talla-otro-wrap').style.display=sel==='Otro'?'':'none';
+  actualizarPreviewCompraPlayeraExistente();
+  actualizarPrecioSugeridoCompraPlayera();
+};
+
+// Si hay precio de catálogo para marca+modelo+género+talla, sugiere el total
+// de la compra (precio × cantidad) — solo como ayuda, no pisa lo escrito.
+window.actualizarPrecioSugeridoCompraPlayera=function(){
+  const hint=document.getElementById('cp-costo-hint');
+  if(!hint) return;
+  const genero=document.getElementById('cp-genero').value;
+  const talla=document.getElementById('cp-talla').value;
+  const marca=document.getElementById('cp-proveedor').value==='Otro'?document.getElementById('cp-proveedor-otro').value.trim():document.getElementById('cp-proveedor').value;
+  const cat=catalogoDeMarca(marca);
+  const modelo=modeloDeCatalogo(cat, modeloSeleccionadoEnFormulario('cp'));
+  const fila=modelo?.tallasPorGenero?.[genero]?.find(t=>t.talla===talla);
+  const cant=+document.getElementById('cp-cantidad').value||1;
+  if(fila && +fila.precio>0){
+    hint.innerHTML=`💡 Precio de catálogo: ${fmtMoney(fila.precio)} c/u — total sugerido <strong>${fmtMoney(fila.precio*cant)}</strong> — <a href="#" onclick="document.getElementById('cp-costo-total').value=${(fila.precio*cant).toFixed(2)};calcCompraPlayeraTotal();return false;" style="color:var(--accent);">usar este total</a>`;
+  } else {
+    hint.textContent='';
+  }
 };
 
 // Muestra si ya existe ese producto en inventario (y con cuánto stock/costo actual)
@@ -5744,12 +6231,16 @@ window.actualizarPreviewCompraPlayeraExistente=function(){
 function leerFormularioCompraPlayera(incluirCantidad){
   const provSel=document.getElementById('cp-proveedor').value;
   const marca=provSel==='Otro'?document.getElementById('cp-proveedor-otro').value.trim():provSel;
+  const modeloSel=document.getElementById('cp-modelo').value;
+  const modelo=modeloSel==='Otro'?document.getElementById('cp-modelo-otro').value.trim():modeloSel;
+  const tallaSel=document.getElementById('cp-talla').value;
+  const talla=tallaSel==='Otro'?document.getElementById('cp-talla-otro').value.trim():tallaSel;
+  const colorSel=document.getElementById('cp-color').value;
+  const color=colorSel==='Otro'?document.getElementById('cp-color-otro').value.trim():colorSel;
   const c={
     tipo:document.getElementById('cp-tipo').value,
     genero:document.getElementById('cp-genero').value,
-    talla:document.getElementById('cp-talla').value,
-    color:document.getElementById('cp-color').value,
-    marca
+    talla, color, marca, modelo
   };
   if(incluirCantidad) c.cantidad=+document.getElementById('cp-cantidad').value||0;
   return c;
@@ -5765,10 +6256,18 @@ window.openCompraPlayeraModal=function(){
   document.getElementById('cp-referencia').value='';
   document.getElementById('cp-notas').value='';
   document.getElementById('cp-registrar-gasto').checked=true;
+  document.getElementById('cp-talla-otro').value='';
+  document.getElementById('cp-color-otro').value='';
+  document.getElementById('cp-modelo-otro').value='';
+  document.getElementById('cp-talla-otro-wrap').style.display='none';
+  document.getElementById('cp-color-otro-wrap').style.display='none';
+  document.getElementById('cp-modelo-otro-wrap').style.display='none';
+  const marcasTodas=[...new Set([...ITEM_MARCAS.filter(m=>m!=='Otro'), ...catalogoMarcas.map(c=>c.marca)])].sort();
   const selProv=document.getElementById('cp-proveedor');
-  selProv.innerHTML='<option value="">— Proveedor / Marca —</option>'+ITEM_MARCAS.map(m=>`<option value="${m}">${m}</option>`).join('');
+  selProv.innerHTML='<option value="">— Proveedor / Marca —</option>'+marcasTodas.map(m=>`<option value="${m}">${m}</option>`).join('')+'<option value="Otro">Otro</option>';
   document.getElementById('cp-proveedor-otro').value='';
   document.getElementById('cp-proveedor-otro-wrap').style.display='none';
+  refrescarModelosDeMarca('cp');
   actualizarTallasCompraPlayera();
   openModal('modal-compra-playera');
 };
@@ -5778,6 +6277,7 @@ window.calcCompraPlayeraTotal=function(){
   const costoTotal=+document.getElementById('cp-costo-total').value||0;
   const costoUnidad=cant>0?costoTotal/cant:0;
   document.getElementById('cp-costo-unidad').value=costoUnidad>0?fmtMoney(costoUnidad):'';
+  if(typeof actualizarPrecioSugeridoCompraPlayera==='function') actualizarPrecioSugeridoCompraPlayera();
 };
 
 async function crearGastoDesdeCompraPlayera(compra){
@@ -5798,20 +6298,12 @@ async function crearGastoDesdeCompraPlayera(compra){
   });
 }
 
-window.guardarCompraPlayera=async function(){
-  const cant=+document.getElementById('cp-cantidad').value||0;
-  const costoTotal=+document.getElementById('cp-costo-total').value||0;
-  if(cant<=0||costoTotal<=0){toast('⚠️ Cantidad y costo total son obligatorios');return;}
-  const c=leerFormularioCompraPlayera(true);
-  if(!c.talla||!c.color){toast('⚠️ Talla y color son obligatorios');return;}
-  const fecha=document.getElementById('cp-fecha').value||hoy();
-  const referencia=document.getElementById('cp-referencia').value;
-  const notas=document.getElementById('cp-notas').value;
-  const costoUnitNuevo=cant>0?costoTotal/cant:0;
-
-  // 1) Sumar al inventario de Playeras — busca coincidencia exacta (tipo/género/talla/color/marca);
-  // si existe, suma el stock y recalcula el costo unitario como promedio ponderado.
-  // Si no existe, crea un producto nuevo con este stock y este costo.
+// Aplica UNA línea de compra (una combinación tipo/género/talla/color/marca)
+// al inventario de Playeras: suma stock a lo existente (recalculando costo
+// promedio ponderado) o crea el producto si no existía, y deja un registro
+// en pl_compras_playeras para trazabilidad. La usan tanto "Registrar compra"
+// (una sola línea) como "Importar factura" (muchas líneas de golpe).
+async function aplicarLineaCompraPlayera(c, cant, costoUnitNuevo, fecha, referencia, notas){
   const existente=buscarPlayeraStock(c);
   if(existente){
     const stockPrev=+existente.stock||0;
@@ -5823,24 +6315,36 @@ window.guardarCompraPlayera=async function(){
     const nuevoId=uid();
     await setDoc(doc(db,'pl_playeras',nuevoId),{
       id:nuevoId,
-      nombre:`${c.tipo} ${c.genero} ${c.talla} ${c.color}${c.marca?' ['+c.marca+']':''}`,
+      nombre:`${c.modelo?c.modelo+' ':''}${c.tipo} ${c.genero} ${c.talla} ${c.color}${c.marca?' ['+c.marca+']':''}`,
       tipo:c.tipo,genero:c.genero,talla:c.talla,color:c.color,
-      categoria:'',stock:cant,stockMin:0,proveedor:c.marca,costo:+costoUnitNuevo.toFixed(2),
+      categoria:'',stock:cant,stockMin:0,proveedor:c.marca,modelo:c.modelo||'',costo:+costoUnitNuevo.toFixed(2),
       notas:'',imagen:'',creado:new Date().toISOString()
     });
   }
-
-  // 2) Registrar la compra para historial/trazabilidad
   const compraId=uid();
   const compraData={
     id:compraId,origen:'playera',fecha,
-    tipo:c.tipo,genero:c.genero,talla:c.talla,color:c.color,marca:c.marca,
-    cantidad:cant,costoTotal,costoUnidad:costoUnitNuevo,
+    tipo:c.tipo,genero:c.genero,talla:c.talla,color:c.color,marca:c.marca,modelo:c.modelo||'',
+    cantidad:cant,costoTotal:+(cant*costoUnitNuevo).toFixed(2),costoUnidad:costoUnitNuevo,
     referencia,notas,creado:new Date().toISOString()
   };
   await setDoc(doc(db,'pl_compras_playeras',compraId),compraData);
+  return compraData;
+}
 
-  // 3) Registrar como gasto si está marcado, para que salga en reportes/flujo de caja
+window.guardarCompraPlayera=async function(){
+  const cant=+document.getElementById('cp-cantidad').value||0;
+  const costoTotal=+document.getElementById('cp-costo-total').value||0;
+  if(cant<=0||costoTotal<=0){toast('⚠️ Cantidad y costo total son obligatorios');return;}
+  const c=leerFormularioCompraPlayera(true);
+  if(!c.talla||!c.color){toast('⚠️ Talla y color son obligatorios');return;}
+  const fecha=document.getElementById('cp-fecha').value||hoy();
+  const referencia=document.getElementById('cp-referencia').value;
+  const notas=document.getElementById('cp-notas').value;
+  const costoUnitNuevo=cant>0?costoTotal/cant:0;
+
+  const compraData=await aplicarLineaCompraPlayera(c, cant, costoUnitNuevo, fecha, referencia, notas);
+
   if(document.getElementById('cp-registrar-gasto').checked){
     await crearGastoDesdeCompraPlayera(compraData);
   }
@@ -5848,6 +6352,156 @@ window.guardarCompraPlayera=async function(){
   closeModal('modal-compra-playera');
   toast(`✅ Compra registrada — se sumaron ${cant} pzas al stock`);
 };
+
+// ═══ IMPORTAR FACTURA DE PLAYERAS DESDE EXCEL (varias líneas de golpe) ═══
+// Formato esperado (encabezados flexibles, sin distinguir mayúsculas):
+// Proveedor | Tipo | Genero | Talla | Color | Cantidad | PrecioUnitario
+window.descargarPlantillaFacturaPlayeras=function(){
+  const wb=XLSX.utils.book_new();
+  const ws=XLSX.utils.aoa_to_sheet([
+    ['Proveedor','Modelo','Tipo','Genero','Talla','Color','Cantidad','PrecioUnitario'],
+    ['Yazbek','C0300','Playera','Hombre','M','Negro',12,44.08],
+    ['Yazbek','N0300','Playera','Hombre','L','Blanco',12,44.08],
+  ]);
+  XLSX.utils.book_append_sheet(wb,ws,'Factura');
+  XLSX.writeFile(wb,'plantilla_factura_playeras.xlsx');
+};
+
+let _facturaPlayerasFilas=[];
+
+window.importarFacturaPlayeras=async function(file){
+  if(!file) return;
+  document.getElementById('if-fecha').value=hoy();
+  document.getElementById('if-referencia').value='';
+  document.getElementById('if-registrar-gasto').checked=true;
+  try{
+    const buf=await file.arrayBuffer();
+    const wb=XLSX.read(buf,{type:'array'});
+    const ws=wb.Sheets[wb.SheetNames[0]];
+    const filasCrudas=XLSX.utils.sheet_to_json(ws,{defval:''});
+    if(filasCrudas.length===0){
+      toast('⚠️ El archivo no tiene filas — revisa que uses la plantilla');
+      document.getElementById('input-importar-factura-playera').value='';
+      return;
+    }
+    // Encabezados flexibles: busca la columna que corresponda sin importar
+    // mayúsculas/acentos/espacios (Proveedor, Marca, Género, Genero, etc.)
+    const norm=s=>(s||'').toString().trim().toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'');
+    const buscarCampo=(fila,posibles)=>{
+      const claves=Object.keys(fila);
+      for(const p of posibles){
+        const k=claves.find(k2=>norm(k2)===norm(p));
+        if(k!==undefined) return fila[k];
+      }
+      return '';
+    };
+    _facturaPlayerasFilas=filasCrudas.map((f,i)=>{
+      const proveedor=String(buscarCampo(f,['Proveedor','Marca'])||'').trim();
+      const modelo=String(buscarCampo(f,['Modelo','Estilo'])||'').trim();
+      const tipo=String(buscarCampo(f,['Tipo','TipoPrenda','Tipo de prenda'])||'Playera').trim()||'Playera';
+      const genero=String(buscarCampo(f,['Genero','Género'])||'').trim();
+      const talla=String(buscarCampo(f,['Talla'])||'').trim();
+      const color=String(buscarCampo(f,['Color'])||'').trim();
+      const cantidad=+buscarCampo(f,['Cantidad','Cant','Piezas'])||0;
+      let precioUnitario=+buscarCampo(f,['PrecioUnitario','Precio Unitario','Precio','Costo','CostoUnitario'])||0;
+      // Si no viene precio en el archivo, intenta tomarlo del catálogo (marca+modelo)
+      if(!precioUnitario){
+        const cat=catalogoDeMarca(proveedor);
+        const mod=modeloDeCatalogo(cat, modelo);
+        const filaCat=mod?.tallasPorGenero?.[genero]?.find(t=>t.talla===talla);
+        if(filaCat) precioUnitario=+filaCat.precio||0;
+      }
+      const errores=[];
+      if(!genero) errores.push('sin género');
+      if(!talla) errores.push('sin talla');
+      if(!color) errores.push('sin color');
+      if(!cantidad||cantidad<=0) errores.push('cantidad inválida');
+      if(!precioUnitario||precioUnitario<=0) errores.push('sin precio (ni en archivo ni en catálogo)');
+      const existente=(errores.length===0)?buscarPlayeraStock({tipo,genero,talla,color,marca:proveedor,modelo}):null;
+      return {fila:i+2, proveedor,modelo,tipo,genero,talla,color,cantidad,precioUnitario,errores,existente,incluir:errores.length===0};
+    });
+  }catch(err){
+    console.error('Error leyendo factura de playeras:', err);
+    toast('⚠️ No se pudo leer el archivo — revisa que sea un Excel válido con la plantilla');
+    document.getElementById('input-importar-factura-playera').value='';
+    return;
+  }
+  document.getElementById('input-importar-factura-playera').value='';
+  renderPreviewFacturaPlayeras();
+  openModal('modal-importar-factura-playera');
+};
+
+function renderPreviewFacturaPlayeras(){
+  const filas=_facturaPlayerasFilas;
+  const validas=filas.filter(f=>f.incluir);
+  const totalPiezas=validas.reduce((s,f)=>s+f.cantidad,0);
+  const totalDinero=validas.reduce((s,f)=>s+f.cantidad*f.precioUnitario,0);
+  const conError=filas.length-validas.length;
+
+  document.getElementById('if-resumen').innerHTML=`
+    <div style="display:flex;gap:24px;flex-wrap:wrap;background:var(--bg);border-radius:8px;padding:12px 16px;">
+      <div><div style="font-size:11px;color:var(--ink-soft);">Líneas a importar</div><strong>${validas.length} de ${filas.length}</strong></div>
+      <div><div style="font-size:11px;color:var(--ink-soft);">Piezas totales</div><strong>${totalPiezas}</strong></div>
+      <div><div style="font-size:11px;color:var(--ink-soft);">Total de la factura</div><strong style="color:var(--green);">${fmtMoney(totalDinero)}</strong></div>
+      ${conError?`<div><div style="font-size:11px;color:var(--red);">Con errores (se van a omitir)</div><strong style="color:var(--red);">${conError}</strong></div>`:''}
+    </div>`;
+
+  document.getElementById('if-preview').innerHTML=`<div class="table-wrap"><table><thead><tr>
+    <th></th><th>Fila</th><th>Proveedor</th><th>Modelo</th><th>Tipo</th><th>Género</th><th>Talla</th><th>Color</th><th>Cant.</th><th>Precio</th><th>Subtotal</th><th>Estado</th>
+  </tr></thead><tbody>`+
+    filas.map((f,i)=>`<tr style="${f.incluir?'':'opacity:0.5;'}">
+      <td><input type="checkbox" ${f.incluir?'checked':''} ${f.errores.length?'disabled':''} onchange="_facturaPlayerasFilas[${i}].incluir=this.checked;renderPreviewFacturaPlayeras();"></td>
+      <td>${f.fila}</td>
+      <td>${f.proveedor||'—'}</td>
+      <td>${f.modelo||'—'}</td>
+      <td>${f.tipo}</td>
+      <td>${f.genero||'—'}</td>
+      <td>${f.talla||'—'}</td>
+      <td>${f.color||'—'}</td>
+      <td>${f.cantidad||'—'}</td>
+      <td>${f.precioUnitario?fmtMoney(f.precioUnitario):'—'}</td>
+      <td>${f.cantidad&&f.precioUnitario?fmtMoney(f.cantidad*f.precioUnitario):'—'}</td>
+      <td style="font-size:11px;">${f.errores.length?'⚠️ '+f.errores.join(', '):(f.existente?'✅ suma a existente':'🆕 producto nuevo')}</td>
+    </tr>`).join('')+
+    `</tbody></table></div>`;
+}
+
+window.confirmarImportarFacturaPlayeras=async function(){
+  const fecha=document.getElementById('if-fecha').value||hoy();
+  const referencia=document.getElementById('if-referencia').value;
+  const filas=_facturaPlayerasFilas.filter(f=>f.incluir);
+  if(filas.length===0){toast('⚠️ No hay líneas válidas para importar');return;}
+  const btn=document.getElementById('if-btn-confirmar');
+  btn.disabled=true; btn.textContent='⏳ Importando...';
+  let totalImportado=0;
+  try{
+    for(const f of filas){
+      const c={tipo:f.tipo,genero:f.genero,talla:f.talla,color:f.color,marca:f.proveedor,modelo:f.modelo};
+      await aplicarLineaCompraPlayera(c, f.cantidad, f.precioUnitario, fecha, referencia, 'Importado desde factura Excel');
+      totalImportado+=f.cantidad*f.precioUnitario;
+    }
+    if(document.getElementById('if-registrar-gasto').checked){
+      const gastoId='facturaplayeras_'+uid();
+      const proveedores=[...new Set(filas.map(f=>f.proveedor).filter(Boolean))];
+      await setDoc(doc(db,'pl_gastos',gastoId),{
+        id:gastoId, origen:'compra-playera-factura', fecha,
+        concepto:`Factura de playeras: ${filas.length} línea(s), ${filas.reduce((s,f)=>s+f.cantidad,0)} pzas`,
+        categoria:'Playeras en blanco', tipo:'Variable',
+        proveedor:proveedores.join(', '), factura:referencia||'',
+        monto:+totalImportado.toFixed(2),
+        notas:'Generado automáticamente al importar factura de Playeras',
+        creado:new Date().toISOString()
+      });
+    }
+    closeModal('modal-importar-factura-playera');
+    toast(`✅ Factura importada — ${filas.length} línea(s), ${fmtMoney(totalImportado)}`);
+  }catch(err){
+    console.error('Error importando factura de playeras:', err);
+    toast('⚠️ Ocurrió un error importando la factura — revisa la consola');
+  }
+  btn.disabled=false; btn.textContent='💾 Confirmar e importar';
+};
+
 
 // ─── INSUMOS ───
 window.openInsumoModal=function(id){
@@ -6437,22 +7091,301 @@ function calcularRendimiento() {
   `;
 }
 
+// ─── CATÁLOGO DE MARCAS (tallas, colores y precio por marca+género) ───
+// Colección pl_catalogo_marcas: un documento por marca, con la lista de
+// colores que maneja y, por cada género, sus tallas con su precio. Cuando
+// hay catálogo configurado para la marca elegida, Playeras y Compras usan
+// esos datos (y llenan el precio solo); si no hay catálogo para esa marca,
+// se cae a las listas genéricas de siempre.
+let catalogoMarcas = [];
+onSnapshot(collection(db,'pl_catalogo_marcas'), s=>{
+  catalogoMarcas = s.docs.map(d=>d.data());
+});
+function catalogoDeMarca(marca){
+  if(!marca) return null;
+  const norm=s=>(s||'').toString().trim().toLowerCase();
+  return catalogoMarcas.find(c=>norm(c.marca)===norm(marca))||null;
+}
+function marcaSeleccionadaEnFormulario(prefijo){
+  const sel=document.getElementById(prefijo+'-proveedor').value;
+  if(sel==='Otro') return document.getElementById(prefijo+'-proveedor-otro')?.value?.trim()||'';
+  return sel;
+}
+
+// ─── ADMINISTRACIÓN DEL CATÁLOGO DE MARCAS (con nivel de Modelo/Estilo) ───
+// Estructura: pl_catalogo_marcas/{marcaId} = { id, marca, modelos:[
+//   { id, nombre, colores:[...], tallasPorGenero:{genero:[{talla,precio}]} }
+// ]}. Cada marca puede tener varios modelos (Yazbek → C0300, N0300...),
+// porque un mismo proveedor suele vender cortes distintos a precios distintos.
+const GENEROS_CATALOGO=['Hombre','Mujer','Niño / Niña','Juvenil','Bebé','Unisex'];
+let _marcaEnEdicion=null;      // {id, marca, modelos:[...]} — la marca completa que se está editando
+let _modeloActivoIndex=-1;     // índice dentro de _marcaEnEdicion.modelos del modelo que se está editando
+let _catalogoGeneroActivo='Hombre';
+
+function _slugMarca(m){
+  return (m||'').toString().trim().toLowerCase()
+    .normalize('NFD').replace(/[\u0300-\u036f]/g,'')
+    .replace(/[^a-z0-9]+/g,'_').replace(/^_+|_+$/g,'')||('marca_'+Date.now());
+}
+// Busca un modelo dentro de una marca por nombre (insensible a mayúsculas/espacios)
+function modeloDeCatalogo(cat, nombreModelo){
+  if(!cat||!nombreModelo) return null;
+  const norm=s=>(s||'').toString().trim().toLowerCase();
+  return (cat.modelos||[]).find(m=>norm(m.nombre)===norm(nombreModelo))||null;
+}
+
+window.abrirCatalogoMarcas=function(){
+  const marcasTodas=[...new Set([...ITEM_MARCAS.filter(m=>m!=='Otro'), ...catalogoMarcas.map(c=>c.marca)])].sort();
+  const sel=document.getElementById('cm-marca-select');
+  sel.innerHTML='<option value="">— Elige una marca —</option>'+marcasTodas.map(m=>`<option value="${m}">${m}${catalogoDeMarca(m)?' ✓':''}</option>`).join('');
+  document.getElementById('cm-marca-nueva').value='';
+  document.getElementById('cm-marca-detalle').style.display='none';
+  document.getElementById('cm-detalle').style.display='none';
+  _marcaEnEdicion=null; _modeloActivoIndex=-1;
+  openModal('modal-catalogo-marcas');
+};
+
+window.crearMarcaCatalogo=function(){
+  const nombre=document.getElementById('cm-marca-nueva').value.trim();
+  if(!nombre){toast('⚠️ Escribe el nombre de la marca');return;}
+  const sel=document.getElementById('cm-marca-select');
+  const yaExiste=[...sel.options].some(o=>o.value.toLowerCase()===nombre.toLowerCase());
+  if(!yaExiste){
+    const opt=document.createElement('option');
+    opt.value=nombre; opt.textContent=nombre;
+    sel.appendChild(opt);
+  }
+  sel.value=nombre;
+  document.getElementById('cm-marca-nueva').value='';
+  seleccionarMarcaCatalogo(nombre);
+};
+
+window.seleccionarMarcaCatalogo=function(marca){
+  document.getElementById('cm-marca-select').value=marca;
+  document.getElementById('cm-detalle').style.display='none';
+  _modeloActivoIndex=-1;
+  if(!marca){document.getElementById('cm-marca-detalle').style.display='none';_marcaEnEdicion=null;return;}
+  const existente=catalogoDeMarca(marca);
+  _marcaEnEdicion=existente
+    ? JSON.parse(JSON.stringify(existente))
+    : {id:_slugMarca(marca),marca,modelos:[]};
+  const selModelo=document.getElementById('cm-modelo-select');
+  selModelo.innerHTML='<option value="">— Elige un modelo —</option>'+(_marcaEnEdicion.modelos||[]).map(m=>`<option value="${m.nombre}">${m.nombre}</option>`).join('');
+  document.getElementById('cm-modelo-nuevo').value='';
+  document.getElementById('cm-marca-detalle').style.display='block';
+};
+
+window.crearModeloCatalogo=function(){
+  if(!_marcaEnEdicion){toast('⚠️ Elige o crea una marca primero');return;}
+  const nombre=document.getElementById('cm-modelo-nuevo').value.trim();
+  if(!nombre){toast('⚠️ Escribe el nombre del modelo (ej. C0300)');return;}
+  const yaExiste=modeloDeCatalogo(_marcaEnEdicion,nombre);
+  if(!yaExiste){
+    _marcaEnEdicion.modelos.push({id:_slugMarca(nombre),nombre,colores:[],tallasPorGenero:{}});
+    const selModelo=document.getElementById('cm-modelo-select');
+    const opt=document.createElement('option');
+    opt.value=nombre; opt.textContent=nombre;
+    selModelo.appendChild(opt);
+  }
+  document.getElementById('cm-modelo-select').value=nombre;
+  document.getElementById('cm-modelo-nuevo').value='';
+  seleccionarModeloCatalogo(nombre);
+};
+
+window.seleccionarModeloCatalogo=function(nombreModelo){
+  document.getElementById('cm-modelo-select').value=nombreModelo;
+  if(!nombreModelo){document.getElementById('cm-detalle').style.display='none';_modeloActivoIndex=-1;return;}
+  _modeloActivoIndex=_marcaEnEdicion.modelos.findIndex(m=>m.nombre===nombreModelo);
+  if(_modeloActivoIndex===-1){document.getElementById('cm-detalle').style.display='none';return;}
+  const modelo=_marcaEnEdicion.modelos[_modeloActivoIndex];
+  _catalogoGeneroActivo='Hombre';
+  document.getElementById('cm-colores').value=(modelo.colores||[]).join(', ');
+  previewColoresCatalogo();
+  renderGeneroTabsCatalogo();
+  document.getElementById('cm-detalle').style.display='block';
+};
+
+window.previewColoresCatalogo=function(){
+  const texto=document.getElementById('cm-colores').value;
+  const colores=texto.split(',').map(c=>c.trim()).filter(Boolean);
+  document.getElementById('cm-colores-preview').innerHTML=colores.map(c=>`<span class="badge badge-blue" style="font-size:11px;">${c}</span>`).join('');
+};
+
+function renderGeneroTabsCatalogo(){
+  const tabsEl=document.getElementById('cm-genero-tabs');
+  tabsEl.innerHTML=GENEROS_CATALOGO.map(g=>
+    `<button class="tab-btn ${g===_catalogoGeneroActivo?'active':''}" onclick="cambiarGeneroCatalogo('${g}')">${g}</button>`
+  ).join('');
+  renderTallasTablaCatalogo();
+}
+
+window.cambiarGeneroCatalogo=function(genero){
+  leerTallasTablaCatalogoDesdeDOM();
+  _catalogoGeneroActivo=genero;
+  renderGeneroTabsCatalogo();
+};
+
+function renderTallasTablaCatalogo(){
+  const modelo=_marcaEnEdicion.modelos[_modeloActivoIndex];
+  const filas=modelo.tallasPorGenero[_catalogoGeneroActivo]||[];
+  const cont=document.getElementById('cm-tallas-tabla');
+  if(filas.length===0){
+    cont.innerHTML='<div style="font-size:13px;color:var(--ink-soft);padding:10px 0;">Sin tallas configuradas para '+_catalogoGeneroActivo+' — agrega una abajo.</div>';
+    return;
+  }
+  cont.innerHTML=`<div class="table-wrap"><table><thead><tr><th>Talla</th><th>Precio ($)</th><th></th></tr></thead><tbody>`+
+    filas.map((f,i)=>`<tr>
+      <td><input type="text" class="cm-fila-talla" value="${f.talla||''}" style="width:100%;border:1px solid var(--border);border-radius:6px;padding:6px 8px;" data-i="${i}"></td>
+      <td><input type="number" class="cm-fila-precio" value="${f.precio||0}" step="0.01" style="width:100%;border:1px solid var(--border);border-radius:6px;padding:6px 8px;" data-i="${i}"></td>
+      <td><button class="btn btn-danger btn-sm" onclick="eliminarFilaTallaCatalogo(${i})">🗑</button></td>
+    </tr>`).join('')+
+    `</tbody></table></div>`;
+}
+
+function leerTallasTablaCatalogoDesdeDOM(){
+  if(_modeloActivoIndex===-1) return;
+  const tallaInputs=[...document.querySelectorAll('.cm-fila-talla')];
+  if(tallaInputs.length===0) return; // nada renderizado (género sin filas) — no hay que sobrescribir
+  const precioInputs=[...document.querySelectorAll('.cm-fila-precio')];
+  const filas=tallaInputs.map((inp,i)=>({talla:inp.value.trim(),precio:+precioInputs[i]?.value||0}));
+  _marcaEnEdicion.modelos[_modeloActivoIndex].tallasPorGenero[_catalogoGeneroActivo]=filas;
+}
+
+window.agregarFilaTallaCatalogo=function(){
+  leerTallasTablaCatalogoDesdeDOM();
+  const modelo=_marcaEnEdicion.modelos[_modeloActivoIndex];
+  if(!modelo.tallasPorGenero[_catalogoGeneroActivo]) modelo.tallasPorGenero[_catalogoGeneroActivo]=[];
+  modelo.tallasPorGenero[_catalogoGeneroActivo].push({talla:'',precio:0});
+  renderTallasTablaCatalogo();
+};
+
+window.eliminarFilaTallaCatalogo=function(i){
+  leerTallasTablaCatalogoDesdeDOM();
+  _marcaEnEdicion.modelos[_modeloActivoIndex].tallasPorGenero[_catalogoGeneroActivo].splice(i,1);
+  renderTallasTablaCatalogo();
+};
+
+window.guardarMarcaCatalogo=async function(){
+  if(!_marcaEnEdicion){toast('⚠️ Elige o crea una marca primero');return;}
+  if(_modeloActivoIndex===-1){toast('⚠️ Elige o crea un modelo primero');return;}
+  leerTallasTablaCatalogoDesdeDOM();
+  const colores=document.getElementById('cm-colores').value.split(',').map(c=>c.trim()).filter(Boolean);
+  _marcaEnEdicion.modelos[_modeloActivoIndex].colores=colores;
+  // Limpiar filas de talla vacías y géneros sin ninguna talla configurada, en TODOS los modelos
+  _marcaEnEdicion.modelos.forEach(m=>{
+    const tallasLimpio={};
+    Object.keys(m.tallasPorGenero||{}).forEach(g=>{
+      const filas=(m.tallasPorGenero[g]||[]).filter(f=>f.talla);
+      if(filas.length) tallasLimpio[g]=filas;
+    });
+    m.tallasPorGenero=tallasLimpio;
+  });
+  const data={id:_marcaEnEdicion.id,marca:_marcaEnEdicion.marca,modelos:_marcaEnEdicion.modelos,actualizado:new Date().toISOString()};
+  await setDoc(doc(db,'pl_catalogo_marcas',data.id),data);
+  toast(`✅ ${_marcaEnEdicion.modelos[_modeloActivoIndex].nombre} (${data.marca}) guardado`);
+  closeModal('modal-catalogo-marcas');
+};
+
+window.eliminarModeloCatalogo=async function(){
+  if(!_marcaEnEdicion||_modeloActivoIndex===-1) return;
+  const nombreModelo=_marcaEnEdicion.modelos[_modeloActivoIndex].nombre;
+  if(!confirm(`¿Quitar el modelo "${nombreModelo}" de ${_marcaEnEdicion.marca}? Las playeras que ya tengas capturadas con ese modelo NO se borran, solo dejarán de tener tallas/precio automáticos.`)) return;
+  _marcaEnEdicion.modelos.splice(_modeloActivoIndex,1);
+  const data={id:_marcaEnEdicion.id,marca:_marcaEnEdicion.marca,modelos:_marcaEnEdicion.modelos,actualizado:new Date().toISOString()};
+  await setDoc(doc(db,'pl_catalogo_marcas',data.id),data);
+  toast(`🗑 Modelo "${nombreModelo}" eliminado`);
+  seleccionarMarcaCatalogo(_marcaEnEdicion.marca);
+};
+
 // ─── TALLAS DINÁMICAS (Playeras) ───
-// IMPORTANTE: usamos las MISMAS listas que Ventas (TALLAS_POR_GENERO_VENTA,
-// TALLAS_PAÑALERO, COLORES_POR_GENERO_VENTA, definidas arriba) para que el
-// cruce automático de stock (género + talla + color + marca) encuentre
-// coincidencias exactas entre lo que se vende y lo que hay en inventario.
+// Si la marca elegida tiene un modelo configurado en el catálogo, tallas y
+// colores salen de ESE modelo (y de paso se puede autocompletar el precio).
+// Si la marca no tiene modelo elegido o no está configurada, se usan las
+// listas genéricas (TALLAS_POR_GENERO_VENTA / coloresParaGenero) para que
+// el cruce automático de stock con Ventas siga funcionando igual que antes.
+// En ambos casos siempre se agrega "Otro" al final con su campo de texto.
+function modeloSeleccionadoEnFormulario(prefijo){
+  const sel=document.getElementById(prefijo+'-modelo').value;
+  if(sel==='Otro') return document.getElementById(prefijo+'-modelo-otro')?.value?.trim()||'';
+  return sel;
+}
+// Llena el select de Modelo con los modelos configurados para la marca elegida
+function refrescarModelosDeMarca(prefijo){
+  const marca=marcaSeleccionadaEnFormulario(prefijo);
+  const cat=catalogoDeMarca(marca);
+  const selModelo=document.getElementById(prefijo+'-modelo');
+  const modeloActual=selModelo.value;
+  const modelos=(cat?.modelos||[]).map(m=>m.nombre);
+  selModelo.innerHTML='<option value="">— Sin modelo específico —</option>'+modelos.map(m=>`<option${m===modeloActual?' selected':''}>${m}</option>`).join('')+'<option value="Otro">Otro</option>';
+  document.getElementById(prefijo+'-modelo-otro-wrap').style.display=modeloActual==='Otro'?'':'none';
+}
+
 window.actualizarTallasPlayera = function() {
   const genero = document.getElementById('p-genero').value;
   const tipo = document.getElementById('p-tipo')?.value||'Playera';
+  const marca = marcaSeleccionadaEnFormulario('p');
+  const cat = catalogoDeMarca(marca);
+  const modelo = modeloDeCatalogo(cat, modeloSeleccionadoEnFormulario('p'));
+
   const selectTalla = document.getElementById('p-talla');
-  const tallas = tipo==='Pañalero' ? TALLAS_PAÑALERO : (TALLAS_POR_GENERO_VENTA[genero] || []);
-  selectTalla.innerHTML = tallas.map(t=>`<option>${t}</option>`).join('');
+  const tallaActual = selectTalla.value;
+  let tallas;
+  if(modelo && modelo.tallasPorGenero && modelo.tallasPorGenero[genero]?.length){
+    tallas = modelo.tallasPorGenero[genero].map(t=>t.talla);
+  } else {
+    tallas = tipo==='Pañalero' ? TALLAS_PAÑALERO : (TALLAS_POR_GENERO_VENTA[genero] || []);
+  }
+  selectTalla.innerHTML = tallas.map(t=>`<option${t===tallaActual?' selected':''}>${t}</option>`).join('') + '<option value="Otro">Otro</option>';
+  document.getElementById('p-talla-otro-wrap').style.display = tallaActual==='Otro'?'':'none';
+
   const selectColor = document.getElementById('p-color');
   if(selectColor){
     const colorActual = selectColor.value;
-    const colores = coloresParaGenero(genero);
+    const colores = (modelo && modelo.colores?.length) ? modelo.colores : coloresParaGenero(genero);
     selectColor.innerHTML = colores.map(c=>`<option${c===colorActual?' selected':''}>${c}</option>`).join('');
+    if(!colores.includes('Otro')) selectColor.innerHTML += '<option value="Otro">Otro</option>';
+    document.getElementById('p-color-otro-wrap').style.display = colorActual==='Otro'?'':'none';
+  }
+  actualizarPrecioSugeridoPlayera();
+};
+
+// Al cambiar la marca: refresca la lista de modelos disponibles y las
+// tallas/colores, y muestra/oculta el campo de texto de "Otro proveedor".
+window.onCambioMarcaPlayera=function(){
+  const sel=document.getElementById('p-proveedor').value;
+  document.getElementById('p-proveedor-otro-wrap').style.display = sel==='Otro'?'':'none';
+  refrescarModelosDeMarca('p');
+  actualizarTallasPlayera();
+};
+
+window.onCambioModeloPlayera=function(){
+  const sel=document.getElementById('p-modelo').value;
+  document.getElementById('p-modelo-otro-wrap').style.display = sel==='Otro'?'':'none';
+  actualizarTallasPlayera();
+};
+
+window.onCambioTallaPlayera=function(){
+  const sel=document.getElementById('p-talla').value;
+  document.getElementById('p-talla-otro-wrap').style.display = sel==='Otro'?'':'none';
+  actualizarPrecioSugeridoPlayera();
+};
+
+// Si la marca+modelo+género+talla elegidos tienen precio en el catálogo, lo
+// sugiere en el campo de costo (sin pisar un valor que ya haya escrito la
+// persona a mano — solo lo propone como ayuda, con un botón para aplicarlo).
+window.actualizarPrecioSugeridoPlayera=function(){
+  const genero=document.getElementById('p-genero').value;
+  const talla=document.getElementById('p-talla').value;
+  const marca=marcaSeleccionadaEnFormulario('p');
+  const cat=catalogoDeMarca(marca);
+  const modelo=modeloDeCatalogo(cat, modeloSeleccionadoEnFormulario('p'));
+  const hint=document.getElementById('p-costo-hint');
+  if(!hint) return;
+  const fila=modelo?.tallasPorGenero?.[genero]?.find(t=>t.talla===talla);
+  if(fila && +fila.precio>0){
+    hint.innerHTML=`💡 Precio de catálogo: <strong>${fmtMoney(fila.precio)}</strong> — <a href="#" onclick="document.getElementById('p-costo').value=${fila.precio};return false;" style="color:var(--accent);">usar este precio</a>`;
+  } else {
+    hint.textContent='';
   }
 };
 
@@ -7158,10 +8091,24 @@ window.renderProveedores=function renderProveedores(){
   const countEl=document.getElementById('prov-count');
   const totalEl=document.getElementById('prov-total-compras');
 
+  // Compras de un proveedor: suma las de Insumos (colección pl_compras) MÁS
+  // las de Playeras en blanco (colección pl_compras_playeras, campo "marca").
+  // Antes solo se contaban las de Insumos, así que a los proveedores de tela
+  // (Yazbek, Euro Cotton, etc.) siempre les salía $0 aunque ya tuvieran compras
+  // registradas desde "Registrar compra" o "Importar factura" en Playeras.
+  const comprasDeProveedor=nombre=>{
+    const norm=(nombre||'').toLowerCase();
+    const deInsumos=compras.filter(c=>(c.proveedor||'').toLowerCase()===norm)
+      .map(c=>({costoTotal:+c.costoTotal||0}));
+    const dePlayeras=(comprasPlayeras||[]).filter(c=>(c.marca||'').toLowerCase()===norm)
+      .map(c=>({costoTotal:+c.costoTotal||0}));
+    return [...deInsumos, ...dePlayeras];
+  };
+
   // Calcular total de compras por proveedor
   let totalComprasGlobal=0;
   lista.forEach(p=>{
-    const comprasProv=compras.filter(c=>(c.proveedor||'').toLowerCase()===p.nombre?.toLowerCase());
+    const comprasProv=comprasDeProveedor(p.nombre);
     totalComprasGlobal+=comprasProv.reduce((s,c)=>s+(+c.costoTotal||0),0);
   });
 
@@ -7177,7 +8124,7 @@ window.renderProveedores=function renderProveedores(){
   const estrellas=n=>('⭐').repeat(+n||0);
 
   tbody.innerHTML=lista.map(p=>{
-    const comprasProv=compras.filter(c=>(c.proveedor||'').toLowerCase()===p.nombre?.toLowerCase());
+    const comprasProv=comprasDeProveedor(p.nombre);
     const totalProv=comprasProv.reduce((s,c)=>s+(+c.costoTotal||0),0);
     return`<tr>
       <td>
@@ -7983,6 +8930,12 @@ ${url}
 // ─── COMPRAS DE INSUMOS ───
 let compras = [];
 onSnapshot(collection(db,'pl_compras'),s=>{compras=s.docs.map(d=>d.data());renderCompras();actualizarBadgeAlertas();});
+// Compras de Playeras en blanco (registradas desde "Registrar compra" o
+// "Importar factura" en Playeras) — colección aparte de pl_compras (insumos),
+// pero Proveedores necesita sumar ambas para que el total de cada proveedor
+// de tela salga correcto.
+let comprasPlayeras = [];
+onSnapshot(collection(db,'pl_compras_playeras'),s=>{comprasPlayeras=s.docs.map(d=>d.data());if(typeof renderProveedores==='function')renderProveedores();});
 
 window.openCompraModal=function(){
   // Llenar datalist de proveedores
