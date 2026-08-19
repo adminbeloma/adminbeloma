@@ -97,6 +97,7 @@
     <button class="tab-btn" data-tab="hoy">📋 Pedidos de hoy</button>
     <button class="tab-btn" data-tab="historico">🕘 Histórico</button>
     <button class="tab-btn" data-tab="reportes">📊 Reportes</button>
+    <button class="tab-btn" data-tab="inventario">📦 Inventario</button>
   </div>
   <div id="msgGlobal" class="msg"></div>
   <div class="panel activo" id="panel-captura">
@@ -291,6 +292,76 @@
       </div>
     </div>
   </div>
+  <div class="panel" id="panel-inventario">
+    <div class="card">
+      <h2>📦 Inventario de playeras ya impresas</h2>
+      <p style="font-size:.82rem;color:#777;margin:-6px 0 12px;">
+        Playeras que ya tienes listas con un diseño específico (no en blanco). Al capturar un pedido, si la talla y
+        descripción coinciden con algo de aquí, el sistema te va a preguntar si quieres descontarlo del inventario.
+      </p>
+      <div class="filtros" style="align-items:flex-end;">
+        <div>
+          <label>Subir Excel de inventario</label>
+          <input type="file" id="invArchivo" accept=".xlsx">
+        </div>
+        <div><button class="btn btn-primario" onclick="document.getElementById('invArchivo').files[0] && importarInventarioExcel(document.getElementById('invArchivo').files[0])">📥 Importar Excel</button></div>
+        <div><button class="btn btn-secundario" onclick="document.getElementById('invModalAgregar').classList.add('activo')">+ Agregar a mano</button></div>
+        <div><button class="btn btn-rojo" onclick="vaciarInventario()">🗑 Vaciar todo el inventario</button></div>
+      </div>
+      <div id="invStatus" style="display:none;margin-top:10px;padding:10px 14px;border-radius:8px;font-size:.85rem;font-weight:600;"></div>
+      <div class="filtros" style="margin-top:16px;">
+        <div style="flex:2;"><label>Buscar por descripción</label><input type="text" id="invBuscar" placeholder="Ej. AKIRA, GATO, NAVIDAD..." oninput="renderInventario()"></div>
+        <div>
+          <label>Género</label>
+          <select id="invFiltroGenero" onchange="renderInventario()">
+            <option value="">Todos</option>
+          </select>
+        </div>
+        <div>
+          <label>Talla</label>
+          <select id="invFiltroTalla" onchange="renderInventario()">
+            <option value="">Todas</option>
+          </select>
+        </div>
+      </div>
+      <div id="invResumen" class="resumen-dia"></div>
+      <div style="overflow-x:auto;margin-top:10px;">
+        <table class="items-tabla" style="width:100%;">
+          <thead><tr>
+            <th>Género</th><th>Talla</th><th>Color</th><th>Descripción</th><th>Categoría</th><th>Piezas</th><th></th>
+          </tr></thead>
+          <tbody id="invBody"></tbody>
+        </table>
+      </div>
+      <div id="invVacio" class="vacio" style="display:none;">No hay playeras en el inventario todavía — impórtalas desde el Excel de arriba.</div>
+    </div>
+  </div>
+</div>
+<div class="modal-overlay" id="invModalAgregar">
+  <div class="modal-box" style="max-width:480px;">
+    <h3>+ Agregar al inventario</h3>
+    <div class="modal-grid" style="grid-template-columns:1fr;">
+      <div>
+        <label>Género</label>
+        <select id="inv-add-genero">
+          <option value="Caballero">Caballero</option>
+          <option value="Dama">Dama</option>
+          <option value="Niño">Niño</option>
+          <option value="Niña">Niña</option>
+          <option value="Juvenil">Juvenil</option>
+          <option value="Unisex">Unisex</option>
+        </select>
+      </div>
+      <div><label>Talla</label><select id="inv-add-talla"></select></div>
+      <div><label>Color</label><input type="text" id="inv-add-color" placeholder="Ej. Negro"></div>
+      <div><label>Descripción (igual a como la escribes al capturar)</label><input type="text" id="inv-add-descripcion" placeholder="Ej. AKIRA 121"></div>
+      <div><label>Piezas</label><input type="number" id="inv-add-cantidad" value="1" min="1"></div>
+    </div>
+    <div class="fila-acciones">
+      <button class="btn btn-secundario" onclick="document.getElementById('invModalAgregar').classList.remove('activo')">Cancelar</button>
+      <button class="btn btn-primario" onclick="guardarInventarioManual()">Guardar</button>
+    </div>
+  </div>
 </div>
 <div class="modal-overlay" id="modalEditar">
   <div class="modal-box" style="max-width:760px;">
@@ -411,6 +482,7 @@ document.querySelectorAll(".tab-btn").forEach(btn=>{
     btn.classList.add("activo");
     document.getElementById("panel-"+btn.dataset.tab).classList.add("activo");
     if(btn.dataset.tab === "hoy") cargarPedidosHoy();
+    if(btn.dataset.tab === "inventario") cargarInventario();
   });
 });
 
@@ -588,7 +660,7 @@ function agregarFilaItem(valores){
       <select class="it-marca" onchange="onMarcaFilaChange('${id}')">${opcionesMarca(esMarcaOtro ? "Otro" : marcaInicial)}</select>
       <input type="text" class="it-marca-otro" placeholder="Especifica la marca" style="margin-top:4px;display:${esMarcaOtro?'block':'none'};" value="${esMarcaOtro?marcaInicial:''}">
     </td>
-    <td><input type="text" class="it-desc" placeholder="Diseño / descripción"></td>
+    <td><input type="text" class="it-desc" placeholder="Diseño / descripción" onblur="revisarInventarioAlCapturar('${id}')"></td>
     <td><input type="number" class="it-cant" min="1" value="1"></td>
     <td><input type="number" class="it-paquete" min="2" placeholder="Ej. 2, 3"></td>
     <td><button class="btn btn-rojo btn-chico" onclick="document.getElementById('${id}').remove(); actualizarChkMaster('it');">✕</button></td>
@@ -1046,6 +1118,332 @@ function badgeCanal(canal){
 }
 
 let pedidosHoyCache = [];
+// ══════════════════════════════════════════
+// MÓDULO DE INVENTARIO (playeras ya impresas)
+// ══════════════════════════════════════════
+const COL_INVENTARIO = "inventario_playeras";
+let inventarioCache = [];
+
+const NORM_TALLA = {
+  "CH":"CH","CHICA":"CH","ECH":"CH",
+  "MED":"M","MEDIANA":"M","M":"M",
+  "GDE":"G","GRANDE":"G","G":"G",
+  "XL":"XL",
+  "2XL":"XXL","XXL":"XXL",
+  "3XL":"XXXL","XXXL":"XXXL"
+};
+const NORM_GENERO = {
+  "HOMBRE":"Caballero","CABALLERO":"Caballero",
+  "MUJER":"Dama","DAMA":"Dama",
+  "NIÑO":"Niño","NIÑOS":"Niño","NÑO":"Niño","NINO":"Niño",
+  "NIÑA":"Niña","NIÑAS":"Niña","NINA":"Niña",
+  "JUVENIL":"Juvenil","UNISEX":"Unisex"
+};
+const NORM_COLOR = {
+  "NEGRA":"Negro","NEGRO":"Negro","NAGRA":"Negro","NEGRO JASPE":"Negro Jaspe",
+  "BLANCA":"Blanco","BLANCO":"Blanco",
+  "ROJA":"Rojo","ROJO":"Rojo",
+  "AZUL REY":"Royal","AZUL MARINO":"Marino","MARINO":"Marino","AZUL CLARO":"Azul Claro",
+  "GRIS JASPE":"Gris Jaspe","BEIGE":"Beige","ROSA PASTEL":"Rosa Pastel","TURQUESA":"Turquesa",
+  "CARBON":"Carbón","CARBÓN":"Carbón","ARENA":"Arena","VERDE JADE":"Jade",
+  "VERDE JADE JASPE":"Jade Jaspe","MARRON":"Marrón","MARRÓN":"Marrón",
+  "PLATA":"Plata","CANARIO":"Canario","NARANJA":"Naranja","MORADA":"Morado","MORADO":"Morado",
+  "CELESTE":"Celeste","CHOCOLATE":"Chocolate","CORAL":"Coral","FUCSIA":"Fucsia"
+};
+// Las primeras 6 hojas (una por talla) son todas de Caballero, según cómo
+// tiene organizado Felipe el Excel.
+const TALLA_DE_HOJA = {"CH":"CH","MED":"M","GDE":"G","XL":"XL","2XL":"XXL","3XL":"XXXL"};
+
+function capitalizar(txt){
+  return txt.charAt(0) + txt.slice(1).toLowerCase();
+}
+function normTalla(raw){ const u=raw.trim().toUpperCase(); return NORM_TALLA[u] || u; }
+function normGenero(raw){ const u=raw.trim().toUpperCase(); return NORM_GENERO[u] || capitalizar(raw.trim()); }
+function normColor(raw){ const u=raw.trim().toUpperCase(); return NORM_COLOR[u] || capitalizar(raw.trim()); }
+function normDescripcion(txt){ return txt.trim().toUpperCase().replace(/\s+/g," "); }
+function claveInventario(genero,talla,descripcion){
+  // El cruce con lo que se vende es por TALLA + DESCRIPCIÓN (y género si
+  // ambos lo traen) — el color no es parte de la clave porque a veces se
+  // captura distinto, y dos playeras del mismo diseño/talla pero color
+  // distinto casi nunca coexisten en la práctica.
+  return `${genero||""}|${normTalla(talla)}|${normDescripcion(descripcion)}`;
+}
+
+async function cargarInventario(){
+  const tbody = document.getElementById("invBody");
+  tbody.innerHTML = `<tr><td colspan="7" class="vacio">Cargando...</td></tr>`;
+  try{
+    const snap = await db.collection(COL_INVENTARIO).get();
+    inventarioCache = [];
+    snap.forEach(doc=> inventarioCache.push({id:doc.id, ...doc.data()}));
+    inventarioCache.sort((a,b)=> (a.descripcion||"").localeCompare(b.descripcion||""));
+    llenarFiltrosInventario();
+    renderInventario();
+  }catch(err){
+    tbody.innerHTML = `<tr><td colspan="7" class="vacio">Error: ${err.message}</td></tr>`;
+  }
+}
+
+function llenarFiltrosInventario(){
+  const generos = [...new Set(inventarioCache.map(i=>i.genero).filter(Boolean))].sort();
+  const tallas = [...new Set(inventarioCache.map(i=>i.talla).filter(Boolean))].sort();
+  const selG = document.getElementById("invFiltroGenero");
+  const selT = document.getElementById("invFiltroTalla");
+  const vG = selG.value, vT = selT.value;
+  selG.innerHTML = `<option value="">Todos</option>` + generos.map(g=>`<option value="${g}">${g}</option>`).join("");
+  selT.innerHTML = `<option value="">Todas</option>` + tallas.map(t=>`<option value="${t}">${t}</option>`).join("");
+  selG.value = vG; selT.value = vT;
+}
+
+function renderInventario(){
+  const buscar = (document.getElementById("invBuscar").value||"").trim().toUpperCase();
+  const fGenero = document.getElementById("invFiltroGenero").value;
+  const fTalla = document.getElementById("invFiltroTalla").value;
+  const lista = inventarioCache.filter(i=>{
+    if(fGenero && i.genero!==fGenero) return false;
+    if(fTalla && i.talla!==fTalla) return false;
+    if(buscar && !(i.descripcion||"").toUpperCase().includes(buscar)) return false;
+    return true;
+  });
+  const tbody = document.getElementById("invBody");
+  const vacio = document.getElementById("invVacio");
+  const totalPiezas = lista.reduce((s,i)=>s+(+i.cantidad||0),0);
+  document.getElementById("invResumen").innerHTML =
+    `<div class="stat"><div class="stat-label">Diseños distintos</div><div class="stat-valor">${lista.length}</div></div>
+     <div class="stat"><div class="stat-label">Piezas totales</div><div class="stat-valor">${totalPiezas}</div></div>`;
+  if(lista.length===0){
+    tbody.innerHTML = "";
+    vacio.style.display = "block";
+    return;
+  }
+  vacio.style.display = "none";
+  tbody.innerHTML = lista.map(i=>`<tr>
+    <td>${i.genero||"—"}</td>
+    <td>${i.talla||"—"}</td>
+    <td>${i.color||"—"}</td>
+    <td>${i.descripcion}</td>
+    <td style="font-size:.78rem;color:#888;">${i.categoria||"—"}</td>
+    <td><strong>${i.cantidad||0}</strong></td>
+    <td><button class="btn btn-rojo btn-chico" onclick="eliminarInventarioItem('${i.id}')">✕</button></td>
+  </tr>`).join("");
+}
+
+window.eliminarInventarioItem = async function(id){
+  if(!confirm("¿Quitar este diseño del inventario por completo?")) return;
+  await db.collection(COL_INVENTARIO).doc(id).delete();
+  inventarioCache = inventarioCache.filter(i=>i.id!==id);
+  renderInventario();
+};
+
+window.vaciarInventario = async function(){
+  if(!confirm(`¿Borrar TODO el inventario (${inventarioCache.length} diseños)? Esto no se puede deshacer.`)) return;
+  if(!confirm("Confirma otra vez: se va a borrar todo el inventario completo.")) return;
+  mostrarInvStatus("🗑 Vaciando inventario...", "loading");
+  const batchSize = 400;
+  for(let i=0;i<inventarioCache.length;i+=batchSize){
+    const batch = db.batch();
+    inventarioCache.slice(i,i+batchSize).forEach(item=> batch.delete(db.collection(COL_INVENTARIO).doc(item.id)));
+    await batch.commit();
+  }
+  inventarioCache = [];
+  renderInventario();
+  mostrarInvStatus("✅ Inventario vaciado.", "ok");
+};
+
+function mostrarInvStatus(texto, tipo){
+  const el = document.getElementById("invStatus");
+  el.textContent = texto;
+  el.style.display = "block";
+  el.style.background = tipo==="err" ? "#fde0dc" : tipo==="ok" ? "#dcf5e0" : "#fef3dc";
+  el.style.color = tipo==="err" ? "#b91c1c" : tipo==="ok" ? "#15803d" : "#92600a";
+}
+
+window.guardarInventarioManual = async function(){
+  const genero = document.getElementById("inv-add-genero").value;
+  const talla = document.getElementById("inv-add-talla").value;
+  const color = document.getElementById("inv-add-color").value.trim();
+  const descripcion = document.getElementById("inv-add-descripcion").value.trim();
+  const cantidad = parseInt(document.getElementById("inv-add-cantidad").value)||1;
+  if(!descripcion || !talla){ mostrarMsg("Falta talla o descripción.", "error"); return; }
+  const clave = claveInventario(genero, talla, descripcion);
+  const existente = inventarioCache.find(i=>claveInventario(i.genero,i.talla,i.descripcion)===clave);
+  if(existente){
+    const nuevaCant = (+existente.cantidad||0) + cantidad;
+    await db.collection(COL_INVENTARIO).doc(existente.id).update({cantidad:nuevaCant});
+    existente.cantidad = nuevaCant;
+  } else {
+    const ref = await db.collection(COL_INVENTARIO).add({
+      genero, talla: normTalla(talla), color: color||"", descripcion, categoria: "Manual", cantidad
+    });
+    inventarioCache.push({id:ref.id, genero, talla:normTalla(talla), color, descripcion, categoria:"Manual", cantidad});
+  }
+  document.getElementById("invModalAgregar").classList.remove("activo");
+  document.getElementById("inv-add-descripcion").value = "";
+  llenarFiltrosInventario();
+  renderInventario();
+  mostrarMsg("✅ Agregado al inventario.", "ok");
+};
+document.getElementById("inv-add-genero").addEventListener("change", ()=>{
+  const sel = document.getElementById("inv-add-talla");
+  const g = document.getElementById("inv-add-genero").value;
+  sel.innerHTML = opcionesTalla(g, "");
+});
+document.getElementById("inv-add-genero").dispatchEvent(new Event("change"));
+
+// ── Importar el Excel de inventario ──
+window.importarInventarioExcel = async function(file){
+  mostrarInvStatus("⏳ Leyendo Excel...", "loading");
+  try{
+    const buf = await file.arrayBuffer();
+    const wb = XLSX.read(buf, {type:"array"});
+    const agregados = {}; // clave -> {genero,talla,color,descripcion,categoria,cantidad}
+    const noReconocidos = {talla:new Set(), genero:new Set(), color:new Set()};
+
+    wb.SheetNames.forEach(nombreHoja=>{
+      const ws = wb.Sheets[nombreHoja];
+      const filas = XLSX.utils.sheet_to_json(ws, {header:1, defval:""});
+      let filaHeaderIdx = -1;
+      const cols = {};
+      for(let i=0;i<filas.length && i<10;i++){
+        const fila = filas[i];
+        for(let j=0;j<fila.length;j++){
+          const val = String(fila[j]||"").trim().toUpperCase();
+          if(val.startsWith("DESCRIP")){ filaHeaderIdx=i; cols.descripcion=j; }
+          if(val==="COLOR") cols.color=j;
+          if(val.startsWith("TALLA")) cols.talla=j;
+          if(val.startsWith("GENERO") || val.startsWith("GÉNERO")) cols.genero=j;
+        }
+        if(filaHeaderIdx>=0) break;
+      }
+      if(filaHeaderIdx<0 || cols.descripcion===undefined) return; // hoja no reconocida, se ignora
+
+      const tallaDeHoja = TALLA_DE_HOJA[nombreHoja.trim().toUpperCase()];
+      const generoDefaultHoja = tallaDeHoja ? "Caballero" : (nombreHoja.trim().toLowerCase()==="mujer" ? "Dama" : "");
+
+      for(let i=filaHeaderIdx+1;i<filas.length;i++){
+        const fila = filas[i];
+        const descripcion = String(fila[cols.descripcion]||"").trim();
+        if(!descripcion) continue;
+
+        let talla = tallaDeHoja || "";
+        if(cols.talla!==undefined){
+          const raw = String(fila[cols.talla]||"").trim();
+          if(raw){
+            const u = raw.toUpperCase();
+            talla = NORM_TALLA[u] || u;
+            if(!NORM_TALLA[u]) noReconocidos.talla.add(raw);
+          }
+        }
+        let genero = generoDefaultHoja;
+        if(cols.genero!==undefined){
+          const raw = String(fila[cols.genero]||"").trim();
+          if(raw){
+            const u = raw.toUpperCase();
+            genero = NORM_GENERO[u] || capitalizar(raw);
+            if(!NORM_GENERO[u]) noReconocidos.genero.add(raw);
+          }
+        }
+        let color = "";
+        if(cols.color!==undefined){
+          const raw = String(fila[cols.color]||"").trim();
+          if(raw){
+            const u = raw.toUpperCase();
+            color = NORM_COLOR[u] || capitalizar(raw);
+            if(!NORM_COLOR[u]) noReconocidos.color.add(raw);
+          }
+        }
+        if(!talla) continue; // sin talla no se puede cruzar contra pedidos, se ignora
+
+        const clave = claveInventario(genero, talla, descripcion);
+        if(!agregados[clave]) agregados[clave] = {genero, talla, color, descripcion, categoria: nombreHoja, cantidad:0};
+        agregados[clave].cantidad++;
+      }
+    });
+
+    const combos = Object.entries(agregados);
+    if(combos.length===0){
+      mostrarInvStatus("⚠️ No se reconoció ninguna hoja con columna 'DESCRIPCION'.", "err");
+      return;
+    }
+
+    mostrarInvStatus(`💾 Guardando ${combos.length} diseño(s)...`, "loading");
+    let nuevos=0, actualizados=0, piezasImportadas=0;
+    let batch = db.batch();
+    let enBatch = 0;
+    for(const [clave, item] of combos){
+      piezasImportadas += item.cantidad;
+      const existente = inventarioCache.find(i=>claveInventario(i.genero,i.talla,i.descripcion)===clave);
+      if(existente){
+        const nuevaCant = (+existente.cantidad||0) + item.cantidad;
+        batch.update(db.collection(COL_INVENTARIO).doc(existente.id), {cantidad: nuevaCant});
+        existente.cantidad = nuevaCant;
+        actualizados++;
+      } else {
+        const ref = db.collection(COL_INVENTARIO).doc();
+        batch.set(ref, item);
+        inventarioCache.push({id:ref.id, ...item});
+        nuevos++;
+      }
+      enBatch++;
+      if(enBatch>=400){ await batch.commit(); batch = db.batch(); enBatch=0; }
+    }
+    if(enBatch>0) await batch.commit();
+
+    llenarFiltrosInventario();
+    renderInventario();
+    document.getElementById("invArchivo").value = "";
+
+    let msg = `✅ Importado: ${piezasImportadas} pieza(s) · ${nuevos} diseño(s) nuevo(s), ${actualizados} sumados a lo que ya tenías.`;
+    const raros = [...noReconocidos.talla].concat([...noReconocidos.genero]).concat([...noReconocidos.color]);
+    if(raros.length>0) msg += ` ⚠️ Revisa estos valores que no reconocí y quedaron tal cual: ${raros.slice(0,8).join(", ")}${raros.length>8?"...":""}`;
+    mostrarInvStatus(msg, raros.length>0 ? "err" : "ok");
+  }catch(err){
+    console.error(err);
+    mostrarInvStatus("⚠️ Error al importar: "+err.message, "err");
+  }
+};
+
+// ── Cruce con el inventario al capturar un pedido del día ──
+// Se dispara cuando el usuario termina de escribir la descripción de un
+// renglón (si ya tiene talla puesta). Si encuentra un diseño igual (talla +
+// descripción) con piezas disponibles, pregunta si se descuenta 1 pieza.
+window.revisarInventarioAlCapturar = async function(trId){
+  const tr = document.getElementById(trId);
+  if(!tr) return;
+  const descripcionInput = tr.querySelector(".it-desc");
+  const tallaSelect = tr.querySelector(".it-talla");
+  if(!descripcionInput || !tallaSelect) return;
+  const descripcion = descripcionInput.value.trim();
+  const talla = tallaSelect.value;
+  if(!descripcion || !talla) return;
+  if(!inventarioCache.length) await cargarInventarioSilencioso();
+
+  const clave = claveInventario("", talla, descripcion); // se ignora género en la búsqueda para no perder coincidencias
+  const match = inventarioCache.find(i=>
+    normTalla(i.talla)===normTalla(talla) &&
+    normDescripcion(i.descripcion)===normDescripcion(descripcion) &&
+    (+i.cantidad||0)>0
+  );
+  if(!match) return;
+  const descontar = confirm(`🎯 Tienes "${match.descripcion}" talla ${match.talla} en tu inventario (quedan ${match.cantidad} pieza(s)).\n\n¿Descontar 1 pieza del inventario para este pedido?`);
+  if(!descontar) return;
+  const nuevaCant = Math.max(0, (+match.cantidad||0) - 1);
+  await db.collection(COL_INVENTARIO).doc(match.id).update({cantidad: nuevaCant});
+  match.cantidad = nuevaCant;
+  mostrarMsg(`📦 Se descontó 1 pieza de "${match.descripcion}" (quedan ${nuevaCant}).`, "ok");
+};
+
+// Carga el inventario en silencio (sin tocar la tabla de la pestaña
+// Inventario) para poder cruzarlo desde la captura aunque no hayas abierto
+// esa pestaña todavía en esta sesión.
+async function cargarInventarioSilencioso(){
+  try{
+    const snap = await db.collection(COL_INVENTARIO).get();
+    inventarioCache = [];
+    snap.forEach(doc=> inventarioCache.push({id:doc.id, ...doc.data()}));
+  }catch(err){ console.error("Error cargando inventario:", err); }
+}
+
 async function cargarPedidosHoy(){
   const cont = document.getElementById("tablaHoyCont");
   cont.innerHTML = '<div class="vacio">Cargando...</div>';
