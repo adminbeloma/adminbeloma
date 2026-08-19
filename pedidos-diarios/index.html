@@ -169,6 +169,7 @@
             <th style="min-width:90px;">Talla</th>
             <th style="min-width:110px;">Color</th>
             <th style="min-width:110px;">Marca</th>
+            <th style="min-width:110px;">Modelo</th>
             <th style="min-width:160px;">Descripción</th>
             <th style="min-width:60px;">Cant.</th>
             <th style="min-width:90px;">Paquete</th>
@@ -212,6 +213,7 @@
             <th style="min-width:90px;">Talla</th>
             <th style="min-width:110px;">Color</th>
             <th style="min-width:110px;">Marca</th>
+            <th style="min-width:110px;">Modelo</th>
             <th style="min-width:160px;">Descripción</th>
             <th style="min-width:60px;">Cant.</th>
             <th style="min-width:90px;">Paquete</th>
@@ -391,6 +393,7 @@
           <th style="min-width:90px;">Talla</th>
           <th style="min-width:110px;">Color</th>
           <th style="min-width:110px;">Marca</th>
+          <th style="min-width:110px;">Modelo</th>
           <th style="min-width:160px;">Descripción</th>
           <th style="min-width:60px;">Cant.</th>
           <th></th>
@@ -459,7 +462,116 @@ const TALLAS_POR_GENERO = {"Caballero": ["CH","M","G","XL","XXL","XXXL"],"Dama":
 // únicamente se maneja en BLANCO, así que su selector de color queda limitado.
 const COLORES_POR_GENERO = {"Pañalero Bebé": ["Blanco"]};
 const COLORES_COMUNES = ["Amarillo Neón","Aqua","Arena","Azul Claro","Beige","Blanco","Canario","Carbón","Caribe","Celeste","Chocolate","Coral","Delfín","Fucsia","Gris Jaspe","Jade","Ladrillo","Lavanda","Lima","Mango","Marino","Marrón","Morado","Naranja","Naranja Neón","Negro","Ocre","Olivo","Plata","Rojo","Rosa Pastel","Royal","Turquesa","Verde Bosque","Verde Neón","Otro"];
-const MARCAS_DISPONIBLES = ["Euro Cotton","Yazbek","Gildan","PlayeryTees","Bones","Optima","Otro"];
+const MARCAS_DISPONIBLES = ["Euro Cotton","Yazbek","Gildan","PlayeryTees","Bones","Blue & White","Mark Athletic","Mayork","JHK","M&O","Optima","Otro"];
+
+// ══════════════════════════════════════════════════════════════════
+//  DESCUENTO AUTOMÁTICO DE STOCK DE PLAYERAS (inventario de adminbeloma)
+// ══════════════════════════════════════════════════════════════════
+// Pedidos Diarios usa su PROPIO vocabulario de género/talla (Caballero,
+// Dama, CH/M/G/XL...), distinto al del inventario de Playeras en
+// adminbeloma (Hombre, Mujer, S/M/L/XL...). Estas tablas traducen de uno a
+// otro para poder buscar el producto correcto en pl_playeras y descontarle
+// stock cada vez que se guarda un pedido — el mismo mecanismo que ya existe
+// en adminbeloma para las Ventas, ahora también aplicado aquí.
+const GENERO_PD_A_PLAYERAS = {
+  'Caballero':{genero:'Hombre',tipo:'Playera'},
+  'Dama':{genero:'Mujer',tipo:'Playera'},
+  'Niño':{genero:'Niño / Niña',tipo:'Playera'},
+  'Niña':{genero:'Niño / Niña',tipo:'Playera'},
+  'Juvenil':{genero:'Juvenil',tipo:'Playera'},
+  'Unisex':{genero:'Unisex',tipo:'Playera'},
+  'Pañalero Bebé':{genero:'Bebé',tipo:'Pañalero'}
+};
+const TALLA_PD_A_PLAYERAS = {'CH':'S','M':'M','G':'L','XL':'XL','XXL':'2XL','XXXL':'3XL'};
+
+// Cache en vivo del inventario de Playeras (misma colección que adminbeloma)
+let playerasCache = [];
+db.collection('pl_playeras').onSnapshot(s=>{ playerasCache = s.docs.map(d=>d.data()); });
+
+// Catálogo de Marcas (mismo que en adminbeloma: cada marca puede tener
+// varios modelos/estilos, cada uno con sus tallas/precio). Se usa aquí para
+// mostrar el selector de Modelo junto a Marca, y para que el cruce de stock
+// sea preciso (C0300 y N0300 de Yazbek no son lo mismo).
+let catalogoMarcasPD = [];
+db.collection('pl_catalogo_marcas').onSnapshot(s=>{ catalogoMarcasPD = s.docs.map(d=>d.data()); });
+function catalogoDeMarcaPD(marca){
+  if(!marca) return null;
+  const norm=s=>(s||'').toString().trim().toLowerCase();
+  return catalogoMarcasPD.find(c=>norm(c.marca)===norm(marca))||null;
+}
+function opcionesModelo(marca, modeloActual){
+  const cat=catalogoDeMarcaPD(marca);
+  const modelos=(cat?.modelos||[]).map(m=>m.nombre);
+  const esOtro = modeloActual==='Otro' || (modeloActual && !modelos.includes(modeloActual));
+  return '<option value="">— Sin modelo específico —</option>'
+    + modelos.map(m=>`<option value="${m}"${m===modeloActual?' selected':''}>${m}</option>`).join('')
+    + `<option value="Otro"${esOtro?' selected':''}>Otro</option>`;
+}
+
+// Convierte los items de un pedido (vocabulario de Pedidos Diarios) a
+// "consumos de prenda en blanco" en el vocabulario de Playeras.
+function expandirConsumosTelaPD(items){
+  const consumos=[];
+  (items||[]).forEach(it=>{
+    if(!it || !it.talla || !(+it.cantidad>0)) return;
+    const mapGen=GENERO_PD_A_PLAYERAS[it.genero]||{genero:it.genero,tipo:'Playera'};
+    const talla = mapGen.tipo==='Pañalero' ? it.talla : (TALLA_PD_A_PLAYERAS[it.talla]||it.talla);
+    consumos.push({tipo:mapGen.tipo,genero:mapGen.genero,talla,color:it.color||'',marca:it.marca||'',modelo:it.modelo||'',cantidad:+it.cantidad});
+  });
+  return consumos;
+}
+
+// Busca en pl_playeras el producto que coincide con un consumo (comparación
+// insensible a mayúsculas/espacios, igual que en adminbeloma). El modelo es
+// opcional: si el pedido no lo capturó, empareja sin ese filtro (toma el
+// primero que encuentre entre los modelos de esa marca).
+function buscarPlayeraStockPD(c){
+  const norm=s=>(s||'').toString().trim().toLowerCase();
+  return playerasCache.find(p=>
+    norm(p.tipo||'Playera')===norm(c.tipo||'Playera') &&
+    norm(p.genero)===norm(c.genero) &&
+    norm(p.talla)===norm(c.talla) &&
+    (!c.color || norm(p.color)===norm(c.color)) &&
+    (!c.marca || norm(p.proveedor)===norm(c.marca)) &&
+    (!c.modelo || norm(p.modelo)===norm(c.modelo))
+  );
+}
+
+// Aplica una lista de consumos al stock de Playeras. signo=1 descuenta
+// (pedido nuevo), signo=-1 repone (se edita o elimina un pedido). Nunca
+// baja de 0. Devuelve los consumos sin coincidencia en inventario.
+async function ajustarStockPlayerasPD(consumos, signo){
+  const sinMatch=[];
+  for(const c of consumos){
+    const p=buscarPlayeraStockPD(c);
+    if(!p){ sinMatch.push(c); continue; }
+    const nuevoStock=Math.max(0,+(+p.stock-signo*c.cantidad).toFixed(2));
+    await db.collection('pl_playeras').doc(p.id).update({stock:nuevoStock});
+    p.stock=nuevoStock; // refleja el cambio local por si otro consumo de este mismo guardado apunta al mismo producto
+  }
+  return sinMatch;
+}
+
+// Descuenta stock de Playeras por los items de un pedido recién guardado.
+// Si se pasan itemsAnteriores (edición), primero repone esos y luego
+// descuenta los nuevos — así el stock siempre queda cuadrado.
+async function descontarStockPlayerasDePedido(itemsNuevos, itemsAnteriores){
+  const consumosAnteriores=expandirConsumosTelaPD(itemsAnteriores);
+  if(consumosAnteriores.length) await ajustarStockPlayerasPD(consumosAnteriores,-1);
+  const consumosNuevos=expandirConsumosTelaPD(itemsNuevos);
+  const sinMatch=await ajustarStockPlayerasPD(consumosNuevos,1);
+  return sinMatch;
+}
+
+// Junta los "sin match" de varios pedidos guardados de golpe (captura rápida
+// o formulario con varias prendas) y muestra un solo aviso al final, para no
+// saturar con un mensaje por cada renglón.
+function avisarSinMatchPlayeras(listaSinMatch){
+  const todos=[].concat(...listaSinMatch.filter(Boolean));
+  if(todos.length===0) return;
+  const detalle=todos.map(c=>`${c.cantidad}× ${c.tipo} ${c.genero} ${c.talla}${c.color?' '+c.color:''}${c.marca?' ['+c.marca+(c.modelo?' '+c.modelo:'')+']':''}`).join(', ');
+  mostrarMsg(`⚠️ No se descontó stock de Playeras (no existe ese producto en inventario): ${detalle}`, 'error');
+}
 
 function hoyISO(){ const d = new Date(); return d.getFullYear()+"-"+String(d.getMonth()+1).padStart(2,"0")+"-"+String(d.getDate()).padStart(2,"0"); }
 function mostrarFechaHoy(){ const opciones = {weekday:'long', year:'numeric', month:'long', day:'numeric'}; document.getElementById("fechaHoyTxt").textContent = new Date().toLocaleDateString('es-MX', opciones); }
@@ -543,6 +655,10 @@ function agregarFilaNuevaHoy(){
       <select class="nh-marca" onchange="onMarcaFilaChangeNH('${id}')">${opcionesMarca("")}</select>
       <input type="text" class="nh-marca-otro" placeholder="Especifica la marca" style="margin-top:4px;display:none;">
     </td>
+    <td>
+      <select class="nh-modelo" onchange="onModeloFilaChangeNH('${id}')">${opcionesModelo("","")}</select>
+      <input type="text" class="nh-modelo-otro" placeholder="Especifica el modelo" style="margin-top:4px;display:none;">
+    </td>
     <td><input type="text" class="nh-desc" placeholder="Diseño / descripción"></td>
     <td><input type="number" class="nh-cant" min="1" value="1"></td>
     <td><input type="number" class="nh-paquete" min="2" placeholder="Ej. 2, 3"></td>
@@ -558,7 +674,8 @@ function actualizarVisibilidadNuevosHoy(){
 }
 function onGeneroFilaChangeNH(id){ refrescarTallaYColorFila(document.getElementById(id), "nh-"); }
 function onColorFilaChangeNH(id){ const tr = document.getElementById(id); const esOtro = tr.querySelector(".nh-color").value === "Otro"; const otroInput = tr.querySelector(".nh-color-otro"); otroInput.style.display = esOtro ? "block" : "none"; if(esOtro) otroInput.focus(); }
-function onMarcaFilaChangeNH(id){ const tr = document.getElementById(id); const esOtro = tr.querySelector(".nh-marca").value === "Otro"; const otroInput = tr.querySelector(".nh-marca-otro"); otroInput.style.display = esOtro ? "block" : "none"; if(esOtro) otroInput.focus(); }
+function onMarcaFilaChangeNH(id){ const tr = document.getElementById(id); const esOtro = tr.querySelector(".nh-marca").value === "Otro"; const otroInput = tr.querySelector(".nh-marca-otro"); otroInput.style.display = esOtro ? "block" : "none"; if(esOtro) otroInput.focus(); const marcaActual = esOtro ? otroInput.value.trim() : tr.querySelector(".nh-marca").value; tr.querySelector(".nh-modelo").innerHTML = opcionesModelo(marcaActual, ""); tr.querySelector(".nh-modelo-otro").style.display = "none"; }
+function onModeloFilaChangeNH(id){ const tr = document.getElementById(id); const esOtro = tr.querySelector(".nh-modelo").value === "Otro"; const otroInput = tr.querySelector(".nh-modelo-otro"); otroInput.style.display = esOtro ? "block" : "none"; if(esOtro) otroInput.focus(); }
 
 async function guardarNuevosHoy(){
   const filas = document.querySelectorAll("#nuevosHoyBody tr");
@@ -566,6 +683,7 @@ async function guardarNuevosHoy(){
   const fecha = hoyISO();
   let guardados = 0;
   let ordenBase = Date.now();
+  const sinMatchAcumulado = [];
   try{
     for(const tr of filas){
       const canal = tr.querySelector(".nh-canal").value;
@@ -573,6 +691,8 @@ async function guardarNuevosHoy(){
       const color = colorSel === "Otro" ? tr.querySelector(".nh-color-otro").value.trim() : colorSel;
       const marcaSel = tr.querySelector(".nh-marca").value;
       const marca = marcaSel === "Otro" ? tr.querySelector(".nh-marca-otro").value.trim() : marcaSel;
+      const modeloSel = tr.querySelector(".nh-modelo").value;
+      const modelo = modeloSel === "Otro" ? tr.querySelector(".nh-modelo-otro").value.trim() : modeloSel;
       let folio = tr.querySelector(".nh-folio").value.trim();
 
       if(!folio && (canal === "Local" || canal === "Foraneo")){
@@ -584,6 +704,13 @@ async function guardarNuevosHoy(){
         folio = `${folioAuto.prefijo}-${yy.slice(2)}${mm}${dd}-${String(folioAuto.siguiente).padStart(2,"0")}`;
       }
 
+      const itemsPedido = [{
+        genero: tr.querySelector(".nh-genero").value,
+        talla: tr.querySelector(".nh-talla").value.trim(),
+        color, marca, modelo,
+        descripcion: tr.querySelector(".nh-desc").value.trim(),
+        cantidad: parseInt(tr.querySelector(".nh-cant").value) || 1
+      }];
       await db.collection(COLECCION).add({
         folio: folio || "(sin folio)",
         canal,
@@ -591,21 +718,19 @@ async function guardarNuevosHoy(){
         cliente: tr.querySelector(".nh-cliente").value.trim() || canal,
         ciudad: tr.querySelector(".nh-ciudad").value.trim(),
         fecha,
-        items: [{
-          genero: tr.querySelector(".nh-genero").value,
-          talla: tr.querySelector(".nh-talla").value.trim(),
-          color, marca,
-          descripcion: tr.querySelector(".nh-desc").value.trim(),
-          cantidad: parseInt(tr.querySelector(".nh-cant").value) || 1
-        }],
+        items: itemsPedido,
         totalPiezas: parseInt(tr.querySelector(".nh-cant").value) || 1,
         piezasPaquete: parseInt(tr.querySelector(".nh-paquete").value) || 0,
         orden: ordenBase++,
         creadoEn: firebase.firestore.FieldValue.serverTimestamp()
       });
+      // Descuenta stock de Playeras en blanco según lo que se acaba de capturar
+      const sinMatch = await descontarStockPlayerasDePedido(itemsPedido, []);
+      if(sinMatch.length) sinMatchAcumulado.push(sinMatch);
       guardados++;
     }
     mostrarMsg(`✔ ${guardados} pedido(s) nuevo(s) guardado(s)`, "ok");
+    avisarSinMatchPlayeras(sinMatchAcumulado);
     document.getElementById("nuevosHoyBody").innerHTML = "";
     const mNH = document.getElementById("chkTodosNH");
     if(mNH){ mNH.checked = false; mNH.indeterminate = false; }
@@ -628,6 +753,7 @@ function agregarFilaItem(valores){
   const esColorOtro = colorInicial && !coloresValidos.includes(colorInicial);
   const marcaInicial = (valores && valores.marca) || "";
   const esMarcaOtro = marcaInicial && !MARCAS_DISPONIBLES.includes(marcaInicial);
+  const modeloInicial = (valores && valores.modelo) || "";
   tr.innerHTML = `
     <td class="col-chk"><input type="checkbox" class="it-chk" onchange="actualizarChkMaster('it')"></td>
     <td><input type="text" class="it-folio" placeholder="Ej. ML-123456"></td>
@@ -650,6 +776,10 @@ function agregarFilaItem(valores){
     <td>
       <select class="it-marca" onchange="onMarcaFilaChange('${id}')">${opcionesMarca(esMarcaOtro ? "Otro" : marcaInicial)}</select>
       <input type="text" class="it-marca-otro" placeholder="Especifica la marca" style="margin-top:4px;display:${esMarcaOtro?'block':'none'};" value="${esMarcaOtro?marcaInicial:''}">
+    </td>
+    <td>
+      <select class="it-modelo" onchange="onModeloFilaChange('${id}')">${opcionesModelo(marcaInicial, modeloInicial)}</select>
+      <input type="text" class="it-modelo-otro" placeholder="Especifica el modelo" style="margin-top:4px;display:none;">
     </td>
     <td><input type="text" class="it-desc" placeholder="Diseño / descripción" onblur="revisarInventarioAlCapturar('${id}')"></td>
     <td><input type="number" class="it-cant" min="1" value="1"></td>
@@ -686,7 +816,8 @@ function onCanalFilaChange(id){
   }
 }
 function onColorFilaChange(id){ const tr = document.getElementById(id); const esOtro = tr.querySelector(".it-color").value === "Otro"; const otroInput = tr.querySelector(".it-color-otro"); otroInput.style.display = esOtro ? "block" : "none"; if(esOtro) otroInput.focus(); }
-function onMarcaFilaChange(id){ const tr = document.getElementById(id); const esOtro = tr.querySelector(".it-marca").value === "Otro"; const otroInput = tr.querySelector(".it-marca-otro"); otroInput.style.display = esOtro ? "block" : "none"; if(esOtro) otroInput.focus(); }
+function onMarcaFilaChange(id){ const tr = document.getElementById(id); const esOtro = tr.querySelector(".it-marca").value === "Otro"; const otroInput = tr.querySelector(".it-marca-otro"); otroInput.style.display = esOtro ? "block" : "none"; if(esOtro) otroInput.focus(); const marcaActual = esOtro ? otroInput.value.trim() : tr.querySelector(".it-marca").value; tr.querySelector(".it-modelo").innerHTML = opcionesModelo(marcaActual, ""); tr.querySelector(".it-modelo-otro").style.display = "none"; }
+function onModeloFilaChange(id){ const tr = document.getElementById(id); const esOtro = tr.querySelector(".it-modelo").value === "Otro"; const otroInput = tr.querySelector(".it-modelo-otro"); otroInput.style.display = esOtro ? "block" : "none"; if(esOtro) otroInput.focus(); }
 
 function leerItems(){
   const filas = document.querySelectorAll("#itemsBody tr");
@@ -696,6 +827,8 @@ function leerItems(){
     const color = colorSel === "Otro" ? tr.querySelector(".it-color-otro").value.trim() : colorSel;
     const marcaSel = tr.querySelector(".it-marca").value;
     const marca = marcaSel === "Otro" ? tr.querySelector(".it-marca-otro").value.trim() : marcaSel;
+    const modeloSel = tr.querySelector(".it-modelo").value;
+    const modelo = modeloSel === "Otro" ? tr.querySelector(".it-modelo-otro").value.trim() : modeloSel;
     items.push({
       folio: tr.querySelector(".it-folio").value.trim(),
       canal: tr.querySelector(".it-canal").value,
@@ -705,6 +838,7 @@ function leerItems(){
       talla: tr.querySelector(".it-talla").value.trim(),
       color: color,
       marca: marca,
+      modelo: modelo,
       descripcion: tr.querySelector(".it-desc").value.trim(),
       cantidad: parseInt(tr.querySelector(".it-cant").value) || 1,
       piezasPaquete: parseInt(tr.querySelector(".it-paquete").value) || 0
@@ -817,7 +951,9 @@ async function guardarPedido(){
     try{
       let guardados = 0;
       let ordenBase = Date.now();
+      const sinMatchAcumulado = [];
       for(const it of items){
+        const itemsPedido=[{genero:it.genero, talla:it.talla, color:it.color, marca:it.marca, modelo:it.modelo, descripcion:it.descripcion, cantidad:it.cantidad}];
         await db.collection(COLECCION).add({
           folio: pedidoExistente.folio,
           canal: pedidoExistente.canal,
@@ -825,15 +961,18 @@ async function guardarPedido(){
           cliente: pedidoExistente.cliente,
           ciudad: pedidoExistente.ciudad,
           fecha: pedidoExistente.fecha,
-          items: [{genero:it.genero, talla:it.talla, color:it.color, marca:it.marca, descripcion:it.descripcion, cantidad:it.cantidad}],
+          items: itemsPedido,
           totalPiezas: it.cantidad,
           piezasPaquete: it.piezasPaquete || pedidoExistente.piezasPaquete || 0,
           orden: ordenBase++,
           creadoEn: firebase.firestore.FieldValue.serverTimestamp()
         });
+        const sinMatch = await descontarStockPlayerasDePedido(itemsPedido, []);
+        if(sinMatch.length) sinMatchAcumulado.push(sinMatch);
         guardados++;
       }
       mostrarMsg(`✔ Se agregaron ${guardados} renglón(es) nuevo(s) al folio "${pedidoExistente.folio}"`, "ok");
+      avisarSinMatchPlayeras(sinMatchAcumulado);
       cancelarPedidoExistente();
       limpiarFormulario();
       cargarPedidosHoy();
@@ -849,6 +988,7 @@ async function guardarPedido(){
   try{
     let guardados = 0;
     let ordenBase = Date.now();
+    const sinMatchAcumulado = [];
     // Folio automático: solo aplica a Local y Foráneo (MercadoLibre/Shopify/etc.
     // ya traen su propio folio real, que se escribe a mano en el campo Folio).
     // Cada renglón pide su folio por separado (transacción atómica en Firestore),
@@ -862,21 +1002,25 @@ async function guardarPedido(){
         const [yy, mm, dd] = fecha.split("-");
         folioFinal = `${folioAuto.prefijo}-${yy.slice(2)}${mm}${dd}-${String(folioAuto.siguiente).padStart(2,"0")}`;
       }
+      const itemsPedido=[{genero:it.genero, talla:it.talla, color:it.color, marca:it.marca, modelo:it.modelo, descripcion:it.descripcion, cantidad:it.cantidad}];
       await db.collection(COLECCION).add({
         folio: folioFinal || "(sin folio)",
         canal: canalItem, tipoCliente: tipoClienteItem,
         cliente: it.cliente || canalItem,
         ciudad: it.ciudad || "",
         fecha,
-        items: [{genero:it.genero, talla:it.talla, color:it.color, marca:it.marca, descripcion:it.descripcion, cantidad:it.cantidad}],
+        items: itemsPedido,
         totalPiezas: it.cantidad,
         piezasPaquete: it.piezasPaquete || 0,
         orden: ordenBase++,
         creadoEn: firebase.firestore.FieldValue.serverTimestamp()
       });
+      const sinMatch = await descontarStockPlayerasDePedido(itemsPedido, []);
+      if(sinMatch.length) sinMatchAcumulado.push(sinMatch);
       guardados++;
     }
     mostrarMsg(`${guardados} pedido(s) guardado(s) ✔`, "ok");
+    avisarSinMatchPlayeras(sinMatchAcumulado);
     limpiarFormulario();
   }catch(err){ console.error(err); mostrarMsg("Error al guardar: " + err.message, "error"); }
 }
@@ -1537,6 +1681,7 @@ function edRenderFilaItem(it){
   const esColorOtro = colorInicial && !coloresValidos.includes(colorInicial);
   const marcaInicial = (it && it.marca) || "";
   const esMarcaOtro = marcaInicial && !MARCAS_DISPONIBLES.includes(marcaInicial);
+  const modeloInicial = (it && it.modelo) || "";
   tr.innerHTML = `
     <td><select class="ed-it-genero" onchange="edOnGeneroFilaChange('${id}')">${opcionesGenero(generoInicial)}</select></td>
     <td><select class="ed-it-talla">${opcionesTalla(generoInicial, it?it.talla:"")}</select></td>
@@ -1547,6 +1692,10 @@ function edRenderFilaItem(it){
     <td>
       <select class="ed-it-marca" onchange="edOnMarcaFilaChange('${id}')">${opcionesMarca(esMarcaOtro ? "Otro" : marcaInicial)}</select>
       <input type="text" class="ed-it-marca-otro" placeholder="Especifica la marca" style="margin-top:4px;display:${esMarcaOtro?'block':'none'};" value="${esMarcaOtro?marcaInicial:''}">
+    </td>
+    <td>
+      <select class="ed-it-modelo" onchange="edOnModeloFilaChange('${id}')">${opcionesModelo(marcaInicial, modeloInicial)}</select>
+      <input type="text" class="ed-it-modelo-otro" placeholder="Especifica el modelo" style="margin-top:4px;display:none;">
     </td>
     <td><input type="text" class="ed-it-desc" placeholder="Diseño / descripción"></td>
     <td><input type="number" class="ed-it-cant" min="1" value="1"></td>
@@ -1560,7 +1709,8 @@ function edRenderFilaItem(it){
 function edAgregarFilaItem(){ edRenderFilaItem(null); }
 function edOnGeneroFilaChange(id){ refrescarTallaYColorFila(document.getElementById(id), "ed-it-"); }
 function edOnColorFilaChange(id){ const tr = document.getElementById(id); const esOtro = tr.querySelector(".ed-it-color").value === "Otro"; const otroInput = tr.querySelector(".ed-it-color-otro"); otroInput.style.display = esOtro ? "block" : "none"; if(esOtro) otroInput.focus(); }
-function edOnMarcaFilaChange(id){ const tr = document.getElementById(id); const esOtro = tr.querySelector(".ed-it-marca").value === "Otro"; const otroInput = tr.querySelector(".ed-it-marca-otro"); otroInput.style.display = esOtro ? "block" : "none"; if(esOtro) otroInput.focus(); }
+function edOnMarcaFilaChange(id){ const tr = document.getElementById(id); const esOtro = tr.querySelector(".ed-it-marca").value === "Otro"; const otroInput = tr.querySelector(".ed-it-marca-otro"); otroInput.style.display = esOtro ? "block" : "none"; if(esOtro) otroInput.focus(); const marcaActual = esOtro ? otroInput.value.trim() : tr.querySelector(".ed-it-marca").value; tr.querySelector(".ed-it-modelo").innerHTML = opcionesModelo(marcaActual, ""); tr.querySelector(".ed-it-modelo-otro").style.display = "none"; }
+function edOnModeloFilaChange(id){ const tr = document.getElementById(id); const esOtro = tr.querySelector(".ed-it-modelo").value === "Otro"; const otroInput = tr.querySelector(".ed-it-modelo-otro"); otroInput.style.display = esOtro ? "block" : "none"; if(esOtro) otroInput.focus(); }
 function edLeerItems(){
   const filas = document.querySelectorAll("#ed-items-body tr");
   const items = [];
@@ -1569,10 +1719,12 @@ function edLeerItems(){
     const color = colorSel === "Otro" ? tr.querySelector(".ed-it-color-otro").value.trim() : colorSel;
     const marcaSel = tr.querySelector(".ed-it-marca").value;
     const marca = marcaSel === "Otro" ? tr.querySelector(".ed-it-marca-otro").value.trim() : marcaSel;
+    const modeloSel = tr.querySelector(".ed-it-modelo").value;
+    const modelo = modeloSel === "Otro" ? tr.querySelector(".ed-it-modelo-otro").value.trim() : modeloSel;
     items.push({
       genero: tr.querySelector(".ed-it-genero").value,
       talla: tr.querySelector(".ed-it-talla").value.trim(),
-      color, marca,
+      color, marca, modelo,
       descripcion: tr.querySelector(".ed-it-desc").value.trim(),
       cantidad: parseInt(tr.querySelector(".ed-it-cant").value) || 1
     });
@@ -1580,10 +1732,12 @@ function edLeerItems(){
   return items;
 }
 
+let _pedidoEnEdicionOriginal = null;
 function abrirEditarPedido(id, origen){
   const lista = origen === "hoy" ? pedidosHoyCache : historicoCache;
   const p = lista.find(x=>x.id===id);
   if(!p){ mostrarMsg("No se encontró el pedido.", "error"); return; }
+  _pedidoEnEdicionOriginal = p; // se usa al guardar, para reponer stock de los items viejos antes de descontar los nuevos
   document.getElementById("ed-id").value = p.id;
   document.getElementById("ed-id").dataset.origen = origen;
   document.getElementById("ed-folio").value = p.folio || "";
@@ -1621,7 +1775,14 @@ async function guardarEdicionPedido(){
   };
   try{
     await db.collection(COLECCION).doc(id).update(data);
+    // Repone el stock de los items viejos y descuenta el de los nuevos —
+    // así una edición (cambiar talla, color, cantidad, etc.) siempre deja
+    // el inventario de Playeras cuadrado con lo que el pedido dice ahora.
+    const itemsAnteriores = (_pedidoEnEdicionOriginal && _pedidoEnEdicionOriginal.id===id) ? (_pedidoEnEdicionOriginal.items||[]) : [];
+    const sinMatch = await descontarStockPlayerasDePedido(items, itemsAnteriores);
     mostrarMsg("✅ Pedido actualizado", "ok");
+    avisarSinMatchPlayeras([sinMatch]);
+    _pedidoEnEdicionOriginal = null;
     cerrarModalEditar();
     if(origen === "hoy") cargarPedidosHoy(); else buscarHistorico();
   }catch(err){ mostrarMsg("Error al actualizar: " + err.message, "error"); }
@@ -1629,6 +1790,12 @@ async function guardarEdicionPedido(){
 async function eliminarPedido(id, origen){
   if(!confirm("¿Eliminar este pedido? Esta acción no se puede deshacer.")) return;
   try{
+    // Antes de borrar, reponer el stock de Playeras que este pedido había descontado.
+    const lista = origen === "hoy" ? pedidosHoyCache : historicoCache;
+    const p = lista.find(x=>x.id===id);
+    if(p && p.items && p.items.length){
+      await descontarStockPlayerasDePedido([], p.items);
+    }
     await db.collection(COLECCION).doc(id).delete();
     mostrarMsg("🗑 Pedido eliminado", "ok");
     if(origen === "hoy") cargarPedidosHoy(); else buscarHistorico();
