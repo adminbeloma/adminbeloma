@@ -4079,8 +4079,20 @@ function ventaLeFaltaTinta(v){
   return cc<=0;
 }
 
-window.abrirTintaPendiente=function(){
-  const lista=ventas.filter(ventaLeFaltaTinta).sort((a,b)=>b.fecha>a.fecha?1:-1);
+window.abrirTintaPendiente=async function(){
+  mostrarProgreso('⏳ Buscando ventas con tinta pendiente...', 'Revisando toda la colección, no solo lo cargado en pantalla');
+  let todas;
+  try{
+    const snap=await getDocs(collection(db,'pl_ventas'));
+    todas=snap.docs.map(d=>({...d.data(), id:d.id}));
+  }catch(err){
+    console.error(err);
+    ocultarProgreso();
+    toast('⚠️ Error al buscar: '+err.message);
+    return;
+  }
+  ocultarProgreso();
+  const lista=todas.filter(ventaLeFaltaTinta).sort((a,b)=>b.fecha>a.fecha?1:-1);
   const tbody=document.getElementById('tabla-tinta-pendiente');
   const empty=document.getElementById('tinta-pendiente-empty');
   const contador=document.getElementById('tinta-pendiente-contador');
