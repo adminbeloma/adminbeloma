@@ -166,6 +166,21 @@
   </div>
 </div>
 
+<!-- ===== Modal: Marcar como recibido ===== -->
+<div id="overlayRecibido" style="display:none;position:fixed;inset:0;background:rgba(20,25,40,.55);z-index:1000;align-items:center;justify-content:center;padding:16px;">
+  <div style="background:#fff;border-radius:12px;max-width:720px;width:100%;max-height:88vh;overflow-y:auto;padding:22px 24px;">
+    <h2 style="margin:0 0 6px;color:var(--azul);font-size:1.05rem;">📦 Marcar pedido como recibido</h2>
+    <p style="font-size:.82rem;color:#6b7280;margin:0 0 14px;">Al confirmar, esto suma las piezas al inventario de Playeras (adminbeloma) y registra el gasto — ya no hace falta capturarlo aparte. Si alguna talla/color tiene precio en el Catálogo de Marcas, se llena solo; si no, escríbelo tú.</p>
+    <div id="recibidoResumen" style="margin-bottom:12px;"></div>
+    <div id="recibidoTablaCont"></div>
+    <div class="resumen" id="recibidoTotal" style="margin-top:12px;"></div>
+    <div class="fila-acciones" style="margin-top:16px;">
+      <button class="btn btn-gris" onclick="cerrarModalRecibido()">Cancelar</button>
+      <button class="btn btn-verde" id="btnConfirmarRecibido" onclick="confirmarRecibido()">✅ Confirmar recepción</button>
+    </div>
+  </div>
+</div>
+
 <script>
 /* =====================================================
    FIREBASE — misma config que adminbeloma / kiosco / mayoreo
@@ -202,6 +217,86 @@ let coloresGuardados = {};  // slug -> [colores extra guardados por el usuario]
 let pedidoActual = [];      // renglones del pedido en curso
 let historial = [];
 let editandoIndex = null;   // si no es null, agregarRenglon() edita ese renglón en vez de crear uno nuevo
+
+// ══════════════════════════════════════════════════════════════════
+//  MARCAR COMO RECIBIDO — suma stock a Playeras (inventario de adminbeloma)
+// ══════════════════════════════════════════════════════════════════
+// Cuando llega la mercancía de un pedido, "Marcar como recibido" suma las
+// piezas al inventario de Playeras automáticamente (misma colección
+// pl_playeras que usa adminbeloma) y registra el gasto — sin tener que
+// volver a capturar nada en Excel ni en el panel principal. El código del
+// producto (ej. "C0300") se usa como Modelo, y el proveedor como Marca —
+// mismos campos que ya existen en el Catálogo de Marcas de adminbeloma.
+const GENERO_YAZBEK_A_PLAYERAS = {
+  'Caballero':{genero:'Hombre',tipo:'Playera'},
+  'Dama':{genero:'Mujer',tipo:'Playera'},
+  'Niño':{genero:'Niño / Niña',tipo:'Playera'},
+  'Niña':{genero:'Niño / Niña',tipo:'Playera'},
+  'Unisex':{genero:'Unisex',tipo:'Playera'}
+};
+// Solo traduce si la talla viene en esta notación corta; si el catálogo del
+// proveedor ya usa S/M/L/XL (lo más común), se deja tal cual sin tocarla.
+const TALLA_YAZBEK_A_PLAYERAS = {'CH':'S','G':'L','XXL':'2XL','XXXL':'3XL'};
+function normalizarTallaProveedor(talla){
+  return TALLA_YAZBEK_A_PLAYERAS[talla] || talla;
+}
+
+let playerasCache = [];
+db.collection('pl_playeras').onSnapshot(s=>{ playerasCache = s.docs.map(d=>d.data()); });
+let catalogoMarcasYazbek = [];
+db.collection('pl_catalogo_marcas').onSnapshot(s=>{ catalogoMarcasYazbek = s.docs.map(d=>d.data()); });
+function catalogoDeMarcaYazbek(marca){
+  if(!marca) return null;
+  const norm=s=>(s||'').toString().trim().toLowerCase();
+  return catalogoMarcasYazbek.find(c=>norm(c.marca)===norm(marca))||null;
+}
+function modeloDeCatalogoYazbek(cat, nombreModelo){
+  if(!cat||!nombreModelo) return null;
+  const norm=s=>(s||'').toString().trim().toLowerCase();
+  return (cat.modelos||[]).find(m=>norm(m.nombre)===norm(nombreModelo))||null;
+}
+// Busca en pl_playeras el producto que coincide (mismo criterio que usa
+// adminbeloma): tipo+género+talla+color+marca+modelo, con color/marca/modelo
+// opcionales si el consumo no los trae.
+function buscarPlayeraStockYazbek(c){
+  const norm=s=>(s||'').toString().trim().toLowerCase();
+  return playerasCache.find(p=>
+    norm(p.tipo||'Playera')===norm(c.tipo||'Playera') &&
+    norm(p.genero)===norm(c.genero) &&
+    norm(p.talla)===norm(c.talla) &&
+    (!c.color || norm(p.color)===norm(c.color)) &&
+    (!c.marca || norm(p.proveedor)===norm(c.marca)) &&
+    (!c.modelo || norm(p.modelo)===norm(c.modelo))
+  );
+}
+// Suma stock a un producto de Playeras (o lo crea si no existe), con costo
+// promedio ponderado — mismo mecanismo que "Registrar compra" en adminbeloma.
+async function sumarStockPlayeraYazbek(c, cantidad, costoUnitario, fecha, referencia){
+  const existente = buscarPlayeraStockYazbek(c);
+  if(existente){
+    const stockPrev = +existente.stock||0;
+    const costoPrev = +existente.costo||0;
+    const stockNuevo = stockPrev + cantidad;
+    const costoPromedio = stockNuevo>0 ? ((stockPrev*costoPrev)+(cantidad*costoUnitario))/stockNuevo : costoUnitario;
+    await db.collection('pl_playeras').doc(existente.id).update({stock:+stockNuevo.toFixed(2), costo:+costoPromedio.toFixed(2)});
+  } else {
+    const nuevoId = 'py_'+Date.now()+'_'+Math.random().toString(36).slice(2,8);
+    await db.collection('pl_playeras').doc(nuevoId).set({
+      id:nuevoId,
+      nombre:`${c.modelo?c.modelo+' ':''}${c.tipo} ${c.genero} ${c.talla} ${c.color}${c.marca?' ['+c.marca+']':''}`,
+      tipo:c.tipo, genero:c.genero, talla:c.talla, color:c.color,
+      categoria:'', stock:cantidad, stockMin:0, proveedor:c.marca, modelo:c.modelo||'',
+      costo:+costoUnitario.toFixed(2), notas:'', imagen:'', creado:new Date().toISOString()
+    });
+  }
+  const compraId = 'py_'+Date.now()+'_'+Math.random().toString(36).slice(2,8);
+  await db.collection('pl_compras_playeras').doc(compraId).set({
+    id:compraId, origen:'playera', fecha,
+    tipo:c.tipo, genero:c.genero, talla:c.talla, color:c.color, marca:c.marca, modelo:c.modelo||'',
+    cantidad, costoTotal:+(cantidad*costoUnitario).toFixed(2), costoUnidad:costoUnitario,
+    referencia, notas:'Recibido desde Pedido Multi-Proveedor', creado:new Date().toISOString()
+  });
+}
 
 /* ---------- utilidades ---------- */
 function mostrarMsg(texto, tipo){
@@ -755,7 +850,11 @@ function renderHistorial(){
   </tr></thead><tbody>`;
   lista.forEach(p=>{
     const piezas = (p.items||[]).reduce((s,r)=>s+(r.cantidad||0),0);
-    const estadoTxt = p.estado === "enviado_whatsapp" ? "📱 Enviado" : "💾 Guardado";
+    const estadoTxt = p.estado === "recibido" ? "📦 Recibido"
+      : p.estado === "enviado_whatsapp" ? "📱 Enviado" : "💾 Guardado";
+    const botonRecibido = p.estado === "recibido"
+      ? `<span style="font-size:.72rem;color:var(--verde);font-weight:600;">✅ ${p.fechaRecibido||''}</span>`
+      : `<button class="btn btn-verde btn-chico" onclick="abrirModalRecibido('${p._id}')">📦 Recibido</button>`;
     html += `<tr>
       <td>${p.folio ? '#'+p.folio : '—'}</td>
       <td>${p.fecha}</td>
@@ -764,7 +863,10 @@ function renderHistorial(){
       <td>${(p.items||[]).length}</td>
       <td>${piezas}</td>
       <td style="font-size:.8rem;color:#6b7280;">${p.referencia||'—'}</td>
-      <td><button class="btn btn-rojo btn-chico" onclick="eliminarPedidoHistorial('${p._id}')">🗑</button></td>
+      <td style="white-space:nowrap;">
+        ${botonRecibido}
+        <button class="btn btn-rojo btn-chico" onclick="eliminarPedidoHistorial('${p._id}')">🗑</button>
+      </td>
     </tr>`;
   });
   html += "</tbody></table>";
@@ -780,6 +882,109 @@ async function eliminarPedidoHistorial(id){
     console.error("Error eliminando pedido:", err);
     mostrarMsg("⚠️ No se pudo eliminar: " + err.message, "error");
   }
+}
+
+/* ---------- marcar como recibido: suma stock a Playeras + registra gasto ---------- */
+let _pedidoRecibiendo = null;
+let _recibidoFilas = [];
+
+function abrirModalRecibido(id){
+  const p = historial.find(h=>h._id===id);
+  if(!p){ mostrarMsg("No se encontró el pedido.", "error"); return; }
+  _pedidoRecibiendo = p;
+  _recibidoFilas = (p.items||[]).map(it=>{
+    const mapGen = GENERO_YAZBEK_A_PLAYERAS[it.genero] || {genero:it.genero, tipo:'Playera'};
+    const talla = normalizarTallaProveedor(it.talla);
+    const marca = p.proveedorNombre || p.proveedor || '';
+    const modelo = it.codigo || '';
+    // Intenta precio de catálogo (marca+modelo+género+talla); si no hay, queda en 0 para que lo escriban.
+    const cat = catalogoDeMarcaYazbek(marca);
+    const mod = modeloDeCatalogoYazbek(cat, modelo);
+    const filaCat = mod?.tallasPorGenero?.[mapGen.genero]?.find(t=>t.talla===talla);
+    return {
+      tipo: mapGen.tipo, genero: mapGen.genero, talla, color: it.color||'',
+      marca, modelo, cantidad: +it.cantidad||0,
+      costoUnitario: filaCat ? +filaCat.precio||0 : 0,
+      descOriginal: `${it.codigo||''} ${it.nombre||''}`.trim(),
+      generoOriginal: it.genero, tallaOriginal: it.talla
+    };
+  });
+  renderModalRecibido();
+  document.getElementById("overlayRecibido").style.display = "flex";
+}
+
+function cerrarModalRecibido(){
+  document.getElementById("overlayRecibido").style.display = "none";
+  _pedidoRecibiendo = null;
+  _recibidoFilas = [];
+}
+
+function renderModalRecibido(){
+  const p = _pedidoRecibiendo;
+  document.getElementById("recibidoResumen").innerHTML =
+    `<span class="badge-proveedor">${p.proveedorNombre||p.proveedor}</span> — Pedido #${p.folio||'—'} del ${p.fecha}`;
+
+  document.getElementById("recibidoTablaCont").innerHTML = `<table><thead><tr>
+    <th>Modelo</th><th>Género</th><th>Talla</th><th>Color</th><th>Piezas</th><th>Costo unitario ($)</th><th>Subtotal</th>
+  </tr></thead><tbody>` +
+    _recibidoFilas.map((f,i)=>`<tr>
+      <td style="font-size:.8rem;">${f.descOriginal||f.modelo||'—'}</td>
+      <td>${f.genero}</td>
+      <td>${f.talla}</td>
+      <td>${f.color}</td>
+      <td>${f.cantidad}</td>
+      <td><input type="number" step="0.01" value="${f.costoUnitario||''}" placeholder="0.00" style="width:100px;" oninput="_recibidoFilas[${i}].costoUnitario=+this.value||0;renderModalRecibido();"></td>
+      <td>$${(f.cantidad*f.costoUnitario).toFixed(2)}</td>
+    </tr>`).join('') +
+    `</tbody></table>`;
+
+  const totalPiezas = _recibidoFilas.reduce((s,f)=>s+f.cantidad,0);
+  const totalCosto = _recibidoFilas.reduce((s,f)=>s+f.cantidad*f.costoUnitario,0);
+  const faltaPrecio = _recibidoFilas.some(f=>!f.costoUnitario);
+  document.getElementById("recibidoTotal").innerHTML =
+    `📦 <strong>${totalPiezas}</strong> piezas · 💰 Total: <strong>$${totalCosto.toFixed(2)}</strong>` +
+    (faltaPrecio ? ` <span style="color:var(--rojo);">— falta capturar el costo de una o más líneas</span>` : '');
+}
+
+async function confirmarRecibido(){
+  if(!_pedidoRecibiendo) return;
+  if(_recibidoFilas.some(f=>!f.costoUnitario||f.costoUnitario<=0)){
+    if(!confirm("Hay líneas sin costo capturado (van a quedar en $0 en el inventario). ¿Continuar de todas formas?")) return;
+  }
+  const btn = document.getElementById("btnConfirmarRecibido");
+  btn.disabled = true; btn.textContent = "⏳ Guardando...";
+  const fecha = hoyISO();
+  try{
+    for(const f of _recibidoFilas){
+      if(!f.cantidad) continue;
+      await sumarStockPlayeraYazbek(
+        {tipo:f.tipo, genero:f.genero, talla:f.talla, color:f.color, marca:f.marca, modelo:f.modelo},
+        f.cantidad, f.costoUnitario||0, fecha, _pedidoRecibiendo.referencia||('Pedido #'+(_pedidoRecibiendo.folio||''))
+      );
+    }
+    const totalCosto = _recibidoFilas.reduce((s,f)=>s+f.cantidad*f.costoUnitario,0);
+    if(totalCosto>0){
+      const gastoId = 'py_gasto_'+Date.now();
+      await db.collection('pl_gastos').doc(gastoId).set({
+        id:gastoId, origen:'compra-playera-factura', fecha,
+        concepto:`Recibido pedido #${_pedidoRecibiendo.folio||''} — ${_pedidoRecibiendo.proveedorNombre||_pedidoRecibiendo.proveedor} (${_recibidoFilas.reduce((s,f)=>s+f.cantidad,0)} pzas)`,
+        categoria:'Playeras en blanco', tipo:'Variable',
+        proveedor:_pedidoRecibiendo.proveedorNombre||_pedidoRecibiendo.proveedor||'',
+        factura:_pedidoRecibiendo.referencia||'', monto:+totalCosto.toFixed(2),
+        notas:'Generado automáticamente al marcar como recibido en Pedido Multi-Proveedor',
+        creado:new Date().toISOString()
+      });
+    }
+    await db.collection('pedidos_multiproveedor').doc(_pedidoRecibiendo._id).update({
+      estado:'recibido', fechaRecibido:fecha
+    });
+    mostrarMsg(`✅ Pedido recibido — se sumó el stock y se registró el gasto`, "ok");
+    cerrarModalRecibido();
+  }catch(err){
+    console.error("Error marcando como recibido:", err);
+    mostrarMsg("⚠️ No se pudo completar: " + err.message, "error");
+  }
+  btn.disabled = false; btn.textContent = "✅ Confirmar recepción";
 }
 
 /* ---------- reporte de piezas por proveedor/color/género/talla ---------- */
