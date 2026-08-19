@@ -8445,17 +8445,37 @@ function calcCorteParaFecha(h){
   // Lo realmente cobrado hoy de cada venta (si quedó saldo pendiente, solo el
   // anticipo recibido; si se pagó completo, el total).
   const cobradoDeVenta=v=>(+v.saldo||0)>0 ? (+v.anticipo||0) : (+v.total||0);
-  const enEfectivo = ventasLocales.filter(v=>v.metodoPago==='efectivo').reduce((s,v)=>s+cobradoDeVenta(v),0);
-  const enTransf   = ventasLocales.filter(v=>v.metodoPago==='transferencia').reduce((s,v)=>s+cobradoDeVenta(v),0);
-  const enDeposito = ventasLocales.filter(v=>v.metodoPago==='deposito').reduce((s,v)=>s+cobradoDeVenta(v),0);
-  const enTarjeta  = ventasLocales.filter(v=>v.metodoPago==='tarjeta').reduce((s,v)=>s+cobradoDeVenta(v),0);
+  const enEfectivoVenta = ventasLocales.filter(v=>v.metodoPago==='efectivo').reduce((s,v)=>s+cobradoDeVenta(v),0);
+  const enTransfVenta   = ventasLocales.filter(v=>v.metodoPago==='transferencia').reduce((s,v)=>s+cobradoDeVenta(v),0);
+  const enDepositoVenta = ventasLocales.filter(v=>v.metodoPago==='deposito').reduce((s,v)=>s+cobradoDeVenta(v),0);
+  const enTarjetaVenta  = ventasLocales.filter(v=>v.metodoPago==='tarjeta').reduce((s,v)=>s+cobradoDeVenta(v),0);
+
+  // Abonos cobrados HOY (pagos de saldo de pedidos capturados en días
+  // anteriores, vía el botón 💰 Pago) — antes NO se sumaban al efectivo del
+  // corte, aunque sí se hayan cobrado en efectivo ese mismo día. Se
+  // desglosan por método igual que las ventas.
+  const abonosHoy = (abonos||[]).filter(a=>a.fecha===h);
+  const abonoEfectivo = abonosHoy.filter(a=>a.metodo==='efectivo').reduce((s,a)=>s+(+a.monto||0),0);
+  const abonoTransf   = abonosHoy.filter(a=>a.metodo==='transferencia').reduce((s,a)=>s+(+a.monto||0),0);
+  const abonoDeposito = abonosHoy.filter(a=>a.metodo==='deposito').reduce((s,a)=>s+(+a.monto||0),0);
+  const abonoTarjeta  = abonosHoy.filter(a=>a.metodo==='tarjeta').reduce((s,a)=>s+(+a.monto||0),0);
+  const abonosTotal   = abonosHoy.reduce((s,a)=>s+(+a.monto||0),0);
+
+  const enEfectivo = enEfectivoVenta + abonoEfectivo;
+  const enTransf   = enTransfVenta + abonoTransf;
+  const enDeposito = enDepositoVenta + abonoDeposito;
+  const enTarjeta  = enTarjetaVenta + abonoTarjeta;
+
   // Solo pedidos capturados directo (no los que son espejo de una venta —
   // esos ya quedaron contados arriba en el desglose por método de pago).
   const anticiposHoy = (pedidos||[]).filter(p => p.fecha === h && p.origen!=='venta').reduce((s,p) => s + (+p.anticipo||0), 0);
   const gastosHoy = (gastosLocales||[]).filter(g => g.fecha === h).reduce((s,g) => s + (+g.monto||0), 0);
   const fondoMonto = fondo ? +fondo.monto : 0;
   const efectivoSistema = fondoMonto + enEfectivo + anticiposHoy - gastosHoy;
-  return{fecha:h,fondo:fondoMonto,ingresos:ingresosHoy,enEfectivo,enTransf,enDeposito,enTarjeta,anticipos:anticiposHoy,gastos:gastosHoy,efectivoSistema};
+  return{fecha:h,fondo:fondoMonto,ingresos:ingresosHoy,enEfectivo,enTransf,enDeposito,enTarjeta,
+    enEfectivoVenta,enTransfVenta,enDepositoVenta,enTarjetaVenta,
+    abonoEfectivo,abonoTransf,abonoDeposito,abonoTarjeta,abonosTotal,
+    anticipos:anticiposHoy,gastos:gastosHoy,efectivoSistema};
 }
 
 window.recalcCorte=function(){
@@ -8482,11 +8502,19 @@ window.recalcCorte=function(){
       <span style="color:var(--ink-soft);">💰 Fondo inicial:</span><strong style="${fondoSospechoso?'color:var(--red);':''}">${fmtMoney(d.fondo)}${fondoSospechoso?' ⚠️ sin confirmar':''}</strong>
       <span style="color:var(--ink-soft);">💚 Ingresos Local+Foráneo:</span><strong style="color:var(--green);">${fmtMoney(d.ingresos)}</strong>
       <span></span>
-      ${d.enEfectivo>0?`<span style="color:var(--ink-soft);padding-left:12px;">└ 💵 Efectivo:</span><span>${fmtMoney(d.enEfectivo)}</span>`:''}
-      ${d.enTransf>0?`<span style="color:var(--ink-soft);padding-left:12px;">└ 📲 Transferencia:</span><span>${fmtMoney(d.enTransf)}</span>`:''}
-      ${d.enDeposito>0?`<span style="color:var(--ink-soft);padding-left:12px;">└ 🏦 Depósito:</span><span>${fmtMoney(d.enDeposito)}</span>`:''}
-      ${d.enTarjeta>0?`<span style="color:var(--ink-soft);padding-left:12px;">└ 💳 Tarjeta:</span><span>${fmtMoney(d.enTarjeta)}</span>`:''}
-      <span style="color:var(--ink-soft);">📦 Anticipos:</span><strong style="color:var(--green);">${fmtMoney(d.anticipos)}</strong>
+      ${d.enEfectivoVenta>0?`<span style="color:var(--ink-soft);padding-left:12px;">└ 💵 Efectivo:</span><span>${fmtMoney(d.enEfectivoVenta)}</span>`:''}
+      ${d.enTransfVenta>0?`<span style="color:var(--ink-soft);padding-left:12px;">└ 📲 Transferencia:</span><span>${fmtMoney(d.enTransfVenta)}</span>`:''}
+      ${d.enDepositoVenta>0?`<span style="color:var(--ink-soft);padding-left:12px;">└ 🏦 Depósito:</span><span>${fmtMoney(d.enDepositoVenta)}</span>`:''}
+      ${d.enTarjetaVenta>0?`<span style="color:var(--ink-soft);padding-left:12px;">└ 💳 Tarjeta:</span><span>${fmtMoney(d.enTarjetaVenta)}</span>`:''}
+      ${d.abonosTotal>0?`
+      <span style="color:var(--ink-soft);">📦 Abonos cobrados hoy:</span><strong style="color:var(--green);">${fmtMoney(d.abonosTotal)}</strong>
+      <span style="font-size:11px;color:var(--ink-soft);grid-column:1/-1;">(pagos de saldo de pedidos capturados en días anteriores)</span>
+      ${d.abonoEfectivo>0?`<span style="color:var(--ink-soft);padding-left:12px;">└ 💵 Efectivo:</span><span>${fmtMoney(d.abonoEfectivo)}</span>`:''}
+      ${d.abonoTransf>0?`<span style="color:var(--ink-soft);padding-left:12px;">└ 📲 Transferencia:</span><span>${fmtMoney(d.abonoTransf)}</span>`:''}
+      ${d.abonoDeposito>0?`<span style="color:var(--ink-soft);padding-left:12px;">└ 🏦 Depósito:</span><span>${fmtMoney(d.abonoDeposito)}</span>`:''}
+      ${d.abonoTarjeta>0?`<span style="color:var(--ink-soft);padding-left:12px;">└ 💳 Tarjeta:</span><span>${fmtMoney(d.abonoTarjeta)}</span>`:''}
+      `:''}
+      <span style="color:var(--ink-soft);">📋 Anticipos (pedidos directos):</span><strong style="color:var(--green);">${fmtMoney(d.anticipos)}</strong>
       <span style="color:var(--ink-soft);">💸 Gastos locales:</span><strong style="color:var(--red);">${fmtMoney(d.gastos)}</strong>
       <span style="color:var(--ink-soft);border-top:1px solid var(--border);padding-top:6px;margin-top:4px;">✅ Efectivo en caja (sistema):</span>
       <strong style="font-size:16px;border-top:1px solid var(--border);padding-top:6px;margin-top:4px;">${fmtMoney(d.efectivoSistema)}</strong>
