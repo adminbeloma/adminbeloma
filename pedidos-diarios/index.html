@@ -102,16 +102,6 @@
   <div id="msgGlobal" class="msg"></div>
   <div class="panel activo" id="panel-captura">
     <div class="card" style="border:1px dashed var(--gris-borde);">
-      <h2>📥 Importar histórico de Mercado Libre (Excel ya procesado)</h2>
-      <p style="font-size:.8rem;color:#6b7280;margin:0 0 12px;">
-        Sube el Excel de ventas de ML ya procesado (folio, ciudad, estado, cliente, descripción, color, talla, género, unidades).
-        Se crea un pedido por cada folio, con cliente/ciudad vacíos (no hacen falta aquí, ya viven en Ventas).
-        No duplica folios que ya hayas importado antes.
-      </p>
-      <button class="btn btn-secundario btn-chico" onclick="document.getElementById('inputImportarML').click()">📥 Elegir Excel</button>
-      <input type="file" id="inputImportarML" accept=".xlsx" style="display:none;" onchange="importarPedidosExcelML(this.files[0])">
-    </div>
-    <div class="card" style="border:1px dashed var(--gris-borde);">
       <h2>📥 Importar "Listado" histórico (un día por hoja, Local + Mercado Libre)</h2>
       <p style="font-size:.8rem;color:#6b7280;margin:0 0 12px;">
         Sube el Excel mensual con formato de lista de producción (#, TALLA, COLOR, GENERO, DESCRIPCION, CLIENTE — un día por hoja).
@@ -880,113 +870,6 @@ async function guardarPedido(){
     mostrarMsg(`${guardados} pedido(s) guardado(s) ✔`, "ok");
     limpiarFormulario();
   }catch(err){ console.error(err); mostrarMsg("Error al guardar: " + err.message, "error"); }
-}
-
-// ---- Importar histórico de Mercado Libre desde Excel ya procesado ----
-// (folio, fecha, ciudad, estado, cliente, descripción, color, talla, género, unidades)
-// Crea un pedido por prenda, agrupado por folio. Cliente/ciudad quedan vacíos
-// a propósito: para Mercado Libre esos datos ya viven en Ventas, y el folio
-// es el puente entre ambos sistemas si algún día hay que cruzarlos.
-function mapGeneroImportadoPedidos(txt){
-  const t=(txt||'').toLowerCase();
-  if(t.includes('pañalero') || t.includes('panalero') || t.includes('mameluco')) return 'Pañalero Bebé';
-  if(t.includes('niña juvenil')) return 'Niña';
-  if(t.includes('niño juvenil')) return 'Niño';
-  if(t.includes('juvenil')) return 'Juvenil';
-  if(t.includes('niña')) return 'Niña';
-  if(t.includes('niño')) return 'Niño';
-  if(t.includes('mujer')) return 'Dama';
-  if(t.includes('hombre')) return 'Caballero';
-  return 'Unisex';
-}
-function parsearFechaMLPedidos(txt){
-  const MESES={enero:1,febrero:2,marzo:3,abril:4,mayo:5,junio:6,julio:7,agosto:8,septiembre:9,octubre:10,noviembre:11,diciembre:12};
-  if(!txt) return hoyISO();
-  const m=String(txt).toLowerCase().match(/(\d{1,2})\s+de\s+([a-záéíóúñ]+)\s+de\s+(\d{4})/);
-  if(!m) return hoyISO();
-  const dia=m[1].padStart(2,'0');
-  const mes=String(MESES[m[2]]||1).padStart(2,'0');
-  return `${m[3]}-${mes}-${dia}`;
-}
-async function importarPedidosExcelML(file){
-  if(!file) return;
-  if(!confirm(`¿Importar "${file.name}" como pedidos de Mercado Libre?\n\nSe crea un pedido por cada prenda, sin cliente/ciudad (para ML esos datos ya viven en Ventas). No se duplican folios ya importados antes.`)){
-    document.getElementById('inputImportarML').value = '';
-    return;
-  }
-  mostrarMsg('⏳ Leyendo Excel...', 'ok');
-  try{
-    const buf = await file.arrayBuffer();
-    const wb = XLSX.read(buf, {type:'array'});
-    const hojasOmitir = ['Resumen','Léeme','Leeme'];
-    let filas = [];
-    wb.SheetNames.forEach(nombre=>{
-      if(hojasOmitir.includes(nombre)) return;
-      filas = filas.concat(XLSX.utils.sheet_to_json(wb.Sheets[nombre], {defval:''}));
-    });
-    if(filas.length===0){ mostrarMsg('⚠️ No se encontraron filas en el Excel.', 'error'); return; }
-
-    // Folios de Mercado Libre ya importados antes (para no duplicar)
-    const snapExistente = await db.collection(COLECCION).where('canal','==','MercadoLibre').get();
-    const foliosExistentes = new Set();
-    snapExistente.forEach(doc=> foliosExistentes.add(String(doc.data().folio||'').trim()));
-
-    // Agrupar filas por folio (cada folio = un paquete/pedido, aunque aquí cada
-    // prenda se guarda como documento independiente, igual que la captura manual)
-    const porFolio = {};
-    const ordenFolios = [];
-    filas.forEach(f=>{
-      const folio = String(f.Folio||'').trim();
-      if(!folio || foliosExistentes.has(folio)) return;
-      if(!porFolio[folio]){ porFolio[folio]=[]; ordenFolios.push(folio); }
-      porFolio[folio].push(f);
-    });
-
-    if(ordenFolios.length===0){
-      mostrarMsg('No hay folios nuevos que importar (todos ya estaban).', 'ok');
-      document.getElementById('inputImportarML').value = '';
-      return;
-    }
-
-    let creados = 0;
-    let ordenBase = Date.now();
-    let batch = db.batch();
-    let enBatch = 0;
-    for(const folio of ordenFolios){
-      const grupo = porFolio[folio];
-      const fecha = parsearFechaMLPedidos(grupo[0].Fecha);
-      const piezasPaquete = grupo.length;
-      for(const f of grupo){
-        const ref = db.collection(COLECCION).doc();
-        batch.set(ref, {
-          folio, canal:'MercadoLibre', tipoCliente:'Foraneo',
-          cliente:'', ciudad:'', fecha,
-          items:[{
-            genero: mapGeneroImportadoPedidos(f['Género']),
-            talla: String(f.Talla||''),
-            color: String(f.Color||''),
-            marca: 'Yazbek',
-            descripcion: String(f['Descripción']||''),
-            cantidad: +f.Unidades || 1
-          }],
-          totalPiezas: +f.Unidades || 1,
-          piezasPaquete: piezasPaquete > 1 ? piezasPaquete : 0,
-          orden: ordenBase++,
-          creadoEn: firebase.firestore.FieldValue.serverTimestamp(),
-          importadoDeExcel: true
-        });
-        creados++; enBatch++;
-        if(enBatch >= 450){ await batch.commit(); batch = db.batch(); enBatch = 0; }
-      }
-    }
-    if(enBatch > 0) await batch.commit();
-
-    document.getElementById('inputImportarML').value = '';
-    mostrarMsg(`✅ Importadas ${creados} prendas (${ordenFolios.length} folios nuevos)`, 'ok');
-  }catch(err){
-    console.error(err);
-    mostrarMsg('⚠️ Error al importar: ' + err.message, 'error');
-  }
 }
 
 // ---- Importar "Listado" histórico (un día por hoja, formato # TALLA COLOR
