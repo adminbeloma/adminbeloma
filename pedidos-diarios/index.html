@@ -564,7 +564,6 @@ async function guardarNuevosHoy(){
   const filas = document.querySelectorAll("#nuevosHoyBody tr");
   if(filas.length === 0){ mostrarMsg("Agrega al menos un renglón.", "error"); return; }
   const fecha = hoyISO();
-  const folioAutoPorCanal = {}; // un consecutivo por canal, para no repetir folios dentro del mismo guardado
   let guardados = 0;
   let ordenBase = Date.now();
   try{
@@ -577,10 +576,12 @@ async function guardarNuevosHoy(){
       let folio = tr.querySelector(".nh-folio").value.trim();
 
       if(!folio && (canal === "Local" || canal === "Foraneo")){
-        if(!folioAutoPorCanal[canal]) folioAutoPorCanal[canal] = await obtenerConsecutivoFolio(canal, fecha);
+        // Cada renglón pide su propio folio en el momento — la transacción
+        // de Firestore en obtenerConsecutivoFolio() garantiza que no se repita
+        // aunque se estén guardando pedidos al mismo tiempo desde otra pestaña.
+        const folioAuto = await obtenerConsecutivoFolio(canal, fecha);
         const [yy, mm, dd] = fecha.split("-");
-        folio = `${folioAutoPorCanal[canal].prefijo}-${yy.slice(2)}${mm}${dd}-${String(folioAutoPorCanal[canal].siguiente).padStart(2,"0")}`;
-        folioAutoPorCanal[canal].siguiente++;
+        folio = `${folioAuto.prefijo}-${yy.slice(2)}${mm}${dd}-${String(folioAuto.siguiente).padStart(2,"0")}`;
       }
 
       await db.collection(COLECCION).add({
@@ -729,10 +730,23 @@ document.getElementById("fCanal").addEventListener("change", (e)=>{
 
 // Genera un folio automático consecutivo para pedidos Local/Foráneo cuando no se
 // escribió uno a mano. Formato: LOC-YYMMDD-## / FOR-YYMMDD-## (## reinicia cada día).
+// Usa una transacción de Firestore contra un contador propio por canal+fecha
+// (colección folioContadoresDiarios) para que, aunque se guarden pedidos al
+// mismo tiempo desde dos pestañas o dos personas distintas, nunca se repita
+// el mismo folio dentro del mismo día — antes se calculaba contando cuántos
+// pedidos ya existían (snap.size + 1), lo cual podía duplicarse si dos
+// guardados ocurrían casi al mismo tiempo.
 async function obtenerConsecutivoFolio(canal, fecha){
   const prefijo = canal === "Local" ? "LOC" : "FOR";
-  const snap = await db.collection(COLECCION).where("canal","==",canal).where("fecha","==",fecha).get();
-  return {prefijo, siguiente: snap.size + 1};
+  const contadorRef = db.collection("folioContadoresDiarios").doc(`${canal}_${fecha}`);
+  const siguiente = await db.runTransaction(async (tx)=>{
+    const snap = await tx.get(contadorRef);
+    const actual = snap.exists ? (+snap.data().ultimo || 0) : 0;
+    const proximo = actual + 1;
+    tx.set(contadorRef, {ultimo: proximo, canal, fecha, actualizado: new Date().toISOString()}, {merge:true});
+    return proximo;
+  });
+  return {prefijo, siguiente};
 }
 
 // Pone las prendas de MercadoLibre primero en la lista, dejando todo lo demás
@@ -837,21 +851,16 @@ async function guardarPedido(){
     let ordenBase = Date.now();
     // Folio automático: solo aplica a Local y Foráneo (MercadoLibre/Shopify/etc.
     // ya traen su propio folio real, que se escribe a mano en el campo Folio).
-    // Se calcula por separado para cada canal que aparezca en la tabla, ya
-    // que ahora un mismo guardado puede mezclar renglones Local y ML/Foráneo.
-    const folioAutoPorCanal = {};
+    // Cada renglón pide su folio por separado (transacción atómica en Firestore),
+    // así que ya no importa el orden ni se necesita guardar caché por canal.
     for(const it of items){
       const canalItem = it.canal || "Local";
       const tipoClienteItem = canalItem === "Local" ? "Local" : "Foraneo";
-      if((canalItem === "Local" || canalItem === "Foraneo") && !folioAutoPorCanal[canalItem]){
-        folioAutoPorCanal[canalItem] = await obtenerConsecutivoFolio(canalItem, fecha);
-      }
-      const folioAuto = folioAutoPorCanal[canalItem];
       let folioFinal = it.folio;
-      if(!folioFinal && folioAuto){
+      if(!folioFinal && (canalItem === "Local" || canalItem === "Foraneo")){
+        const folioAuto = await obtenerConsecutivoFolio(canalItem, fecha);
         const [yy, mm, dd] = fecha.split("-");
         folioFinal = `${folioAuto.prefijo}-${yy.slice(2)}${mm}${dd}-${String(folioAuto.siguiente).padStart(2,"0")}`;
-        folioAuto.siguiente++;
       }
       await db.collection(COLECCION).add({
         folio: folioFinal || "(sin folio)",
