@@ -5928,6 +5928,13 @@ window.generarReporte=function(){
 window.openPlayeraModal=function(id){
   document.getElementById('p-id').value='';
   ['p-nombre','p-stock','p-stock-min','p-proveedor-otro','p-modelo-otro','p-talla-otro','p-color-otro','p-costo','p-notas'].forEach(f=>document.getElementById(f).value='');
+  // IMPORTANTE: también hay que limpiar el <input type="file"> de la imagen.
+  // Antes NO se limpiaba, así que si en una edición anterior se había elegido
+  // un archivo (aunque fuera sin querer), ese archivo se quedaba "pegado" en
+  // el input — y al editar OTRA playera sin tocar el botón de imagen, el
+  // sistema creía que sí había una imagen nueva y subía esa imagen vieja
+  // encima, pisando la foto correcta de esa playera.
+  document.getElementById('p-imagen').value='';
   document.getElementById('p-imagen-preview').style.display='none';
   document.getElementById('p-tipo').value='Playera';
   document.getElementById('p-genero').value='Hombre';
