@@ -1441,7 +1441,7 @@ tbody td{padding:11px 14px;font-size:13.5px;vertical-align:middle;}
 </div><!-- /main -->
 
 <!-- MODAL VENTA -->
-<div class="modal-overlay" id="modal-venta">
+<div class="modal-overlay" id="modal-venta" style="z-index:1001;">
   <div class="modal">
     <div class="modal-header"><h2 id="modal-venta-title">Nueva Venta</h2><button class="modal-close" onclick="confirmarCerrarModal('modal-venta')">×</button></div>
     <div class="modal-body">
@@ -3658,6 +3658,17 @@ window.guardarVenta=async function(){
   if(idxVentaGuardada>=0) ventas[idxVentaGuardada]=data; else ventas.unshift(data);
   renderVentas();
   renderDashboard();
+  // Si el modal de "Tinta pendiente" está abierto detrás (se llegó aquí
+  // desde el botón "✏️ Capturar tinta"), se refresca esa lista sin cerrarla
+  // — la venta que se acaba de guardar sale sola si ya no le falta la tinta.
+  if(document.getElementById('modal-tinta-pendiente')?.classList.contains('open')){
+    const idx=_tintaPendienteTodas.findIndex(v=>v.id===id);
+    if(idx>=0){
+      if(ventaLeFaltaTinta(data)) _tintaPendienteTodas[idx]=data;
+      else _tintaPendienteTodas.splice(idx,1);
+    }
+    renderTintaPendiente();
+  }
 };
 
 // ---- Importar Excel de ventas ya procesado (folio/ciudad/estado/cliente/
@@ -4165,7 +4176,7 @@ function renderTintaPendiente(){
         <td style="font-size:12px;max-width:260px;">${productoTxt}</td>
         <td><span class="badge ${canalColor[v.canal]||'badge-gray'}">${v.canal||'—'}</span></td>
         <td>${v.cantidad||'—'}</td>
-        <td><button class="btn btn-ghost btn-sm" onclick="closeModal('modal-tinta-pendiente');openVentaModal('edit','${v.id}')">✏️ Capturar tinta</button></td>
+        <td><button class="btn btn-ghost btn-sm" onclick="openVentaModal('edit','${v.id}')">✏️ Capturar tinta</button></td>
       </tr>`;
     }).join('');
   }
