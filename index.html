@@ -793,6 +793,7 @@ tbody td{padding:11px 14px;font-size:13.5px;vertical-align:middle;}
         <input type="file" id="input-importar-factura-playera" accept=".xlsx,.xls,.csv,.pdf" style="display:none;" onchange="importarFacturaPlayeras(this.files[0])">
         <button class="btn btn-ghost btn-sm admin-only" style="display:none;" onclick="descargarPlantillaFacturaPlayeras()">⬇️ Plantilla</button>
         <button class="btn btn-ghost admin-only" style="display:none;" onclick="abrirCatalogoMarcas()">⚙️ Catálogo de Marcas</button>
+        <button class="btn btn-ghost admin-only" style="display:none;" onclick="abrirHistorialFacturasPlayeras()">📋 Historial de Facturas</button>
         <button class="btn btn-accent admin-only" style="display:none;" onclick="openPlayeraModal()">+ Agregar Playera</button>
       </div>
     </div>
@@ -1968,6 +1969,29 @@ tbody td{padding:11px 14px;font-size:13.5px;vertical-align:middle;}
 </div>
 
 <!-- MODAL CATÁLOGO DE MARCAS (tallas, colores y precio por marca) -->
+<div class="modal-overlay" id="modal-historial-facturas-playeras">
+  <div class="modal" style="max-width:920px;">
+    <div class="modal-header"><h2>📋 Historial de Facturas de Playeras</h2><button class="modal-close" onclick="closeModal('modal-historial-facturas-playeras')">×</button></div>
+    <div class="modal-body">
+      <div style="background:var(--accent-light);border-radius:8px;padding:10px 14px;font-size:12px;margin-bottom:14px;">
+        💡 Esto junta TODO lo que está capturado como gasto de "Playeras en blanco" — tanto lo importado con el lector de facturas, como lo que hayas registrado a mano en Gastos. Úsalo para contar cuántas facturas/gastos tienes realmente registrados por proveedor.
+      </div>
+      <div class="filter-bar">
+        <select id="hfp-filtro-proveedor" onchange="renderHistorialFacturasPlayeras()">
+          <option value="">Todos los proveedores</option>
+        </select>
+        <input type="date" id="hfp-desde" onchange="renderHistorialFacturasPlayeras()">
+        <input type="date" id="hfp-hasta" onchange="renderHistorialFacturasPlayeras()">
+      </div>
+      <div id="hfp-resumen" style="margin-bottom:14px;"></div>
+      <div id="hfp-tabla" style="max-height:480px;overflow-y:auto;"></div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-ghost" onclick="closeModal('modal-historial-facturas-playeras')">Cerrar</button>
+    </div>
+  </div>
+</div>
+
 <div class="modal-overlay" id="modal-catalogo-marcas">
   <div class="modal" style="max-width:760px;">
     <div class="modal-header"><h2>⚙️ Catálogo de Marcas</h2><button class="modal-close" onclick="closeModal('modal-catalogo-marcas')">×</button></div>
@@ -8568,6 +8592,64 @@ window.verDetalleProveedor=function(id){
     `</tbody></table></div>`;
 
   openModal('modal-detalle-proveedor');
+};
+
+// Junta TODOS los gastos categoría "Playeras en blanco" — importados por el
+// lector de facturas o capturados a mano en Gastos — para que se pueda
+// contar y revisar cuántos hay realmente registrados, por proveedor y fecha.
+window.abrirHistorialFacturasPlayeras=function(){
+  const proveedoresEnGastos=[...new Set((gastos||[]).filter(g=>g.categoria==='Playeras en blanco').map(g=>g.proveedor).filter(Boolean))].sort();
+  const sel=document.getElementById('hfp-filtro-proveedor');
+  sel.innerHTML='<option value="">Todos los proveedores</option>'+proveedoresEnGastos.map(p=>`<option>${p}</option>`).join('');
+  document.getElementById('hfp-desde').value='';
+  document.getElementById('hfp-hasta').value='';
+  renderHistorialFacturasPlayeras();
+  openModal('modal-historial-facturas-playeras');
+};
+
+window.renderHistorialFacturasPlayeras=function(){
+  const provFiltro=document.getElementById('hfp-filtro-proveedor').value;
+  const desde=document.getElementById('hfp-desde').value;
+  const hasta=document.getElementById('hfp-hasta').value;
+  let lista=(gastos||[]).filter(g=>g.categoria==='Playeras en blanco');
+  if(provFiltro) lista=lista.filter(g=>g.proveedor===provFiltro);
+  if(desde) lista=lista.filter(g=>g.fecha>=desde);
+  if(hasta) lista=lista.filter(g=>g.fecha<=hasta);
+  lista.sort((a,b)=>(b.fecha||'').localeCompare(a.fecha||''));
+
+  const total=lista.reduce((s,g)=>s+(+g.monto||0),0);
+  const porProveedor={};
+  lista.forEach(g=>{
+    const prov=g.proveedor||'Sin proveedor';
+    if(!porProveedor[prov]) porProveedor[prov]={n:0,monto:0};
+    porProveedor[prov].n++; porProveedor[prov].monto+=+g.monto||0;
+  });
+  const filasProveedor=Object.entries(porProveedor).sort((a,b)=>b[1].monto-a[1].monto);
+
+  document.getElementById('hfp-resumen').innerHTML=`
+    <div style="display:flex;gap:24px;flex-wrap:wrap;background:var(--bg);border-radius:8px;padding:12px 16px;margin-bottom:${filasProveedor.length?'8px':'0'};">
+      <div><div style="font-size:11px;color:var(--ink-soft);">Registros encontrados</div><strong style="font-size:20px;">${lista.length}</strong></div>
+      <div><div style="font-size:11px;color:var(--ink-soft);">Total</div><strong style="color:var(--green);font-size:20px;">${fmtMoney(total)}</strong></div>
+    </div>
+    ${filasProveedor.length?`<div style="display:flex;flex-wrap:wrap;gap:8px;">${filasProveedor.map(([prov,d])=>
+      `<div style="background:var(--bg);border-radius:8px;padding:8px 12px;font-size:12px;"><strong>${prov}</strong> — ${d.n} registro${d.n===1?'':'s'} · ${fmtMoney(d.monto)}</div>`).join('')}</div>`:''}`;
+
+  if(lista.length===0){
+    document.getElementById('hfp-tabla').innerHTML='<div class="empty-state"><div class="icon">📋</div><p>No hay gastos de "Playeras en blanco" con estos filtros.</p></div>';
+    return;
+  }
+  document.getElementById('hfp-tabla').innerHTML=`<div class="table-wrap"><table><thead><tr>
+    <th>Fecha</th><th>Proveedor</th><th>Concepto</th><th>Factura/Ref.</th><th>Monto</th><th>Origen</th>
+  </tr></thead><tbody>`+
+    lista.map(g=>`<tr>
+      <td>${fmtFecha(g.fecha)}</td>
+      <td>${g.proveedor||'—'}</td>
+      <td style="font-size:12px;max-width:280px;">${g.concepto||'—'}</td>
+      <td style="font-size:12px;">${g.factura||'—'}</td>
+      <td style="font-weight:600;">${fmtMoney(g.monto)}</td>
+      <td style="font-size:11px;color:var(--ink-soft);">${g.origen==='compra-playera-factura'?'📄 Import. factura':g.origen==='compra-playera'?'🛒 Compra individual':'✍️ Manual'}</td>
+    </tr>`).join('')+
+    `</tbody></table></div>`;
 };
 
 window.eliminarProveedor=async function(id){
