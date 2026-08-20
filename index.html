@@ -1277,31 +1277,54 @@ tbody td{padding:11px 14px;font-size:13.5px;vertical-align:middle;}
       </div>
     </div>
     <div class="content">
-      <div class="filter-bar">
-        <input type="text" id="search-proveedores" placeholder="🔍 Buscar proveedor..." oninput="renderProveedores()">
-        <select id="filter-prov-categoria" onchange="renderProveedores()">
-          <option value="">Todas las categorías</option>
-          <option>Playeras / Ropa</option>
-          <option>Tintas</option>
-          <option>Pretratamiento</option>
-          <option>Insumos generales</option>
-          <option>Empaque</option>
-          <option>Equipo / Maquinaria</option>
-          <option>Servicios</option>
-          <option>Otro</option>
-        </select>
+      <div class="tabs">
+        <button class="tab-btn active" data-tab-prov="registrados" onclick="cambiarTabProveedores('registrados')">Proveedores registrados</button>
+        <button class="tab-btn" data-tab-prov="concentrado" onclick="cambiarTabProveedores('concentrado')">📊 Concentrado de Facturas</button>
       </div>
-      <div style="display:flex;gap:14px;margin-bottom:14px;flex-wrap:wrap;">
-        <div style="background:var(--bg-card);border:1px solid var(--border);border-radius:8px;padding:10px 14px;"><div style="font-size:11px;color:var(--ink-soft);font-weight:600;text-transform:uppercase;">Total proveedores</div><div style="font-size:18px;font-weight:700;" id="prov-count">0</div></div>
-        <div style="background:var(--bg-card);border:1px solid var(--border);border-radius:8px;padding:10px 14px;"><div style="font-size:11px;color:var(--ink-soft);font-weight:600;text-transform:uppercase;">Total compras</div><div style="font-size:18px;font-weight:700;color:var(--red);" id="prov-total-compras">$0</div></div>
+
+      <div id="prov-tab-registrados">
+        <div class="filter-bar">
+          <input type="text" id="search-proveedores" placeholder="🔍 Buscar proveedor..." oninput="renderProveedores()">
+          <select id="filter-prov-categoria" onchange="renderProveedores()">
+            <option value="">Todas las categorías</option>
+            <option>Playeras / Ropa</option>
+            <option>Tintas</option>
+            <option>Pretratamiento</option>
+            <option>Insumos generales</option>
+            <option>Empaque</option>
+            <option>Equipo / Maquinaria</option>
+            <option>Servicios</option>
+            <option>Otro</option>
+          </select>
+        </div>
+        <div style="display:flex;gap:14px;margin-bottom:14px;flex-wrap:wrap;">
+          <div style="background:var(--bg-card);border:1px solid var(--border);border-radius:8px;padding:10px 14px;"><div style="font-size:11px;color:var(--ink-soft);font-weight:600;text-transform:uppercase;">Total proveedores</div><div style="font-size:18px;font-weight:700;" id="prov-count">0</div></div>
+          <div style="background:var(--bg-card);border:1px solid var(--border);border-radius:8px;padding:10px 14px;"><div style="font-size:11px;color:var(--ink-soft);font-weight:600;text-transform:uppercase;">Total compras</div><div style="font-size:18px;font-weight:700;color:var(--red);" id="prov-total-compras">$0</div></div>
+        </div>
+        <div class="table-wrap">
+          <table>
+            <thead><tr><th>Proveedor</th><th>Categoría</th><th>Contacto</th><th>Teléfono</th><th>Ciudad</th><th>Web / Tienda</th><th>Compras</th><th>Total</th><th>Acciones</th></tr></thead>
+            <tbody id="tabla-proveedores"></tbody>
+          </table>
+        </div>
+        <div id="proveedores-empty" class="empty-state" style="display:none;"><div class="icon">🏭</div><p>No hay proveedores registrados.</p></div>
       </div>
-      <div class="table-wrap">
-        <table>
-          <thead><tr><th>Proveedor</th><th>Categoría</th><th>Contacto</th><th>Teléfono</th><th>Ciudad</th><th>Web / Tienda</th><th>Compras</th><th>Total</th><th>Acciones</th></tr></thead>
-          <tbody id="tabla-proveedores"></tbody>
-        </table>
+
+      <div id="prov-tab-concentrado" style="display:none;">
+        <div style="background:var(--accent-light);border-radius:8px;padding:10px 14px;font-size:13px;margin-bottom:14px;">
+          💡 Esto junta TODAS tus facturas/compras/gastos de playeras, agrupadas por el nombre que capturaste en cada una — sin importar si ese proveedor está dado de alta arriba o no. Ponle un "Nombre comercial" a cada una (ej. si la factura viene a nombre de una persona pero tú le dices "Euro Cotton"), y las que compartan el mismo nombre comercial se suman juntas en el resumen de arriba.
+        </div>
+        <div class="filter-bar">
+          <label style="font-size:12px;color:var(--ink-soft);align-self:center;">Desde</label>
+          <input type="date" id="conc-desde" onchange="renderConcentradoProveedores()">
+          <label style="font-size:12px;color:var(--ink-soft);align-self:center;">Hasta</label>
+          <input type="date" id="conc-hasta" onchange="renderConcentradoProveedores()">
+          <button class="btn btn-ghost btn-sm" onclick="document.getElementById('conc-desde').value='';document.getElementById('conc-hasta').value='';renderConcentradoProveedores();">Limpiar fechas</button>
+        </div>
+        <div id="conc-resumen" style="margin-bottom:18px;"></div>
+        <div style="font-weight:700;font-size:14px;margin-bottom:8px;">Detalle por nombre tal como aparece en cada factura/gasto</div>
+        <div id="conc-detalle"></div>
       </div>
-      <div id="proveedores-empty" class="empty-state" style="display:none;"><div class="icon">🏭</div><p>No hay proveedores registrados.</p></div>
     </div>
   </div>
 
@@ -8478,6 +8501,130 @@ function comprasDeProveedor(nombre){
     .map(g=>({costoTotal:+g.monto||0,fecha:g.fecha||'',concepto:g.concepto||'Gasto'}));
   return [...deInsumos, ...dePlayeras, ...deGastosManuales];
 }
+
+window.cambiarTabProveedores=function(tab){
+  document.querySelectorAll('.tab-btn[data-tab-prov]').forEach(b=>b.classList.toggle('active',b.dataset.tabProv===tab));
+  document.getElementById('prov-tab-registrados').style.display=tab==='registrados'?'':'none';
+  document.getElementById('prov-tab-concentrado').style.display=tab==='concentrado'?'':'none';
+  if(tab==='concentrado') renderConcentradoProveedores();
+};
+
+// ═══ CONCENTRADO DE FACTURAS (independiente de los Proveedores dados de alta) ═══
+// Junta TODOS los movimientos (compras de insumos, compras de playeras,
+// gastos manuales) sin importar si el nombre coincide con algún proveedor
+// registrado — agrupa por el nombre EXACTO tal cual se capturó en cada uno.
+// Cada nombre puede tener un "nombre comercial" asignado (guardado en
+// pl_proveedor_alias); los que compartan el mismo nombre comercial se suman
+// juntos en el resumen de arriba, aunque el nombre capturado sea distinto
+// (ej. la factura viene a nombre de una persona física, pero comercialmente
+// es "Euro Cotton").
+let proveedorAlias=[];
+onSnapshot(collection(db,'pl_proveedor_alias'),s=>{
+  proveedorAlias=s.docs.map(d=>d.data());
+  if(document.getElementById('prov-tab-concentrado')?.style.display!=='none') renderConcentradoProveedores();
+});
+function _slugAlias(s){
+  return (s||'').toString().trim().toLowerCase()
+    .normalize('NFD').replace(/[\u0300-\u036f]/g,'')
+    .replace(/[^a-z0-9]+/g,'_').replace(/^_+|_+$/g,'')||('alias_'+Date.now());
+}
+function nombreComercialDe(nombreOriginal){
+  const norm=(nombreOriginal||'').trim().toLowerCase();
+  const alias=proveedorAlias.find(a=>(a.nombreOriginal||'').trim().toLowerCase()===norm);
+  return (alias&&alias.nombreComercial)?alias.nombreComercial:nombreOriginal;
+}
+window.guardarAliasProveedor=async function(nombreOriginal, nombreComercial){
+  const id=_slugAlias(nombreOriginal);
+  await setDoc(doc(db,'pl_proveedor_alias',id),{id,nombreOriginal,nombreComercial:nombreComercial.trim(),actualizado:new Date().toISOString()});
+};
+
+// Todos los movimientos (de las mismas 3 fuentes que ya usa Proveedores)
+// SIN filtrar por ningún proveedor en específico — cada uno trae su nombre
+// original tal cual se capturó, para poder agruparlos aquí.
+function todosLosMovimientosParaConcentrado(){
+  const deInsumos=compras.filter(c=>c.proveedor)
+    .map(c=>({nombreOriginal:c.proveedor,fecha:c.fechaPago||c.fecha||'',monto:+c.costoTotal||0,concepto:c.insumoNombre||c.descripcion||'Insumo'}));
+  const dePlayeras=(comprasPlayeras||[]).filter(c=>c.marca)
+    .map(c=>({nombreOriginal:c.marca,fecha:c.fecha||'',monto:+c.costoTotal||0,concepto:`${c.cantidad||''}pz ${c.tipo||''} ${c.genero||''} ${c.talla||''} ${c.color||''}`.replace(/\s+/g,' ').trim()}));
+  const deGastosManuales=(gastos||[]).filter(g=>!ORIGENES_GASTO_YA_CONTADOS.includes(g.origen)&&g.proveedor)
+    .map(g=>({nombreOriginal:g.proveedor,fecha:g.fecha||'',monto:+g.monto||0,concepto:g.concepto||'Gasto'}));
+  return [...deInsumos, ...dePlayeras, ...deGastosManuales];
+}
+
+window.renderConcentradoProveedores=function(){
+  const desde=document.getElementById('conc-desde')?.value||'';
+  const hasta=document.getElementById('conc-hasta')?.value||'';
+  let movs=todosLosMovimientosParaConcentrado();
+  if(desde) movs=movs.filter(m=>m.fecha>=desde);
+  if(hasta) movs=movs.filter(m=>m.fecha<=hasta);
+
+  // 1) Agrupar por nombre ORIGINAL (para poder editar el alias de cada uno)
+  const porOriginal={};
+  movs.forEach(m=>{
+    const key=m.nombreOriginal.trim().toLowerCase();
+    if(!porOriginal[key]) porOriginal[key]={nombreOriginal:m.nombreOriginal.trim(),n:0,total:0,ultimaFecha:''};
+    porOriginal[key].n++;
+    porOriginal[key].total+=m.monto;
+    if(m.fecha>porOriginal[key].ultimaFecha) porOriginal[key].ultimaFecha=m.fecha;
+  });
+  const filasOriginal=Object.values(porOriginal).sort((a,b)=>b.total-a.total);
+
+  // 2) Re-agrupar por NOMBRE COMERCIAL (varios nombres originales pueden
+  // compartir un mismo nombre comercial y sumarse juntos aquí)
+  const porComercial={};
+  filasOriginal.forEach(f=>{
+    const comercial=nombreComercialDe(f.nombreOriginal);
+    const key=comercial.trim().toLowerCase();
+    if(!porComercial[key]) porComercial[key]={nombreComercial:comercial.trim(),n:0,total:0,originales:[]};
+    porComercial[key].n+=f.n;
+    porComercial[key].total+=f.total;
+    porComercial[key].originales.push(f.nombreOriginal);
+  });
+  const filasComercial=Object.values(porComercial).sort((a,b)=>b.total-a.total);
+
+  const totalGeneral=filasComercial.reduce((s,f)=>s+f.total,0);
+
+  document.getElementById('conc-resumen').innerHTML=`
+    <div style="display:flex;gap:24px;flex-wrap:wrap;background:var(--bg);border-radius:8px;padding:12px 16px;margin-bottom:12px;">
+      <div><div style="font-size:11px;color:var(--ink-soft);">Proveedores distintos</div><strong style="font-size:20px;">${filasComercial.length}</strong></div>
+      <div><div style="font-size:11px;color:var(--ink-soft);">Movimientos totales</div><strong style="font-size:20px;">${movs.length}</strong></div>
+      <div><div style="font-size:11px;color:var(--ink-soft);">Total general</div><strong style="font-size:20px;color:var(--green);">${fmtMoney(totalGeneral)}</strong></div>
+    </div>
+    ${filasComercial.length?`<div class="table-wrap"><table><thead><tr><th>Nombre comercial</th><th>Nombres que agrupa</th><th># Movimientos</th><th>Total</th></tr></thead><tbody>`+
+      filasComercial.map(f=>`<tr>
+        <td style="font-weight:700;">${f.nombreComercial}</td>
+        <td style="font-size:11px;color:var(--ink-soft);">${[...new Set(f.originales)].join(', ')}</td>
+        <td>${f.n}</td>
+        <td style="font-weight:700;color:var(--red);">${fmtMoney(f.total)}</td>
+      </tr>`).join('')+
+      `</tbody></table></div>`:'<div class="empty-state"><div class="icon">📊</div><p>No hay movimientos con estos filtros.</p></div>'}`;
+
+  if(filasOriginal.length===0){
+    document.getElementById('conc-detalle').innerHTML='';
+    return;
+  }
+  document.getElementById('conc-detalle').innerHTML=`<div class="table-wrap"><table><thead><tr>
+    <th>Nombre tal como aparece</th><th>Nombre comercial</th><th># Mov.</th><th>Total</th><th>Última fecha</th>
+  </tr></thead><tbody>`+
+    filasOriginal.map((f,i)=>`<tr>
+      <td style="font-size:13px;">${f.nombreOriginal}</td>
+      <td><input type="text" value="${nombreComercialDe(f.nombreOriginal)}" id="conc-alias-${i}" style="border:1.5px solid var(--border);border-radius:6px;padding:5px 8px;font-size:13px;width:180px;" onblur="guardarAliasYRefrescar('${f.nombreOriginal.replace(/'/g,"\\'")}', document.getElementById('conc-alias-${i}').value)"></td>
+      <td>${f.n}</td>
+      <td style="font-weight:600;">${fmtMoney(f.total)}</td>
+      <td style="font-size:12px;color:var(--ink-soft);">${f.ultimaFecha?fmtFecha(f.ultimaFecha):'—'}</td>
+    </tr>`).join('')+
+    `</tbody></table></div>`;
+};
+
+window.guardarAliasYRefrescar=async function(nombreOriginal, nombreComercial){
+  if(!nombreComercial||!nombreComercial.trim()||nombreComercial.trim()===nombreOriginal){
+    // sin cambio real o vacío — no hace falta guardar nada
+    return;
+  }
+  await guardarAliasProveedor(nombreOriginal, nombreComercial);
+  toast(`✅ "${nombreOriginal}" ahora se agrupa como "${nombreComercial.trim()}"`);
+  renderConcentradoProveedores();
+};
 
 window.renderProveedores=function renderProveedores(){
   const search=(document.getElementById('search-proveedores')||{value:''}).value.toLowerCase();
