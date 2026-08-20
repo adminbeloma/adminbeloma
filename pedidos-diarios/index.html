@@ -171,6 +171,7 @@
             <th style="min-width:110px;">Marca</th>
             <th style="min-width:110px;">Modelo</th>
             <th style="min-width:160px;">Descripción</th>
+            <th style="min-width:80px;">🧍 Propia</th>
             <th style="min-width:60px;">Cant.</th>
             <th style="min-width:90px;">Paquete</th>
             <th style="width:8%"></th>
@@ -215,6 +216,7 @@
             <th style="min-width:110px;">Marca</th>
             <th style="min-width:110px;">Modelo</th>
             <th style="min-width:160px;">Descripción</th>
+            <th style="min-width:80px;">🧍 Propia</th>
             <th style="min-width:60px;">Cant.</th>
             <th style="min-width:90px;">Paquete</th>
             <th style="width:8%"></th>
@@ -395,6 +397,7 @@
           <th style="min-width:110px;">Marca</th>
           <th style="min-width:110px;">Modelo</th>
           <th style="min-width:160px;">Descripción</th>
+          <th style="min-width:80px;">🧍 Propia</th>
           <th style="min-width:60px;">Cant.</th>
           <th></th>
         </tr>
@@ -514,6 +517,13 @@ function expandirConsumosTelaPD(items){
   const consumos=[];
   (items||[]).forEach(it=>{
     if(!it || !it.talla || !(+it.cantidad>0)) return;
+    // Si esta pieza se resolvió con una playera YA IMPRESA (inventario_playeras),
+    // no se descuenta playera en blanco — no se va a imprimir una nueva, así
+    // que no tiene caso restarle al inventario de tela cruda por esta pieza.
+    if(it.desdeInventarioImpreso) return;
+    // Si el cliente trajo su propia playera, tampoco se descuenta nada —
+    // no salió de ningún inventario tuyo, blanco ni ya impreso.
+    if(it.clientePropiaPlayera) return;
     const mapGen=GENERO_PD_A_PLAYERAS[it.genero]||{genero:it.genero,tipo:'Playera'};
     const talla = mapGen.tipo==='Pañalero' ? it.talla : (TALLA_PD_A_PLAYERAS[it.talla]||it.talla);
     consumos.push({tipo:mapGen.tipo,genero:mapGen.genero,talla,color:it.color||'',marca:it.marca||'',modelo:it.modelo||'',cantidad:+it.cantidad});
@@ -660,6 +670,12 @@ function agregarFilaNuevaHoy(){
       <input type="text" class="nh-modelo-otro" placeholder="Especifica el modelo" style="margin-top:4px;display:none;">
     </td>
     <td><input type="text" class="nh-desc" placeholder="Diseño / descripción"></td>
+    <td style="text-align:center;">
+      <label style="display:flex;flex-direction:column;align-items:center;gap:2px;font-size:.68rem;cursor:pointer;" title="El cliente trae su propia playera — no se descuenta nada del inventario">
+        <input type="checkbox" class="nh-propia">
+        🧍 Propia
+      </label>
+    </td>
     <td><input type="number" class="nh-cant" min="1" value="1"></td>
     <td><input type="number" class="nh-paquete" min="2" placeholder="Ej. 2, 3"></td>
     <td><button class="btn btn-rojo btn-chico" onclick="document.getElementById('${id}').remove(); actualizarVisibilidadNuevosHoy(); actualizarChkMaster('nh');">✕</button></td>
@@ -709,7 +725,8 @@ async function guardarNuevosHoy(){
         talla: tr.querySelector(".nh-talla").value.trim(),
         color, marca, modelo,
         descripcion: tr.querySelector(".nh-desc").value.trim(),
-        cantidad: parseInt(tr.querySelector(".nh-cant").value) || 1
+        cantidad: parseInt(tr.querySelector(".nh-cant").value) || 1,
+        clientePropiaPlayera: tr.querySelector(".nh-propia")?.checked||false
       }];
       await db.collection(COLECCION).add({
         folio: folio || "(sin folio)",
@@ -782,6 +799,12 @@ function agregarFilaItem(valores){
       <input type="text" class="it-modelo-otro" placeholder="Especifica el modelo" style="margin-top:4px;display:none;">
     </td>
     <td><input type="text" class="it-desc" placeholder="Diseño / descripción" onblur="revisarInventarioAlCapturar('${id}')"></td>
+    <td style="text-align:center;">
+      <label style="display:flex;flex-direction:column;align-items:center;gap:2px;font-size:.68rem;cursor:pointer;" title="El cliente trae su propia playera — no se descuenta nada del inventario">
+        <input type="checkbox" class="it-propia" onchange="onClientePropiaChange('${id}')">
+        🧍 Propia
+      </label>
+    </td>
     <td><input type="number" class="it-cant" min="1" value="1"></td>
     <td><input type="number" class="it-paquete" min="2" placeholder="Ej. 2, 3"></td>
     <td><button class="btn btn-rojo btn-chico" onclick="document.getElementById('${id}').remove(); actualizarChkMaster('it');">✕</button></td>
@@ -841,7 +864,9 @@ function leerItems(){
       modelo: modelo,
       descripcion: tr.querySelector(".it-desc").value.trim(),
       cantidad: parseInt(tr.querySelector(".it-cant").value) || 1,
-      piezasPaquete: parseInt(tr.querySelector(".it-paquete").value) || 0
+      piezasPaquete: parseInt(tr.querySelector(".it-paquete").value) || 0,
+      desdeInventarioImpreso: tr.dataset.desdeInventarioImpreso==='1',
+      clientePropiaPlayera: tr.querySelector('.it-propia')?.checked||false
     });
   });
   return items;
@@ -953,7 +978,7 @@ async function guardarPedido(){
       let ordenBase = Date.now();
       const sinMatchAcumulado = [];
       for(const it of items){
-        const itemsPedido=[{genero:it.genero, talla:it.talla, color:it.color, marca:it.marca, modelo:it.modelo, descripcion:it.descripcion, cantidad:it.cantidad}];
+        const itemsPedido=[{genero:it.genero, talla:it.talla, color:it.color, marca:it.marca, modelo:it.modelo, descripcion:it.descripcion, cantidad:it.cantidad, desdeInventarioImpreso:it.desdeInventarioImpreso, clientePropiaPlayera:it.clientePropiaPlayera}];
         await db.collection(COLECCION).add({
           folio: pedidoExistente.folio,
           canal: pedidoExistente.canal,
@@ -1002,7 +1027,7 @@ async function guardarPedido(){
         const [yy, mm, dd] = fecha.split("-");
         folioFinal = `${folioAuto.prefijo}-${yy.slice(2)}${mm}${dd}-${String(folioAuto.siguiente).padStart(2,"0")}`;
       }
-      const itemsPedido=[{genero:it.genero, talla:it.talla, color:it.color, marca:it.marca, modelo:it.modelo, descripcion:it.descripcion, cantidad:it.cantidad}];
+      const itemsPedido=[{genero:it.genero, talla:it.talla, color:it.color, marca:it.marca, modelo:it.modelo, descripcion:it.descripcion, cantidad:it.cantidad, desdeInventarioImpreso:it.desdeInventarioImpreso, clientePropiaPlayera:it.clientePropiaPlayera}];
       await db.collection(COLECCION).add({
         folio: folioFinal || "(sin folio)",
         canal: canalItem, tipoCliente: tipoClienteItem,
@@ -1439,13 +1464,29 @@ window.importarInventarioExcel = async function(file){
   }
 };
 
+// Si se marca "Cliente trae su propia playera" DESPUÉS de haber confirmado
+// un cruce con inventario ya impreso, se le quita esa marca — ya no aplica,
+// porque ahora esta pieza no sale de ningún inventario (ni blanco ni ya impreso).
+window.onClientePropiaChange=function(trId){
+  const tr=document.getElementById(trId);
+  if(!tr) return;
+  if(tr.querySelector('.it-propia')?.checked){
+    tr.dataset.desdeInventarioImpreso='';
+  }
+};
+
 // ── Cruce con el inventario al capturar un pedido del día ──
 // Se dispara cuando el usuario termina de escribir la descripción de un
 // renglón (si ya tiene talla puesta). Si encuentra un diseño igual (talla +
 // descripción) con piezas disponibles, pregunta si se descuenta 1 pieza.
+// Si confirma, se marca el renglón como "resuelto con pieza ya impresa" —
+// así, al guardar el pedido, NO se le descuenta también una playera en
+// blanco: esa pieza ya estaba hecha desde antes, no se va a imprimir una
+// nueva ahora, así que no tiene caso restarle al inventario de tela cruda.
 window.revisarInventarioAlCapturar = async function(trId){
   const tr = document.getElementById(trId);
   if(!tr) return;
+  if(tr.querySelector(".it-propia")?.checked) return; // el cliente trae su propia playera — no hay nada que cruzar
   const descripcionInput = tr.querySelector(".it-desc");
   const tallaSelect = tr.querySelector(".it-talla");
   if(!descripcionInput || !tallaSelect) return;
@@ -1460,13 +1501,14 @@ window.revisarInventarioAlCapturar = async function(trId){
     normDescripcion(i.descripcion)===normDescripcion(descripcion) &&
     (+i.cantidad||0)>0
   );
-  if(!match) return;
-  const descontar = confirm(`🎯 Tienes "${match.descripcion}" talla ${match.talla} en tu inventario (quedan ${match.cantidad} pieza(s)).\n\n¿Descontar 1 pieza del inventario para este pedido?`);
-  if(!descontar) return;
+  if(!match){ tr.dataset.desdeInventarioImpreso=''; return; }
+  const descontar = confirm(`🎯 Tienes "${match.descripcion}" talla ${match.talla} en tu inventario (quedan ${match.cantidad} pieza(s)).\n\n¿Descontar 1 pieza del inventario para este pedido?\n\n(Esta pieza ya está impresa — al confirmar, NO se le va a descontar además una playera en blanco, porque no se va a imprimir una nueva).`);
+  if(!descontar){ tr.dataset.desdeInventarioImpreso=''; return; }
   const nuevaCant = Math.max(0, (+match.cantidad||0) - 1);
   await db.collection(COL_INVENTARIO).doc(match.id).update({cantidad: nuevaCant});
   match.cantidad = nuevaCant;
-  mostrarMsg(`📦 Se descontó 1 pieza de "${match.descripcion}" (quedan ${nuevaCant}).`, "ok");
+  tr.dataset.desdeInventarioImpreso='1';
+  mostrarMsg(`📦 Se descontó 1 pieza de "${match.descripcion}" (quedan ${nuevaCant}) — no se toca la playera en blanco.`, "ok");
 };
 
 // Carga el inventario en silencio (sin tocar la tabla de la pestaña
@@ -1698,6 +1740,12 @@ function edRenderFilaItem(it){
       <input type="text" class="ed-it-modelo-otro" placeholder="Especifica el modelo" style="margin-top:4px;display:none;">
     </td>
     <td><input type="text" class="ed-it-desc" placeholder="Diseño / descripción"></td>
+    <td style="text-align:center;">
+      <label style="display:flex;flex-direction:column;align-items:center;gap:2px;font-size:.68rem;cursor:pointer;" title="El cliente trae su propia playera — no se descuenta nada del inventario">
+        <input type="checkbox" class="ed-it-propia">
+        🧍 Propia
+      </label>
+    </td>
     <td><input type="number" class="ed-it-cant" min="1" value="1"></td>
     <td><button class="btn btn-rojo btn-chico" onclick="document.getElementById('${id}').remove()">✕</button></td>
   `;
@@ -1705,6 +1753,7 @@ function edRenderFilaItem(it){
   tr.querySelector(".ed-it-genero").value = generoInicial;
   tr.querySelector(".ed-it-desc").value = (it && it.descripcion) || "";
   tr.querySelector(".ed-it-cant").value = (it && it.cantidad) || 1;
+  tr.querySelector(".ed-it-propia").checked = !!(it && it.clientePropiaPlayera);
 }
 function edAgregarFilaItem(){ edRenderFilaItem(null); }
 function edOnGeneroFilaChange(id){ refrescarTallaYColorFila(document.getElementById(id), "ed-it-"); }
@@ -1726,7 +1775,8 @@ function edLeerItems(){
       talla: tr.querySelector(".ed-it-talla").value.trim(),
       color, marca, modelo,
       descripcion: tr.querySelector(".ed-it-desc").value.trim(),
-      cantidad: parseInt(tr.querySelector(".ed-it-cant").value) || 1
+      cantidad: parseInt(tr.querySelector(".ed-it-cant").value) || 1,
+      clientePropiaPlayera: tr.querySelector(".ed-it-propia")?.checked||false
     });
   });
   return items;
