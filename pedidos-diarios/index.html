@@ -710,6 +710,7 @@ async function guardarNuevosHoy(){
       const modeloSel = tr.querySelector(".nh-modelo").value;
       const modelo = modeloSel === "Otro" ? tr.querySelector(".nh-modelo-otro").value.trim() : modeloSel;
       let folio = tr.querySelector(".nh-folio").value.trim();
+      const folioTecleadoAMano = !!folio;
 
       if(!folio && (canal === "Local" || canal === "Foraneo")){
         // Cada renglón pide su propio folio en el momento — la transacción
@@ -741,6 +742,9 @@ async function guardarNuevosHoy(){
         orden: ordenBase++,
         creadoEn: firebase.firestore.FieldValue.serverTimestamp()
       });
+      // Folio tecleado a mano: pone el contador de ese día al día para que el
+      // siguiente automático no vuelva a entregar ese mismo número.
+      if(folioTecleadoAMano) await sincronizarContadorConFolioManual(folio);
       // Descuenta stock de Playeras en blanco según lo que se acaba de capturar
       const sinMatch = await descontarStockPlayerasDePedido(itemsPedido, []);
       if(sinMatch.length) sinMatchAcumulado.push(sinMatch);
@@ -895,17 +899,109 @@ document.getElementById("fCanal").addEventListener("change", (e)=>{
 // el mismo folio dentro del mismo día — antes se calculaba contando cuántos
 // pedidos ya existían (snap.size + 1), lo cual podía duplicarse si dos
 // guardados ocurrían casi al mismo tiempo.
+//
+// El contador solo, sin embargo, NO alcanzaba: se quedaba atrás en dos casos y
+// entonces volvía a entregar un número ya usado.
+//   1) Folio escrito a mano. Como no pasaba por aquí, el contador ni se
+//      enteraba: si alguien tecleaba LOC-260820-03 con el contador en 2, el
+//      siguiente automático volvía a salir 03.
+//   2) Captura con fecha retroactiva. El contador se llama canal_fecha, así
+//      que un día sin documento contador (días viejos, o días numerados a
+//      mano) arrancaba de cero y repetía desde el 01.
+// Se arregla por los dos lados: abajo, el generador consulta cuál es el mayor
+// consecutivo REALMENTE usado ese día antes de entregar el siguiente (se repara
+// solo); y en cada guardado con folio manual se llama a
+// sincronizarContadorConFolioManual() para empujar el contador.
+
+const RX_FOLIO_DIARIO = /^(LOC|FOR)-(\d{6})-(\d+)$/i;
+
+// "LOC-260812-04" → {canal:"Local", fecha:"2026-08-12", nn:4}. Ojo: el día y el
+// canal se sacan del PROPIO folio, no del campo fecha del pedido, porque es el
+// texto del folio el que puede repetirse (un pedido con fecha 13 puede llevar
+// un folio del día 12 si se tecleó a mano o se editó la fecha después).
+function analizarFolioDiario(folio){
+  const m = RX_FOLIO_DIARIO.exec((folio||"").trim());
+  if(!m) return null;
+  const seg = m[2];
+  const nn = parseInt(m[3],10);
+  if(!isFinite(nn)) return null;
+  return {canal: m[1].toUpperCase()==="LOC" ? "Local" : "Foraneo",
+          fecha: `20${seg.slice(0,2)}-${seg.slice(2,4)}-${seg.slice(4,6)}`, nn};
+}
+const prefijoCanalFolio = canal => canal === "Local" ? "LOC" : "FOR";
+const claveContadorFolio = (canal, fecha) => `${canal}_${fecha}`;
+const segmentoFechaFolio = fecha => { const [yy,mm,dd] = fecha.split("-"); return yy.slice(2)+mm+dd; };
+
+// Mayor consecutivo ya usado en pedidos de ese día+canal, leído de la propia
+// colección. Es el "piso" que el contador nunca puede ignorar. Se consulta por
+// rango de texto sobre el folio ("LOC-260812-" … "LOC-260812.") — Firestore no
+// tiene "empieza con", pero '-' (0x2D) va justo antes de '.' (0x2E), así que el
+// rango cae exactamente sobre los folios de ese día. Se guarda en memoria para
+// no releer en cada renglón de una captura larga.
+const _maxFolioUsadoPorDia = {};
+async function mayorFolioUsado(canal, fecha){
+  const clave = claveContadorFolio(canal, fecha);
+  if(_maxFolioUsadoPorDia[clave] !== undefined) return _maxFolioUsadoPorDia[clave];
+  const base = `${prefijoCanalFolio(canal)}-${segmentoFechaFolio(fecha)}-`;
+  let max = 0;
+  try{
+    const snap = await db.collection(COLECCION)
+      .where("folio", ">=", base)
+      .where("folio", "<", base.slice(0,-1) + ".")
+      .get();
+    snap.forEach(d=>{ const f = analizarFolioDiario(d.data().folio); if(f && f.nn > max) max = f.nn; });
+  }catch(err){
+    // Si la consulta falla no bloqueamos nada: mandaría el contador solo, que
+    // es como se comportaba antes. Por eso no se guarda en caché el 0.
+    console.error("No se pudieron revisar los folios ya usados de " + clave, err);
+    return 0;
+  }
+  _maxFolioUsadoPorDia[clave] = max;
+  return max;
+}
+
 async function obtenerConsecutivoFolio(canal, fecha){
-  const prefijo = canal === "Local" ? "LOC" : "FOR";
-  const contadorRef = db.collection("folioContadoresDiarios").doc(`${canal}_${fecha}`);
+  const prefijo = prefijoCanalFolio(canal);
+  const piso = await mayorFolioUsado(canal, fecha);
+  const clave = claveContadorFolio(canal, fecha);
+  const contadorRef = db.collection("folioContadoresDiarios").doc(clave);
   const siguiente = await db.runTransaction(async (tx)=>{
     const snap = await tx.get(contadorRef);
     const actual = snap.exists ? (+snap.data().ultimo || 0) : 0;
-    const proximo = actual + 1;
+    // max(contador, piso): si el contador no existe o se quedó atrás, se repara
+    // solo en vez de reiniciar en 1 y pisar folios que ya andan en la calle.
+    const proximo = Math.max(actual, piso) + 1;
     tx.set(contadorRef, {ultimo: proximo, canal, fecha, actualizado: new Date().toISOString()}, {merge:true});
     return proximo;
   });
+  _maxFolioUsadoPorDia[clave] = siguiente; // el número que acabamos de tomar ya está usado
   return {prefijo, siguiente};
+}
+
+// Un folio escrito a mano no pasa por el contador, así que hay que empujarlo
+// hasta ese número. Se llama DESPUÉS de guardar el pedido, para que el folio ya
+// esté en la colección. No bloquea el guardado si falla: el generador vuelve a
+// revisar los folios ya usados antes de entregar el siguiente, así que aunque
+// esta escritura no se logre, tampoco saldrá un duplicado.
+async function sincronizarContadorConFolioManual(folio){
+  const f = analizarFolioDiario(folio);
+  if(!f) return;
+  const clave = claveContadorFolio(f.canal, f.fecha);
+  // Solo se SUBE el piso en memoria si ya estaba calculado; si aún no lo está
+  // se deja sin tocar, para que la próxima consulta lea el máximo real de la
+  // colección (este folio manual podría ser más bajo que otros de ese día).
+  if(_maxFolioUsadoPorDia[clave] !== undefined && _maxFolioUsadoPorDia[clave] < f.nn) _maxFolioUsadoPorDia[clave] = f.nn;
+  try{
+    const ref = db.collection("folioContadoresDiarios").doc(clave);
+    await db.runTransaction(async (tx)=>{
+      const snap = await tx.get(ref);
+      const actual = snap.exists ? (+snap.data().ultimo || 0) : 0;
+      if(actual >= f.nn) return;   // el contador ya iba más adelante: no se baja nunca
+      tx.set(ref, {ultimo: f.nn, canal: f.canal, fecha: f.fecha, actualizado: new Date().toISOString()}, {merge:true});
+    });
+  }catch(err){
+    console.error("No se pudo poner al día el contador con el folio manual " + folio, err);
+  }
 }
 
 // Pone las prendas de MercadoLibre primero en la lista, dejando todo lo demás
@@ -1022,6 +1118,7 @@ async function guardarPedido(){
       const canalItem = it.canal || "Local";
       const tipoClienteItem = canalItem === "Local" ? "Local" : "Foraneo";
       let folioFinal = it.folio;
+      const folioTecleadoAMano = !!folioFinal;
       if(!folioFinal && (canalItem === "Local" || canalItem === "Foraneo")){
         const folioAuto = await obtenerConsecutivoFolio(canalItem, fecha);
         const [yy, mm, dd] = fecha.split("-");
@@ -1040,6 +1137,9 @@ async function guardarPedido(){
         orden: ordenBase++,
         creadoEn: firebase.firestore.FieldValue.serverTimestamp()
       });
+      // Igual que arriba: si el folio se escribió a mano, el contador de ese
+      // día tiene que enterarse para no repetirlo después.
+      if(folioTecleadoAMano) await sincronizarContadorConFolioManual(folioFinal);
       const sinMatch = await descontarStockPlayerasDePedido(itemsPedido, []);
       if(sinMatch.length) sinMatchAcumulado.push(sinMatch);
       guardados++;
@@ -1825,6 +1925,10 @@ async function guardarEdicionPedido(){
   };
   try{
     await db.collection(COLECCION).doc(id).update(data);
+    // El folio del modal de edición es texto libre: si quedó con formato
+    // LOC-/FOR-YYMMDD-NN, el contador de ese día tiene que quedar al menos en
+    // ese número. No hace nada si el folio es de otro canal o no tiene formato.
+    await sincronizarContadorConFolioManual(data.folio);
     // Repone el stock de los items viejos y descuenta el de los nuevos —
     // así una edición (cambiar talla, color, cantidad, etc.) siempre deja
     // el inventario de Playeras cuadrado con lo que el pedido dice ahora.
