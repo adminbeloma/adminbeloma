@@ -1951,6 +1951,12 @@ tbody td{padding:11px 14px;font-size:13.5px;vertical-align:middle;}
           Registrar también como gasto (salida de dinero) en Gastos, por el total de la factura
         </label>
       </div>
+      <div class="form-group full" style="margin-bottom:14px;background:var(--bg);border-radius:8px;padding:10px 14px;">
+        <label style="display:flex;align-items:center;gap:8px;font-weight:400;cursor:pointer;">
+          <input type="checkbox" id="if-no-sumar-stock" onchange="renderPreviewFacturaPlayeras()" style="accent-color:var(--accent);width:16px;height:16px;">
+          <span>Es una factura <strong>vieja</strong> — esas playeras ya se vendieron/usaron, <strong>NO sumar al stock actual</strong> (solo registrar el gasto para tu contabilidad)</span>
+        </label>
+      </div>
       <div id="if-resumen" style="margin-bottom:14px;"></div>
       <div id="if-preview" style="max-height:400px;overflow-y:auto;"></div>
     </div>
@@ -2448,6 +2454,21 @@ tbody td{padding:11px 14px;font-size:13.5px;vertical-align:middle;}
     <div class="modal-footer">
       <button class="btn btn-ghost" onclick="closeModal('modal-proveedor')">Cancelar</button>
       <button class="btn btn-accent" onclick="guardarProveedor()">Guardar Proveedor</button>
+    </div>
+  </div>
+</div>
+
+<!-- MODAL DETALLE DE PROVEEDOR (consumo por mes) -->
+<div class="modal-overlay" id="modal-detalle-proveedor">
+  <div class="modal" style="max-width:720px;">
+    <div class="modal-header"><h2 id="dp-titulo">📊 Detalle de proveedor</h2><button class="modal-close" onclick="closeModal('modal-detalle-proveedor')">×</button></div>
+    <div class="modal-body">
+      <div id="dp-resumen" style="margin-bottom:14px;"></div>
+      <div id="dp-tabla-meses" style="margin-bottom:14px;"></div>
+      <div id="dp-detalle-lineas"></div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-ghost" onclick="closeModal('modal-detalle-proveedor')">Cerrar</button>
     </div>
   </div>
 </div>
@@ -3112,7 +3133,7 @@ onSnapshot(query(collection(db,'pl_ventas'), orderBy('creado','desc'), limit(5))
   renderDashboard();
   actualizarBadgeAlertas();
 });
-onSnapshot(collection(db,'pl_gastos'),s=>{gastos=s.docs.map(d=>d.data());checkLoaded();renderDashboard();renderGastos();});
+onSnapshot(collection(db,'pl_gastos'),s=>{gastos=s.docs.map(d=>d.data());checkLoaded();renderDashboard();renderGastos();if(typeof renderProveedores==='function')renderProveedores();});
 onSnapshot(collection(db,'pl_playeras'),s=>{playeras=s.docs.map(d=>d.data());checkLoaded();renderPlayeras();actualizarBadgeAlertas();});
 onSnapshot(collection(db,'pl_insumos'),s=>{insumos=s.docs.map(d=>d.data());checkLoaded();renderInsumos();renderDashboard();actualizarBadgeAlertas();});
 onSnapshot(collection(db,'pl_consumos'),s=>{consumos=s.docs.map(d=>d.data());checkLoaded();});
@@ -6404,30 +6425,38 @@ async function crearGastoDesdeCompraPlayera(compra){
 // promedio ponderado) o crea el producto si no existía, y deja un registro
 // en pl_compras_playeras para trazabilidad. La usan tanto "Registrar compra"
 // (una sola línea) como "Importar factura" (muchas líneas de golpe).
-async function aplicarLineaCompraPlayera(c, cant, costoUnitNuevo, fecha, referencia, notas){
-  const existente=buscarPlayeraStock(c);
-  if(existente){
-    const stockPrev=+existente.stock||0;
-    const costoPrev=+existente.costo||0;
-    const stockNuevo=stockPrev+cant;
-    const costoPromedio=stockNuevo>0?((stockPrev*costoPrev)+(cant*costoUnitNuevo))/stockNuevo:costoUnitNuevo;
-    await setDoc(doc(db,'pl_playeras',existente.id),{...existente,stock:+stockNuevo.toFixed(2),costo:+costoPromedio.toFixed(2)});
-  } else {
-    const nuevoId=uid();
-    await setDoc(doc(db,'pl_playeras',nuevoId),{
-      id:nuevoId,
-      nombre:`${c.modelo?c.modelo+' ':''}${c.tipo} ${c.genero} ${c.talla} ${c.color}${c.marca?' ['+c.marca+']':''}`,
-      tipo:c.tipo,genero:c.genero,talla:c.talla,color:c.color,
-      categoria:'',stock:cant,stockMin:0,proveedor:c.marca,modelo:c.modelo||'',costo:+costoUnitNuevo.toFixed(2),
-      notas:'',imagen:'',creado:new Date().toISOString()
-    });
+// sumarStock=false se usa para facturas VIEJAS que solo se quieren registrar
+// como gasto histórico (para que cuadre la contabilidad) pero cuyas piezas
+// ya se vendieron/usaron hace tiempo — no tiene caso sumarlas al stock de
+// HOY, porque ya no existen físicamente en el inventario.
+async function aplicarLineaCompraPlayera(c, cant, costoUnitNuevo, fecha, referencia, notas, sumarStock=true){
+  if(sumarStock){
+    const existente=buscarPlayeraStock(c);
+    if(existente){
+      const stockPrev=+existente.stock||0;
+      const costoPrev=+existente.costo||0;
+      const stockNuevo=stockPrev+cant;
+      const costoPromedio=stockNuevo>0?((stockPrev*costoPrev)+(cant*costoUnitNuevo))/stockNuevo:costoUnitNuevo;
+      await setDoc(doc(db,'pl_playeras',existente.id),{...existente,stock:+stockNuevo.toFixed(2),costo:+costoPromedio.toFixed(2)});
+    } else {
+      const nuevoId=uid();
+      await setDoc(doc(db,'pl_playeras',nuevoId),{
+        id:nuevoId,
+        nombre:`${c.modelo?c.modelo+' ':''}${c.tipo} ${c.genero} ${c.talla} ${c.color}${c.marca?' ['+c.marca+']':''}`,
+        tipo:c.tipo,genero:c.genero,talla:c.talla,color:c.color,
+        categoria:'',stock:cant,stockMin:0,proveedor:c.marca,modelo:c.modelo||'',costo:+costoUnitNuevo.toFixed(2),
+        notas:'',imagen:'',creado:new Date().toISOString()
+      });
+    }
   }
   const compraId=uid();
   const compraData={
     id:compraId,origen:'playera',fecha,
     tipo:c.tipo,genero:c.genero,talla:c.talla,color:c.color,marca:c.marca,modelo:c.modelo||'',
     cantidad:cant,costoTotal:+(cant*costoUnitNuevo).toFixed(2),costoUnidad:costoUnitNuevo,
-    referencia,notas,creado:new Date().toISOString()
+    referencia,notas:sumarStock?notas:(notas+' — histórico, NO sumado al stock actual (piezas ya usadas/vendidas)'),
+    sumadoAStock:sumarStock,
+    creado:new Date().toISOString()
   };
   await setDoc(doc(db,'pl_compras_playeras',compraId),compraData);
   return compraData;
@@ -6477,6 +6506,7 @@ window.importarFacturaPlayeras=async function(file){
   document.getElementById('if-fecha').value=hoy();
   document.getElementById('if-referencia').value='';
   document.getElementById('if-registrar-gasto').checked=true;
+  document.getElementById('if-no-sumar-stock').checked=false;
   _facturaPDFTextoCompleto=''; // se limpia aquí para no arrastrar el aviso de "total de piezas" de una importación anterior
   const esPDF=/\.pdf$/i.test(file.name);
   try{
@@ -6672,6 +6702,7 @@ function renderPreviewFacturaPlayeras(){
     </div>
     ${avisoTotalFactura?`<div style="font-size:13px;">${avisoTotalFactura}</div>`:''}`;
 
+  const sumarStockPreview=!document.getElementById('if-no-sumar-stock')?.checked;
   document.getElementById('if-preview').innerHTML=`<div class="table-wrap"><table><thead><tr>
     <th></th><th>Fila</th><th>Proveedor</th><th>Modelo</th><th>Tipo</th><th>Género</th><th>Talla</th><th>Color</th><th>Cant.</th><th>Precio</th><th>Subtotal</th><th>Estado</th>
   </tr></thead><tbody>`+
@@ -6687,7 +6718,7 @@ function renderPreviewFacturaPlayeras(){
       <td>${f.cantidad||'—'}</td>
       <td>${f.precioUnitario?fmtMoney(f.precioUnitario):'—'}</td>
       <td>${f.cantidad&&f.precioUnitario?fmtMoney(f.cantidad*f.precioUnitario):'—'}</td>
-      <td style="font-size:11px;">${f.errores.length?'⚠️ '+f.errores.join(', '):(f.existente?'✅ suma a existente':'🆕 producto nuevo')}</td>
+      <td style="font-size:11px;">${f.errores.length?'⚠️ '+f.errores.join(', '):(sumarStockPreview?(f.existente?'✅ suma a existente':'🆕 producto nuevo'):'📋 solo gasto (no toca stock)')}</td>
     </tr>`).join('')+
     `</tbody></table></div>`;
 }
@@ -6697,13 +6728,14 @@ window.confirmarImportarFacturaPlayeras=async function(){
   const referencia=document.getElementById('if-referencia').value;
   const filas=_facturaPlayerasFilas.filter(f=>f.incluir);
   if(filas.length===0){toast('⚠️ No hay líneas válidas para importar');return;}
+  const sumarStock=!document.getElementById('if-no-sumar-stock').checked;
   const btn=document.getElementById('if-btn-confirmar');
   btn.disabled=true; btn.textContent='⏳ Importando...';
   let totalImportado=0;
   try{
     for(const f of filas){
       const c={tipo:f.tipo,genero:f.genero,talla:f.talla,color:f.color,marca:f.proveedor,modelo:f.modelo};
-      await aplicarLineaCompraPlayera(c, f.cantidad, f.precioUnitario, fecha, referencia, 'Importado desde factura Excel');
+      await aplicarLineaCompraPlayera(c, f.cantidad, f.precioUnitario, fecha, referencia, 'Importado desde factura Excel', sumarStock);
       totalImportado+=f.cantidad*f.precioUnitario;
     }
     if(document.getElementById('if-registrar-gasto').checked){
@@ -6711,16 +6743,16 @@ window.confirmarImportarFacturaPlayeras=async function(){
       const proveedores=[...new Set(filas.map(f=>f.proveedor).filter(Boolean))];
       await setDoc(doc(db,'pl_gastos',gastoId),{
         id:gastoId, origen:'compra-playera-factura', fecha,
-        concepto:`Factura de playeras: ${filas.length} línea(s), ${filas.reduce((s,f)=>s+f.cantidad,0)} pzas`,
+        concepto:`Factura de playeras: ${filas.length} línea(s), ${filas.reduce((s,f)=>s+f.cantidad,0)} pzas${sumarStock?'':' (histórico, no sumado al stock)'}`,
         categoria:'Playeras en blanco', tipo:'Variable',
         proveedor:proveedores.join(', '), factura:referencia||'',
         monto:+totalImportado.toFixed(2),
-        notas:'Generado automáticamente al importar factura de Playeras',
+        notas:sumarStock?'Generado automáticamente al importar factura de Playeras':'Generado automáticamente al importar factura VIEJA de Playeras — solo gasto, piezas ya usadas/vendidas',
         creado:new Date().toISOString()
       });
     }
     closeModal('modal-importar-factura-playera');
-    toast(`✅ Factura importada — ${filas.length} línea(s), ${fmtMoney(totalImportado)}`);
+    toast(`✅ Factura importada — ${filas.length} línea(s), ${fmtMoney(totalImportado)}${sumarStock?'':' (sin sumar al stock)'}`);
   }catch(err){
     console.error('Error importando factura de playeras:', err);
     toast('⚠️ Ocurrió un error importando la factura — revisa la consola');
@@ -8331,6 +8363,34 @@ window.guardarProveedor=async function(){
   toast('✅ Proveedor guardado');
 };
 
+// Compras/gastos de un proveedor: se juntan TRES fuentes —
+//  1) Compras de Insumos (colección pl_compras)
+//  2) Compras de Playeras en blanco (colección pl_compras_playeras, campo "marca")
+//  3) Gastos capturados MANUALMENTE en Gastos con ese proveedor (ej. las
+//     facturas de enero a junio que Felipe ya había registrado ahí antes
+//     de que existiera el importador de facturas de Playeras)
+// Los gastos que YA vienen de las fuentes 1 y 2 (generados automáticamente
+// al registrar una compra) se EXCLUYEN de la fuente 3 para no contarlos
+// doble — se identifican por su campo "origen".
+// La comparación de nombres es POR CONTENIDO (no exacta): el registro en
+// Proveedores a veces trae texto extra alrededor (ej. "Playera y Mas
+// (Yazbek)"), pero lo que se captura en una compra es solo "Yazbek".
+const ORIGENES_GASTO_YA_CONTADOS=['compra','compra-playera','compra-playera-factura'];
+function nombresCoinciden(a,b){
+  const na=(a||'').toLowerCase().trim(), nb=(b||'').toLowerCase().trim();
+  if(!na||!nb) return false;
+  return na===nb || na.includes(nb) || nb.includes(na);
+}
+function comprasDeProveedor(nombre){
+  const deInsumos=compras.filter(c=>nombresCoinciden(c.proveedor,nombre))
+    .map(c=>({costoTotal:+c.costoTotal||0,fecha:c.fechaPago||c.fecha||'',concepto:c.insumoNombre||c.descripcion||'Insumo'}));
+  const dePlayeras=(comprasPlayeras||[]).filter(c=>nombresCoinciden(c.marca,nombre))
+    .map(c=>({costoTotal:+c.costoTotal||0,fecha:c.fecha||'',concepto:`${c.cantidad||''}pz ${c.tipo||''} ${c.genero||''} ${c.talla||''} ${c.color||''}`.replace(/\s+/g,' ').trim()}));
+  const deGastosManuales=(gastos||[]).filter(g=>!ORIGENES_GASTO_YA_CONTADOS.includes(g.origen)&&nombresCoinciden(g.proveedor,nombre))
+    .map(g=>({costoTotal:+g.monto||0,fecha:g.fecha||'',concepto:g.concepto||'Gasto'}));
+  return [...deInsumos, ...dePlayeras, ...deGastosManuales];
+}
+
 window.renderProveedores=function renderProveedores(){
   const search=(document.getElementById('search-proveedores')||{value:''}).value.toLowerCase();
   const catFiltro=(document.getElementById('filter-prov-categoria')||{value:''}).value;
@@ -8342,25 +8402,6 @@ window.renderProveedores=function renderProveedores(){
 
   const countEl=document.getElementById('prov-count');
   const totalEl=document.getElementById('prov-total-compras');
-
-  // Compras de un proveedor: suma las de Insumos (colección pl_compras) MÁS
-  // las de Playeras en blanco (colección pl_compras_playeras, campo "marca").
-  // La comparación es POR CONTENIDO (no exacta): el registro en Proveedores
-  // a veces trae texto extra alrededor (ej. "Playera y Mas (Yazbek)"), pero
-  // lo que se captura en una compra es solo "Yazbek" — así que se hace match
-  // si uno de los dos nombres está contenido dentro del otro.
-  const nombresCoinciden=(a,b)=>{
-    const na=(a||'').toLowerCase().trim(), nb=(b||'').toLowerCase().trim();
-    if(!na||!nb) return false;
-    return na===nb || na.includes(nb) || nb.includes(na);
-  };
-  const comprasDeProveedor=nombre=>{
-    const deInsumos=compras.filter(c=>nombresCoinciden(c.proveedor,nombre))
-      .map(c=>({costoTotal:+c.costoTotal||0}));
-    const dePlayeras=(comprasPlayeras||[]).filter(c=>nombresCoinciden(c.marca,nombre))
-      .map(c=>({costoTotal:+c.costoTotal||0}));
-    return [...deInsumos, ...dePlayeras];
-  };
 
   // Calcular total de compras por proveedor
   let totalComprasGlobal=0;
@@ -8398,7 +8439,8 @@ window.renderProveedores=function renderProveedores(){
       <td style="font-size:12px;">${p.web?`<a href="${p.web.startsWith('http')?p.web:'https://'+p.web}" target="_blank" style="color:var(--accent);">Ver sitio 🔗</a>`:'—'}</td>
       <td style="font-size:13px;">${comprasProv.length}</td>
       <td style="font-weight:700;color:var(--red);">${fmtMoney(totalProv)}</td>
-      <td style="display:flex;gap:4px;">
+      <td style="display:flex;gap:4px;flex-wrap:wrap;">
+        <button class="btn btn-ghost btn-sm" onclick="verDetalleProveedor('${p.id}')" title="Ver consumo por mes">📊 Detalle</button>
         <button class="btn btn-ghost btn-sm" onclick="openProveedorModal('${p.id}')">✏️ Editar</button>
         <button class="btn btn-danger btn-sm" onclick="eliminarProveedor('${p.id}')">🗑</button>
       </td>
@@ -8412,6 +8454,56 @@ window.wsProv=function(id){
   const tel=p.telefono.replace(/[^0-9]/g,'');
   const telWs=tel.length===10?'52'+tel:tel;
   window.open(`https://wa.me/${telWs}`,'_blank');
+};
+
+// Desglosa el consumo de un proveedor mes por mes (y de paso, año por año,
+// ya que cada mes trae su año en la etiqueta) — juntando las mismas tres
+// fuentes que usa el total de Proveedores (insumos, playeras, gastos manuales).
+window.verDetalleProveedor=function(id){
+  const p=proveedores.find(x=>x.id===id);
+  if(!p){toast('⚠️ Proveedor no encontrado');return;}
+  document.getElementById('dp-titulo').textContent=`📊 ${p.nombre}`;
+  const lineas=comprasDeProveedor(p.nombre).filter(l=>l.fecha); // sin fecha no se puede agrupar por mes
+  const totalGeneral=lineas.reduce((s,l)=>s+(+l.costoTotal||0),0);
+
+  const NOMBRES=['Ene','Feb','Mar','Abr','May','Jun','Jul','Ago','Sep','Oct','Nov','Dic'];
+  const porMes={};
+  lineas.forEach(l=>{
+    const key=l.fecha.slice(0,7); // 'YYYY-MM'
+    if(!porMes[key]) porMes[key]=0;
+    porMes[key]+=+l.costoTotal||0;
+  });
+  const mesesOrdenados=Object.keys(porMes).sort().reverse();
+
+  document.getElementById('dp-resumen').innerHTML=`
+    <div style="display:flex;gap:24px;flex-wrap:wrap;background:var(--bg);border-radius:8px;padding:12px 16px;">
+      <div><div style="font-size:11px;color:var(--ink-soft);">Total histórico</div><strong style="color:var(--green);font-size:18px;">${fmtMoney(totalGeneral)}</strong></div>
+      <div><div style="font-size:11px;color:var(--ink-soft);">Movimientos</div><strong>${lineas.length}</strong></div>
+    </div>`;
+
+  if(mesesOrdenados.length===0){
+    document.getElementById('dp-tabla-meses').innerHTML='<div class="empty-state"><div class="icon">📊</div><p>No hay compras/gastos con fecha registrados para este proveedor todavía.</p></div>';
+    document.getElementById('dp-detalle-lineas').innerHTML='';
+    openModal('modal-detalle-proveedor');
+    return;
+  }
+
+  document.getElementById('dp-tabla-meses').innerHTML=`<div class="table-wrap"><table><thead><tr><th>Mes</th><th>Total</th></tr></thead><tbody>`+
+    mesesOrdenados.map(key=>{
+      const [y,m]=key.split('-');
+      return `<tr><td style="font-weight:600;">${NOMBRES[+m-1]} ${y}</td><td style="color:var(--red);font-weight:700;">${fmtMoney(porMes[key])}</td></tr>`;
+    }).join('')+
+    `</tbody></table></div>`;
+
+  // Detalle de líneas, más recientes primero, para revisar movimiento por movimiento
+  const lineasOrdenadas=[...lineas].sort((a,b)=>b.fecha.localeCompare(a.fecha));
+  document.getElementById('dp-detalle-lineas').innerHTML=`
+    <div style="font-weight:700;font-size:13px;margin:10px 0 6px;">Movimientos</div>
+    <div class="table-wrap" style="max-height:260px;overflow-y:auto;"><table><thead><tr><th>Fecha</th><th>Concepto</th><th>Monto</th></tr></thead><tbody>`+
+    lineasOrdenadas.map(l=>`<tr><td>${fmtFecha(l.fecha)}</td><td style="font-size:12px;">${l.concepto||'—'}</td><td style="font-weight:600;">${fmtMoney(l.costoTotal)}</td></tr>`).join('')+
+    `</tbody></table></div>`;
+
+  openModal('modal-detalle-proveedor');
 };
 
 window.eliminarProveedor=async function(id){
