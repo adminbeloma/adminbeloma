@@ -8,6 +8,7 @@
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.5.28/jspdf.plugin.autotable.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
 <style>
 @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=DM+Serif+Display:ital@0;1&display=swap');
 
@@ -788,8 +789,8 @@ tbody td{padding:11px 14px;font-size:13.5px;vertical-align:middle;}
       <h1>Inventario de Playeras</h1>
       <div class="actions">
         <button class="btn btn-teal admin-only" style="display:none;" onclick="openCompraPlayeraModal()">🛒 Registrar compra</button>
-        <button class="btn btn-ghost admin-only" style="display:none;" onclick="document.getElementById('input-importar-factura-playera').click()">📄 Importar factura (Excel)</button>
-        <input type="file" id="input-importar-factura-playera" accept=".xlsx,.xls,.csv" style="display:none;" onchange="importarFacturaPlayeras(this.files[0])">
+        <button class="btn btn-ghost admin-only" style="display:none;" onclick="document.getElementById('input-importar-factura-playera').click()">📄 Importar factura (Excel o PDF)</button>
+        <input type="file" id="input-importar-factura-playera" accept=".xlsx,.xls,.csv,.pdf" style="display:none;" onchange="importarFacturaPlayeras(this.files[0])">
         <button class="btn btn-ghost btn-sm admin-only" style="display:none;" onclick="descargarPlantillaFacturaPlayeras()">⬇️ Plantilla</button>
         <button class="btn btn-ghost admin-only" style="display:none;" onclick="abrirCatalogoMarcas()">⚙️ Catálogo de Marcas</button>
         <button class="btn btn-accent admin-only" style="display:none;" onclick="openPlayeraModal()">+ Agregar Playera</button>
@@ -1936,6 +1937,9 @@ tbody td{padding:11px 14px;font-size:13.5px;vertical-align:middle;}
   <div class="modal" style="max-width:920px;">
     <div class="modal-header"><h2>📄 Importar factura de Playeras</h2><button class="modal-close" onclick="closeModal('modal-importar-factura-playera')">×</button></div>
     <div class="modal-body">
+      <div style="background:var(--accent-light);border-radius:8px;padding:10px 14px;font-size:12px;margin-bottom:14px;">
+        💡 Si el proveedor es <strong>Yazbek</strong>, puedes pegar el código tal cual viene en su factura CFDI (ej. <strong>YA300</strong>, <strong>YJ300</strong>) en la columna Modelo — el sistema lo traduce solo al código real del catálogo (C0300, J0300...) para que no se separe el inventario en dos.
+      </div>
       <div class="form-grid" style="margin-bottom:14px;">
         <div class="form-group"><label>Fecha de la compra *</label><input type="date" id="if-fecha"></div>
         <div class="form-group"><label>No. de factura / referencia</label><input type="text" id="if-referencia" placeholder="FAC-001"></div>
@@ -6368,7 +6372,9 @@ window.descargarPlantillaFacturaPlayeras=function(){
   const ws=XLSX.utils.aoa_to_sheet([
     ['Proveedor','Modelo','Tipo','Genero','Talla','Color','Cantidad','PrecioUnitario'],
     ['Yazbek','C0300','Playera','Hombre','M','Negro',12,44.08],
-    ['Yazbek','N0300','Playera','Hombre','L','Blanco',12,44.08],
+    ['Yazbek','YA300','Playera','Hombre','L','Blanco',12,44.08],
+    ['Yazbek','YJ300','Playera','Juvenil','M','Negro',6,44.00],
+    ['Yazbek','YN300','Playera','Niño / Niña','S','Blanco',6,44.00],
   ]);
   XLSX.utils.book_append_sheet(wb,ws,'Factura');
   XLSX.writeFile(wb,'plantilla_factura_playeras.xlsx');
@@ -6381,55 +6387,77 @@ window.importarFacturaPlayeras=async function(file){
   document.getElementById('if-fecha').value=hoy();
   document.getElementById('if-referencia').value='';
   document.getElementById('if-registrar-gasto').checked=true;
+  _facturaPDFTextoCompleto=''; // se limpia aquí para no arrastrar el aviso de "total de piezas" de una importación anterior
+  const esPDF=/\.pdf$/i.test(file.name);
   try{
-    const buf=await file.arrayBuffer();
-    const wb=XLSX.read(buf,{type:'array'});
-    const ws=wb.Sheets[wb.SheetNames[0]];
-    const filasCrudas=XLSX.utils.sheet_to_json(ws,{defval:''});
-    if(filasCrudas.length===0){
-      toast('⚠️ El archivo no tiene filas — revisa que uses la plantilla');
-      document.getElementById('input-importar-factura-playera').value='';
-      return;
+    if(esPDF){
+      _facturaPlayerasFilas=await procesarFacturaPDFYazbek(file);
+      if(_facturaPlayerasFilas.length===0){
+        toast('⚠️ No se reconoció ninguna línea de producto en el PDF — por ahora este lector solo entiende el formato de factura de Yazbek (SimanG8 ERP)');
+        document.getElementById('input-importar-factura-playera').value='';
+        return;
+      }
+      // Referencia = folio de la factura, si se pudo leer
+      const folioMatch=(_facturaPDFTextoCompleto||'').match(/Folio:\s*([A-Z0-9]+)/i);
+      if(folioMatch) document.getElementById('if-referencia').value=folioMatch[1];
+    } else {
+      const buf=await file.arrayBuffer();
+      const wb=XLSX.read(buf,{type:'array'});
+      const ws=wb.Sheets[wb.SheetNames[0]];
+      const filasCrudas=XLSX.utils.sheet_to_json(ws,{defval:''});
+      if(filasCrudas.length===0){
+        toast('⚠️ El archivo no tiene filas — revisa que uses la plantilla');
+        document.getElementById('input-importar-factura-playera').value='';
+        return;
+      }
+      // Encabezados flexibles: busca la columna que corresponda sin importar
+      // mayúsculas/acentos/espacios (Proveedor, Marca, Género, Genero, etc.)
+      const norm=s=>(s||'').toString().trim().toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'');
+      const buscarCampo=(fila,posibles)=>{
+        const claves=Object.keys(fila);
+        for(const p of posibles){
+          const k=claves.find(k2=>norm(k2)===norm(p));
+          if(k!==undefined) return fila[k];
+        }
+        return '';
+      };
+      _facturaPlayerasFilas=filasCrudas.map((f,i)=>{
+        const proveedor=String(buscarCampo(f,['Proveedor','Marca'])||'').trim();
+        let modelo=String(buscarCampo(f,['Modelo','Estilo'])||'').trim();
+        let modeloOriginalFactura='';
+        // Si viene el código tal cual aparece en la factura CFDI de Yazbek
+        // (ej. "YA300", "YJ300"), se traduce solo al código real del catálogo
+        // (C0300, J0300...) para no crear un modelo duplicado/distinto.
+        if(/^yazbek$/i.test(proveedor)){
+          const traducido=traducirCodigoFacturaYazbek(modelo);
+          if(traducido){ modeloOriginalFactura=modelo; modelo=traducido; }
+        }
+        const tipo=String(buscarCampo(f,['Tipo','TipoPrenda','Tipo de prenda'])||'Playera').trim()||'Playera';
+        const genero=String(buscarCampo(f,['Genero','Género'])||'').trim();
+        const talla=String(buscarCampo(f,['Talla'])||'').trim();
+        const color=String(buscarCampo(f,['Color'])||'').trim();
+        const cantidad=+buscarCampo(f,['Cantidad','Cant','Piezas'])||0;
+        let precioUnitario=+buscarCampo(f,['PrecioUnitario','Precio Unitario','Precio','Costo','CostoUnitario'])||0;
+        // Si no viene precio en el archivo, intenta tomarlo del catálogo (marca+modelo)
+        if(!precioUnitario){
+          const cat=catalogoDeMarca(proveedor);
+          const mod=modeloDeCatalogo(cat, modelo);
+          const filaCat=mod?.tallasPorGenero?.[genero]?.find(t=>t.talla===talla);
+          if(filaCat) precioUnitario=+filaCat.precio||0;
+        }
+        const errores=[];
+        if(!genero) errores.push('sin género');
+        if(!talla) errores.push('sin talla');
+        if(!color) errores.push('sin color');
+        if(!cantidad||cantidad<=0) errores.push('cantidad inválida');
+        if(!precioUnitario||precioUnitario<=0) errores.push('sin precio (ni en archivo ni en catálogo)');
+        const existente=(errores.length===0)?buscarPlayeraStock({tipo,genero,talla,color,marca:proveedor,modelo}):null;
+        return {fila:i+2, proveedor,modelo,modeloOriginalFactura,tipo,genero,talla,color,cantidad,precioUnitario,errores,existente,incluir:errores.length===0};
+      });
     }
-    // Encabezados flexibles: busca la columna que corresponda sin importar
-    // mayúsculas/acentos/espacios (Proveedor, Marca, Género, Genero, etc.)
-    const norm=s=>(s||'').toString().trim().toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'');
-    const buscarCampo=(fila,posibles)=>{
-      const claves=Object.keys(fila);
-      for(const p of posibles){
-        const k=claves.find(k2=>norm(k2)===norm(p));
-        if(k!==undefined) return fila[k];
-      }
-      return '';
-    };
-    _facturaPlayerasFilas=filasCrudas.map((f,i)=>{
-      const proveedor=String(buscarCampo(f,['Proveedor','Marca'])||'').trim();
-      const modelo=String(buscarCampo(f,['Modelo','Estilo'])||'').trim();
-      const tipo=String(buscarCampo(f,['Tipo','TipoPrenda','Tipo de prenda'])||'Playera').trim()||'Playera';
-      const genero=String(buscarCampo(f,['Genero','Género'])||'').trim();
-      const talla=String(buscarCampo(f,['Talla'])||'').trim();
-      const color=String(buscarCampo(f,['Color'])||'').trim();
-      const cantidad=+buscarCampo(f,['Cantidad','Cant','Piezas'])||0;
-      let precioUnitario=+buscarCampo(f,['PrecioUnitario','Precio Unitario','Precio','Costo','CostoUnitario'])||0;
-      // Si no viene precio en el archivo, intenta tomarlo del catálogo (marca+modelo)
-      if(!precioUnitario){
-        const cat=catalogoDeMarca(proveedor);
-        const mod=modeloDeCatalogo(cat, modelo);
-        const filaCat=mod?.tallasPorGenero?.[genero]?.find(t=>t.talla===talla);
-        if(filaCat) precioUnitario=+filaCat.precio||0;
-      }
-      const errores=[];
-      if(!genero) errores.push('sin género');
-      if(!talla) errores.push('sin talla');
-      if(!color) errores.push('sin color');
-      if(!cantidad||cantidad<=0) errores.push('cantidad inválida');
-      if(!precioUnitario||precioUnitario<=0) errores.push('sin precio (ni en archivo ni en catálogo)');
-      const existente=(errores.length===0)?buscarPlayeraStock({tipo,genero,talla,color,marca:proveedor,modelo}):null;
-      return {fila:i+2, proveedor,modelo,tipo,genero,talla,color,cantidad,precioUnitario,errores,existente,incluir:errores.length===0};
-    });
   }catch(err){
     console.error('Error leyendo factura de playeras:', err);
-    toast('⚠️ No se pudo leer el archivo — revisa que sea un Excel válido con la plantilla');
+    toast('⚠️ No se pudo leer el archivo — revisa que sea un archivo válido con la plantilla, o un PDF de factura de Yazbek');
     document.getElementById('input-importar-factura-playera').value='';
     return;
   }
@@ -6438,6 +6466,74 @@ window.importarFacturaPlayeras=async function(file){
   openModal('modal-importar-factura-playera');
 };
 
+// ═══ LECTOR DE PDF — FACTURA DE YAZBEK (SimanG8 ERP) ═══
+// Por ahora solo entiende el formato de factura de Yazbek (el proveedor que
+// ya nos dio la muestra). Si algún día usas el lector con otro proveedor y
+// no reconoce nada, avísame el formato de su factura para agregarlo.
+//
+// El código de cada línea viene como YA300-NEGMD: prefijo de género (A/J/N)
+// + gramaje (300), guion, y sufijo de 3 letras de color + 2 de talla
+// (MD/GD/XG/2G...). El texto que se extrae de un PDF a veces sale
+// "desordenado" (cuando una descripción se parte en dos líneas, el número
+// de cantidad se corre de lugar) — por eso la cantidad real NO se lee del
+// texto directamente, se calcula como Importe ÷ Precio, que es mucho más
+// confiable porque esos dos números siempre se quedan juntos.
+const YAZBEK_COLOR_CODIGO={'NEG':'Negro','BCO':'Blanco','CAR':'Carbón','OLI':'Olivo','MRR':'Marrón','ROJ':'Rojo','AZU':'Azul','GRI':'Gris','MOR':'Morado','VER':'Verde','AMA':'Amarillo','NAR':'Naranja','ARE':'Arena','BEI':'Beige','TUR':'Turquesa','CEL':'Celeste','FIU':'Fucsia'};
+const YAZBEK_TALLA_CODIGO={'CH':'S','MD':'M','GD':'L','XG':'XL','2G':'2XL','3G':'3XL'};
+const YAZBEK_GENERO_PREFIJO={'A':'Hombre','J':'Juvenil','N':'Niño / Niña','D':'Mujer'};
+
+let _facturaPDFTextoCompleto='';
+
+async function extraerTextoPDF(file){
+  if(!window.pdfjsLib){ throw new Error('Librería de lectura de PDF no disponible'); }
+  pdfjsLib.GlobalWorkerOptions.workerSrc='https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+  const buf=await file.arrayBuffer();
+  const pdf=await pdfjsLib.getDocument({data:buf}).promise;
+  let texto='';
+  for(let i=1;i<=pdf.numPages;i++){
+    const page=await pdf.getPage(i);
+    const content=await page.getTextContent();
+    texto += content.items.map(it=>it.str).join(' ') + '\n';
+  }
+  return texto;
+}
+
+async function procesarFacturaPDFYazbek(file){
+  const textoCrudo=await extraerTextoPDF(file);
+  _facturaPDFTextoCompleto=textoCrudo;
+  const texto=textoCrudo.replace(/\s+/g,' ');
+  // Busca cada línea de producto: código Yazbek + ... + PZA + precio + importe.
+  // El "[^0-9]{0,3}\d{0,2}" tolera que un número de cantidad desplazado quede
+  // pegado justo antes de "PZA" (ver nota arriba sobre el desorden del texto).
+  const reItem=/Y([A-Z])(\d{3})-([A-Z]{3})(\d?[A-Z]{1,2})[^0-9]{0,3}\d{0,2}.{0,60}?PZA\D{0,10}?([\d,]+\.\d{2})\D{1,10}?([\d,]+\.\d{2})/g;
+  const filas=[];
+  let m, i=0;
+  while((m=reItem.exec(texto))){
+    i++;
+    const [,prefLetra,numero,colorCod,tallaCod,precioStr,importeStr]=m;
+    const precioUnitario=+precioStr.replace(/,/g,'');
+    const importe=+importeStr.replace(/,/g,'');
+    const cantidad=precioUnitario>0?Math.round(importe/precioUnitario):0;
+    const color=YAZBEK_COLOR_CODIGO[colorCod]||'';
+    const talla=YAZBEK_TALLA_CODIGO[tallaCod]||'';
+    const genero=YAZBEK_GENERO_PREFIJO[prefLetra]||'';
+    const modelo=traducirCodigoFacturaYazbek('Y'+prefLetra+numero)||('Y'+prefLetra+numero);
+    const errores=[];
+    if(!genero) errores.push('género de factura desconocido: '+prefLetra);
+    if(!talla) errores.push('talla de factura desconocida: '+tallaCod);
+    if(!color) errores.push('color de factura desconocido: '+colorCod);
+    if(!cantidad||cantidad<=0) errores.push('cantidad inválida');
+    if(!precioUnitario||precioUnitario<=0) errores.push('sin precio');
+    const existente=(errores.length===0)?buscarPlayeraStock({tipo:'Playera',genero,talla,color,marca:'Yazbek',modelo}):null;
+    filas.push({
+      fila:i, proveedor:'Yazbek', modelo, modeloOriginalFactura:'Y'+prefLetra+numero+'-'+colorCod+tallaCod,
+      tipo:'Playera', genero, talla, color, cantidad, precioUnitario,
+      errores, existente, incluir:errores.length===0
+    });
+  }
+  return filas;
+}
+
 function renderPreviewFacturaPlayeras(){
   const filas=_facturaPlayerasFilas;
   const validas=filas.filter(f=>f.incluir);
@@ -6445,13 +6541,29 @@ function renderPreviewFacturaPlayeras(){
   const totalDinero=validas.reduce((s,f)=>s+f.cantidad*f.precioUnitario,0);
   const conError=filas.length-validas.length;
 
+  // Si venimos de un PDF, la propia factura declara un "Total de piezas" —
+  // si no coincide con lo que se logró leer, es señal de que algo no se
+  // parseó bien y hay que revisar con más cuidado antes de confirmar.
+  let avisoTotalFactura='';
+  if(_facturaPDFTextoCompleto){
+    const m=_facturaPDFTextoCompleto.replace(/\s+/g,' ').match(/Total de piezas:\s*(\d+)/i);
+    if(m){
+      const totalDeclarado=+m[1];
+      const totalLeido=filas.reduce((s,f)=>s+f.cantidad,0);
+      avisoTotalFactura = totalDeclarado===totalLeido
+        ? `<div style="color:var(--green);">✅ El total de piezas leído (${totalLeido}) coincide con el que declara la factura</div>`
+        : `<div style="color:var(--red);font-weight:600;">⚠️ La factura declara ${totalDeclarado} piezas pero solo se lograron leer ${totalLeido} — revisa línea por línea antes de confirmar, puede que falte alguna.</div>`;
+    }
+  }
+
   document.getElementById('if-resumen').innerHTML=`
-    <div style="display:flex;gap:24px;flex-wrap:wrap;background:var(--bg);border-radius:8px;padding:12px 16px;">
+    <div style="display:flex;gap:24px;flex-wrap:wrap;background:var(--bg);border-radius:8px;padding:12px 16px;margin-bottom:${avisoTotalFactura?'8px':'0'};">
       <div><div style="font-size:11px;color:var(--ink-soft);">Líneas a importar</div><strong>${validas.length} de ${filas.length}</strong></div>
       <div><div style="font-size:11px;color:var(--ink-soft);">Piezas totales</div><strong>${totalPiezas}</strong></div>
       <div><div style="font-size:11px;color:var(--ink-soft);">Total de la factura</div><strong style="color:var(--green);">${fmtMoney(totalDinero)}</strong></div>
       ${conError?`<div><div style="font-size:11px;color:var(--red);">Con errores (se van a omitir)</div><strong style="color:var(--red);">${conError}</strong></div>`:''}
-    </div>`;
+    </div>
+    ${avisoTotalFactura?`<div style="font-size:13px;">${avisoTotalFactura}</div>`:''}`;
 
   document.getElementById('if-preview').innerHTML=`<div class="table-wrap"><table><thead><tr>
     <th></th><th>Fila</th><th>Proveedor</th><th>Modelo</th><th>Tipo</th><th>Género</th><th>Talla</th><th>Color</th><th>Cant.</th><th>Precio</th><th>Subtotal</th><th>Estado</th>
@@ -6460,7 +6572,7 @@ function renderPreviewFacturaPlayeras(){
       <td><input type="checkbox" ${f.incluir?'checked':''} ${f.errores.length?'disabled':''} onchange="_facturaPlayerasFilas[${i}].incluir=this.checked;renderPreviewFacturaPlayeras();"></td>
       <td>${f.fila}</td>
       <td>${f.proveedor||'—'}</td>
-      <td>${f.modelo||'—'}</td>
+      <td>${f.modelo||'—'}${f.modeloOriginalFactura?`<div style="font-size:10px;color:var(--ink-soft);">(era ${f.modeloOriginalFactura} en factura)</div>`:''}</td>
       <td>${f.tipo}</td>
       <td>${f.genero||'—'}</td>
       <td>${f.talla||'—'}</td>
@@ -7134,6 +7246,30 @@ function _slugMarca(m){
     .normalize('NFD').replace(/[\u0300-\u036f]/g,'')
     .replace(/[^a-z0-9]+/g,'_').replace(/^_+|_+$/g,'')||('marca_'+Date.now());
 }
+
+// ─── TRADUCTOR DE CÓDIGO DE FACTURA YAZBEK → CÓDIGO DE CATÁLOGO ───
+// La factura CFDI de Yazbek usa sus propios códigos internos (YA300, YJ300...)
+// que NO son los mismos que el código de modelo en su catálogo/página (C0300,
+// J0300...). Sin esto, importar una factura crearía "YA300" como si fuera un
+// modelo nuevo y distinto de "C0300", separando el stock/precio en dos partes.
+// Patrón confirmado por Felipe: se quita la "Y" inicial, la letra de género se
+// traduce (A=Adulto→C=Caballero, J=Juvenil se queda igual, N=Niño se queda
+// igual, D=Dama se queda igual), y el número se rellena con ceros a la
+// izquierda hasta 4 dígitos. El número no siempre es "300" — por ejemplo
+// "Sin mangas" es YA310→C0310 — el traductor ya funciona con cualquier
+// número, no hace falta tocar nada más para eso.
+// Si aparece una letra nueva que no está aquí (ej. Dama), se puede agregar
+// una entrada más a este objeto.
+const YAZBEK_LETRA_FACTURA_A_CATALOGO={'A':'C','J':'J','N':'N','D':'D'};
+function traducirCodigoFacturaYazbek(codigo){
+  const m=(codigo||'').toString().trim().toUpperCase().match(/^Y([A-Z])0*(\d+)$/);
+  if(!m) return null;
+  const [,letra,numero]=m;
+  const letraCat=YAZBEK_LETRA_FACTURA_A_CATALOGO[letra];
+  if(!letraCat) return null; // letra desconocida — no se adivina, mejor no traducir
+  return letraCat+numero.padStart(4,'0');
+}
+
 // Busca un modelo dentro de una marca por nombre (insensible a mayúsculas/espacios)
 function modeloDeCatalogo(cat, nombreModelo){
   if(!cat||!nombreModelo) return null;
