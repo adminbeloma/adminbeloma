@@ -1312,7 +1312,8 @@ tbody td{padding:11px 14px;font-size:13.5px;vertical-align:middle;}
 
       <div id="prov-tab-concentrado" style="display:none;">
         <div style="background:var(--accent-light);border-radius:8px;padding:10px 14px;font-size:13px;margin-bottom:14px;">
-          💡 Esto junta TODAS tus facturas/compras/gastos de playeras, agrupadas por el nombre que capturaste en cada una — sin importar si ese proveedor está dado de alta arriba o no. Ponle un "Nombre comercial" a cada una (ej. si la factura viene a nombre de una persona pero tú le dices "Euro Cotton"), y las que compartan el mismo nombre comercial se suman juntas en el resumen de arriba.
+          💡 Esto junta TODAS tus facturas/compras/gastos de playeras, agrupadas por el nombre que capturaste en cada una — sin importar si ese proveedor está dado de alta arriba o no. Escribe el <strong>Nombre comercial</strong> en el campo de cada fila y dale clic a <strong>💾 Guardar</strong> (o Enter) — si ese nombre coincide con uno de tus Proveedores registrados, esa fila se suma allá automáticamente y desaparece de aquí.<br><br>
+          ⚠️ Ojo: cambiarle el nombre a un proveedor <strong>desde la pestaña "Proveedores registrados"</strong> (con el botón ✏️ Editar) NO hace nada aquí — son dos cosas distintas. El nombre comercial se asigna únicamente desde esta pantalla, fila por fila.
         </div>
         <div class="filter-bar">
           <label style="font-size:12px;color:var(--ink-soft);align-self:center;">Desde</label>
@@ -8494,12 +8495,18 @@ function nombresCoinciden(a,b){
   if(!na||!nb) return false;
   return na===nb || na.includes(nb) || nb.includes(na);
 }
+// Un movimiento cuenta para un proveedor registrado si su nombre capturado
+// coincide directamente, O si el "nombre comercial" que le pusiste en el
+// Concentrado de Facturas coincide — así, en cuanto le asignas un nombre
+// comercial que ya tienes dado de alta, ese movimiento se "absorbe" en el
+// total de Proveedores registrados sin tener que volver a capturar nada.
 function comprasDeProveedor(nombre){
-  const deInsumos=compras.filter(c=>nombresCoinciden(c.proveedor,nombre))
+  const coincideConNombreOAlias=nombreCapturado=>nombresCoinciden(nombreCapturado,nombre)||nombresCoinciden(nombreComercialDe(nombreCapturado),nombre);
+  const deInsumos=compras.filter(c=>coincideConNombreOAlias(c.proveedor))
     .map(c=>({costoTotal:+c.costoTotal||0,fecha:c.fechaPago||c.fecha||'',concepto:c.insumoNombre||c.descripcion||'Insumo'}));
-  const dePlayeras=(comprasPlayeras||[]).filter(c=>nombresCoinciden(c.marca,nombre))
+  const dePlayeras=(comprasPlayeras||[]).filter(c=>coincideConNombreOAlias(c.marca))
     .map(c=>({costoTotal:+c.costoTotal||0,fecha:c.fecha||'',concepto:`${c.cantidad||''}pz ${c.tipo||''} ${c.genero||''} ${c.talla||''} ${c.color||''}`.replace(/\s+/g,' ').trim()}));
-  const deGastosManuales=(gastos||[]).filter(g=>!ORIGENES_GASTO_YA_CONTADOS.includes(g.origen)&&nombresCoinciden(g.proveedor,nombre))
+  const deGastosManuales=(gastos||[]).filter(g=>!ORIGENES_GASTO_YA_CONTADOS.includes(g.origen)&&coincideConNombreOAlias(g.proveedor))
     .map(g=>({costoTotal:+g.monto||0,fecha:g.fecha||'',concepto:g.concepto||'Gasto'}));
   return [...deInsumos, ...dePlayeras, ...deGastosManuales];
 }
@@ -8524,6 +8531,7 @@ let proveedorAlias=[];
 onSnapshot(collection(db,'pl_proveedor_alias'),s=>{
   proveedorAlias=s.docs.map(d=>d.data());
   if(document.getElementById('prov-tab-concentrado')?.style.display!=='none') renderConcentradoProveedores();
+  if(typeof renderProveedores==='function') renderProveedores();
 });
 function _slugAlias(s){
   return (s||'').toString().trim().toLowerCase()
@@ -8561,9 +8569,23 @@ function todosLosMovimientosParaConcentrado(){
 window.buscarFacturasDuplicadas=function(){
   const cont=document.getElementById('conc-duplicados');
   const conFactura=[];
+  // OJO: las líneas de pl_compras_playeras (comprasPlayeras) NO se revisan
+  // aquí una por una — una sola factura con 11 productos genera 11
+  // registros que TODOS comparten la misma referencia a propósito (es una
+  // sola factura con muchas líneas, no 11 facturas repetidas). Por eso el
+  // duplicado de una factura de Playeras se detecta a nivel del GASTO que
+  // se genera una sola vez por cada importación (origen compra-playera o
+  // compra-playera-factura) — ahí si aparece dos veces la misma
+  // referencia+proveedor, sí es señal real de que se subió la factura completa dos veces.
   compras.forEach(c=>{ if(c.proveedor&&c.referencia) conFactura.push({proveedor:c.proveedor,referencia:c.referencia,fecha:c.fechaPago||c.fecha||'',monto:+c.costoTotal||0,origen:'Compra de insumo'}); });
-  (comprasPlayeras||[]).forEach(c=>{ if(c.marca&&c.referencia) conFactura.push({proveedor:c.marca,referencia:c.referencia,fecha:c.fecha||'',monto:+c.costoTotal||0,origen:'Compra de playera'}); });
-  (gastos||[]).forEach(g=>{ if(!ORIGENES_GASTO_YA_CONTADOS.includes(g.origen)&&g.proveedor&&g.factura) conFactura.push({proveedor:g.proveedor,referencia:g.factura,fecha:g.fecha||'',monto:+g.monto||0,origen:'Gasto manual'}); });
+  (gastos||[]).forEach(g=>{
+    if(!g.proveedor||!g.factura) return;
+    const esImportPlayera=['compra-playera-factura','compra-playera'].includes(g.origen);
+    const esManual=!ORIGENES_GASTO_YA_CONTADOS.includes(g.origen);
+    if(esImportPlayera||esManual){
+      conFactura.push({proveedor:g.proveedor,referencia:g.factura,fecha:g.fecha||'',monto:+g.monto||0,origen:esImportPlayera?'Factura de playeras importada':'Gasto manual'});
+    }
+  });
 
   const grupos={};
   conFactura.forEach(m=>{
@@ -8571,24 +8593,63 @@ window.buscarFacturasDuplicadas=function(){
     if(!grupos[key]) grupos[key]=[];
     grupos[key].push(m);
   });
-  const duplicados=Object.values(grupos).filter(g=>g.length>1);
+  let posiblesDuplicados=Object.values(grupos).filter(g=>g.length>1);
 
-  if(duplicados.length===0){
-    cont.innerHTML='<div style="background:var(--accent-light);border-radius:8px;padding:12px 16px;font-size:13px;">✅ No se encontró ningún número de factura repetido para el mismo proveedor — no hay duplicados aparentes.</div>';
+  // Si las fechas de un grupo están espaciadas ~1 mes entre sí y el monto es
+  // siempre el mismo, es más probable que sea un gasto RECURRENTE (ej. una
+  // suscripción o servicio mensual que usa el mismo número de referencia
+  // cada mes) que una factura subida por error varias veces — se marca
+  // distinto para no generar alarma de más.
+  const analizados=posiblesDuplicados.map(g=>{
+    const ordenado=[...g].sort((a,b)=>a.fecha.localeCompare(b.fecha));
+    const montosIguales=ordenado.every(m=>Math.abs(m.monto-ordenado[0].monto)<0.01);
+    let pareceRecurrente=false;
+    if(montosIguales && ordenado.length>=3){
+      const diffs=[];
+      for(let i=1;i<ordenado.length;i++){
+        const d1=new Date(ordenado[i-1].fecha), d2=new Date(ordenado[i].fecha);
+        if(!isNaN(d1)&&!isNaN(d2)) diffs.push((d2-d1)/(1000*60*60*24));
+      }
+      pareceRecurrente=diffs.length>0 && diffs.every(d=>d>=25&&d<=35);
+    }
+    return {grupo:ordenado, pareceRecurrente};
+  });
+
+  const duplicadosReales=analizados.filter(a=>!a.pareceRecurrente);
+  const recurrentes=analizados.filter(a=>a.pareceRecurrente);
+
+  if(duplicadosReales.length===0 && recurrentes.length===0){
+    cont.innerHTML=`<div style="background:var(--accent-light);border-radius:8px;padding:12px 16px;font-size:13px;display:flex;justify-content:space-between;align-items:center;">
+      <span>✅ No se encontró ningún número de factura repetido de forma sospechosa — no hay duplicados aparentes.</span>
+      <button class="btn btn-ghost btn-sm" onclick="document.getElementById('conc-duplicados').innerHTML=''">✕ Cerrar</button>
+    </div>`;
     return;
   }
-  cont.innerHTML=`<div style="background:#FFE0DC;border:1px solid #F5C0B8;border-radius:8px;padding:12px 16px;">
-    <div style="font-weight:700;margin-bottom:8px;">⚠️ Se encontraron ${duplicados.length} número(s) de factura repetidos para el mismo proveedor:</div>
-    ${duplicados.map(g=>`
-      <div style="background:#fff;border-radius:6px;padding:8px 12px;margin-bottom:6px;font-size:13px;">
-        <strong>${g[0].proveedor}</strong> — factura/referencia "${g[0].referencia}" aparece <strong>${g.length} veces</strong>:
-        <ul style="margin:4px 0 0 18px;">
-          ${g.map(m=>`<li>${fmtFecha(m.fecha)} — ${m.origen} — ${fmtMoney(m.monto)}</li>`).join('')}
-        </ul>
-      </div>
-    `).join('')}
-    <div style="font-size:12px;color:var(--ink-soft);margin-top:6px;">Si de verdad es la misma factura subida dos veces, bórrala desde donde corresponda (Gastos, o el historial de compras) para no contar el gasto de más.</div>
-  </div>`;
+  cont.innerHTML=`
+    <div style="display:flex;justify-content:flex-end;margin-bottom:8px;">
+      <button class="btn btn-ghost btn-sm" onclick="document.getElementById('conc-duplicados').innerHTML=''">✕ Cerrar este resultado</button>
+    </div>
+    ${duplicadosReales.length?`<div style="background:#FFE0DC;border:1px solid #F5C0B8;border-radius:8px;padding:12px 16px;margin-bottom:10px;">
+      <div style="font-weight:700;margin-bottom:8px;">⚠️ Se encontraron ${duplicadosReales.length} número(s) de factura repetidos para el mismo proveedor:</div>
+      ${duplicadosReales.map(a=>`
+        <div style="background:#fff;border-radius:6px;padding:8px 12px;margin-bottom:6px;font-size:13px;">
+          <strong>${a.grupo[0].proveedor}</strong> — factura/referencia "${a.grupo[0].referencia}" aparece <strong>${a.grupo.length} veces</strong>:
+          <ul style="margin:4px 0 0 18px;">
+            ${a.grupo.map(m=>`<li>${fmtFecha(m.fecha)} — ${m.origen} — ${fmtMoney(m.monto)}</li>`).join('')}
+          </ul>
+        </div>
+      `).join('')}
+      <div style="font-size:12px;color:var(--ink-soft);margin-top:6px;">Si de verdad es la misma factura subida dos veces, bórrala desde donde corresponda (Gastos, o el historial de compras) para no contar el gasto de más.</div>
+    </div>`:''}
+    ${recurrentes.length?`<div style="background:var(--gold-light);border:1px solid #F5E0A8;border-radius:8px;padding:12px 16px;">
+      <div style="font-weight:700;margin-bottom:8px;">📅 ${recurrentes.length} caso(s) con la misma referencia repitiéndose ~cada mes y el mismo monto — parece un gasto RECURRENTE (ej. suscripción/servicio), no necesariamente un error:</div>
+      ${recurrentes.map(a=>`
+        <div style="background:#fff;border-radius:6px;padding:8px 12px;margin-bottom:6px;font-size:13px;">
+          <strong>${a.grupo[0].proveedor}</strong> — referencia "${a.grupo[0].referencia}" — ${a.grupo.length} meses, ${fmtMoney(a.grupo[0].monto)} c/u (${fmtFecha(a.grupo[0].fecha)} a ${fmtFecha(a.grupo[a.grupo.length-1].fecha)})
+        </div>
+      `).join('')}
+      <div style="font-size:12px;color:var(--ink-soft);margin-top:6px;">Revisa nada más que de verdad sea un cargo mensual esperado y no la misma factura capturada varias veces sin querer.</div>
+    </div>`:''}`;
 };
 
 window.renderConcentradoProveedores=function(){
@@ -8597,6 +8658,15 @@ window.renderConcentradoProveedores=function(){
   let movs=todosLosMovimientosParaConcentrado();
   if(desde) movs=movs.filter(m=>m.fecha>=desde);
   if(hasta) movs=movs.filter(m=>m.fecha<=hasta);
+
+  // Los movimientos cuyo nombre comercial ya coincide con un proveedor
+  // REGISTRADO se "absorben" ahí — ya se están sumando en Proveedores
+  // registrados (ver comprasDeProveedor), así que se quitan de esta vista
+  // para no ver dos veces la misma información y para que el Concentrado
+  // se vaya limpiando conforme le vayas poniendo nombre comercial a las cosas.
+  const totalAntes=movs.length;
+  movs=movs.filter(m=>!proveedores.some(p=>nombresCoinciden(p.nombre, nombreComercialDe(m.nombreOriginal))));
+  const absorbidos=totalAntes-movs.length;
 
   // 1) Agrupar por nombre ORIGINAL (para poder editar el alias de cada uno)
   const porOriginal={};
@@ -8625,10 +8695,11 @@ window.renderConcentradoProveedores=function(){
   const totalGeneral=filasComercial.reduce((s,f)=>s+f.total,0);
 
   document.getElementById('conc-resumen').innerHTML=`
+    ${absorbidos>0?`<div style="background:var(--accent-light);border-radius:8px;padding:10px 14px;font-size:13px;margin-bottom:10px;">✅ ${absorbidos} movimiento(s) ya tienen nombre comercial que coincide con un proveedor registrado — se están sumando allá, en "Proveedores registrados", y por eso ya no aparecen aquí abajo.</div>`:''}
     <div style="display:flex;gap:24px;flex-wrap:wrap;background:var(--bg);border-radius:8px;padding:12px 16px;margin-bottom:12px;">
-      <div><div style="font-size:11px;color:var(--ink-soft);">Proveedores distintos</div><strong style="font-size:20px;">${filasComercial.length}</strong></div>
-      <div><div style="font-size:11px;color:var(--ink-soft);">Movimientos totales</div><strong style="font-size:20px;">${movs.length}</strong></div>
-      <div><div style="font-size:11px;color:var(--ink-soft);">Total general</div><strong style="font-size:20px;color:var(--green);">${fmtMoney(totalGeneral)}</strong></div>
+      <div><div style="font-size:11px;color:var(--ink-soft);">Proveedores distintos (sin dar de alta)</div><strong style="font-size:20px;">${filasComercial.length}</strong></div>
+      <div><div style="font-size:11px;color:var(--ink-soft);">Movimientos sin asignar</div><strong style="font-size:20px;">${movs.length}</strong></div>
+      <div><div style="font-size:11px;color:var(--ink-soft);">Total sin asignar</div><strong style="font-size:20px;color:var(--green);">${fmtMoney(totalGeneral)}</strong></div>
     </div>
     ${filasComercial.length?`<div class="table-wrap"><table><thead><tr><th>Nombre comercial</th><th>Nombres que agrupa</th><th># Movimientos</th><th>Total</th></tr></thead><tbody>`+
       filasComercial.map(f=>`<tr>
@@ -8637,18 +8708,25 @@ window.renderConcentradoProveedores=function(){
         <td>${f.n}</td>
         <td style="font-weight:700;color:var(--red);">${fmtMoney(f.total)}</td>
       </tr>`).join('')+
-      `</tbody></table></div>`:'<div class="empty-state"><div class="icon">📊</div><p>No hay movimientos con estos filtros.</p></div>'}`;
+      `</tbody></table></div>`:'<div class="empty-state"><div class="icon">✅</div><p>Todo lo que tienes capturado ya está identificado con un proveedor registrado.</p></div>'}`;
 
   if(filasOriginal.length===0){
     document.getElementById('conc-detalle').innerHTML='';
     return;
   }
+  // Se guarda en una variable global para que los botones de "Guardar" de
+  // abajo puedan encontrar el nombre original por ÍNDICE en vez de tener
+  // que meterlo como texto dentro del atributo onclick — así no hay riesgo
+  // de que un nombre con paréntesis, comillas u otros caracteres especiales
+  // (ej. "Playera y Mas (Yazbek)") rompa el botón silenciosamente.
+  window._concentradoFilasOriginal=filasOriginal;
   document.getElementById('conc-detalle').innerHTML=`<div class="table-wrap"><table><thead><tr>
-    <th>Nombre tal como aparece</th><th>Nombre comercial</th><th># Mov.</th><th>Total</th><th>Última fecha</th>
+    <th>Nombre tal como aparece</th><th>Nombre comercial</th><th></th><th># Mov.</th><th>Total</th><th>Última fecha</th>
   </tr></thead><tbody>`+
     filasOriginal.map((f,i)=>`<tr>
       <td style="font-size:13px;">${f.nombreOriginal}</td>
-      <td><input type="text" value="${nombreComercialDe(f.nombreOriginal)}" id="conc-alias-${i}" style="border:1.5px solid var(--border);border-radius:6px;padding:5px 8px;font-size:13px;width:180px;" onblur="guardarAliasYRefrescar('${f.nombreOriginal.replace(/'/g,"\\'")}', document.getElementById('conc-alias-${i}').value)"></td>
+      <td><input type="text" value="${nombreComercialDe(f.nombreOriginal)}" id="conc-alias-${i}" style="border:1.5px solid var(--border);border-radius:6px;padding:5px 8px;font-size:13px;width:180px;" onkeydown="if(event.key==='Enter'){guardarAliasPorIndice(${i});event.target.blur();}"></td>
+      <td><button class="btn btn-accent btn-sm" onclick="guardarAliasPorIndice(${i})">💾 Guardar</button></td>
       <td>${f.n}</td>
       <td style="font-weight:600;">${fmtMoney(f.total)}</td>
       <td style="font-size:12px;color:var(--ink-soft);">${f.ultimaFecha?fmtFecha(f.ultimaFecha):'—'}</td>
@@ -8656,14 +8734,30 @@ window.renderConcentradoProveedores=function(){
     `</tbody></table></div>`;
 };
 
+window.guardarAliasPorIndice=async function(i){
+  const fila=window._concentradoFilasOriginal?.[i];
+  if(!fila){ toast('⚠️ No se encontró la fila — vuelve a intentarlo'); return; }
+  const input=document.getElementById('conc-alias-'+i);
+  if(!input){ toast('⚠️ No se encontró el campo — vuelve a intentarlo'); return; }
+  await guardarAliasYRefrescar(fila.nombreOriginal, input.value);
+};
+
 window.guardarAliasYRefrescar=async function(nombreOriginal, nombreComercial){
-  if(!nombreComercial||!nombreComercial.trim()||nombreComercial.trim()===nombreOriginal){
-    // sin cambio real o vacío — no hace falta guardar nada
+  if(!nombreComercial||!nombreComercial.trim()){
+    toast('⚠️ Escribe un nombre comercial antes de guardar');
+    return;
+  }
+  if(nombreComercial.trim()===nombreOriginal){
+    toast('No hubo cambios — es el mismo nombre');
     return;
   }
   await guardarAliasProveedor(nombreOriginal, nombreComercial);
-  toast(`✅ "${nombreOriginal}" ahora se agrupa como "${nombreComercial.trim()}"`);
+  const yaRegistrado=proveedores.some(p=>nombresCoinciden(p.nombre, nombreComercial.trim()));
+  toast(yaRegistrado
+    ? `✅ "${nombreOriginal}" ahora se suma dentro de "${nombreComercial.trim()}" en Proveedores registrados`
+    : `✅ "${nombreOriginal}" ahora se agrupa como "${nombreComercial.trim()}"`);
   renderConcentradoProveedores();
+  if(typeof renderProveedores==='function') renderProveedores();
 };
 
 window.renderProveedores=function renderProveedores(){
