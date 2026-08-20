@@ -6502,15 +6502,32 @@ async function procesarFacturaPDFYazbek(file){
   const textoCrudo=await extraerTextoPDF(file);
   _facturaPDFTextoCompleto=textoCrudo;
   const texto=textoCrudo.replace(/\s+/g,' ');
-  // Busca cada línea de producto: código Yazbek + ... + PZA + precio + importe.
-  // El "[^0-9]{0,3}\d{0,2}" tolera que un número de cantidad desplazado quede
-  // pegado justo antes de "PZA" (ver nota arriba sobre el desorden del texto).
-  const reItem=/Y([A-Z])(\d{3})-([A-Z]{3})(\d?[A-Z]{1,2})[^0-9]{0,3}\d{0,2}.{0,60}?PZA\D{0,10}?([\d,]+\.\d{2})\D{1,10}?([\d,]+\.\d{2})/g;
+  // Busca cada línea de producto a partir del código Yazbek (ej. YA300-NEGMD).
+  // El orden en que el PDF realmente entrega el texto NO es el orden visual
+  // de las columnas — se confirmó con una factura real que el texto sale como
+  // "código ... descripción ... cantidad precio importe PZA" (cantidad y
+  // precio/importe DESPUÉS de la descripción, y "PZA" hasta el final — no
+  // antes de los números, como parecía por la vista impresa). Se prueba ese
+  // orden primero; si algún día cambia el formato, se intenta el orden
+  // anterior como respaldo.
+  const patronesOrdenados=[
+    /Y([A-Z])(\d{3})-([A-Z]{3})(\d?[A-Z]{1,2})[\s\S]{0,100}?(\d+)\s+([\d,]+\.\d{2})\s+([\d,]+\.\d{2})\s+PZA/g,
+    /Y([A-Z])(\d{3})-([A-Z]{3})(\d?[A-Z]{1,2})[^0-9]{0,3}\d{0,2}.{0,60}?PZA\D{0,10}?([\d,]+\.\d{2})\D{1,10}?([\d,]+\.\d{2})/g,
+  ];
+  let coincidencias=[];
+  for(const re of patronesOrdenados){
+    coincidencias=[...texto.matchAll(re)];
+    if(coincidencias.length>0) break; // ya encontró con este patrón, no prueba el otro
+  }
   const filas=[];
-  let m, i=0;
-  while((m=reItem.exec(texto))){
+  let i=0;
+  for(const m of coincidencias){
     i++;
-    const [,prefLetra,numero,colorCod,tallaCod,precioStr,importeStr]=m;
+    // El primer patrón trae 7 grupos (con cantidad de texto, que no se usa);
+    // el segundo trae 6. En ambos casos los últimos dos son precio e importe.
+    const grupos=m.slice(1).filter(g=>g!==undefined);
+    const prefLetra=grupos[0], numero=grupos[1], colorCod=grupos[2], tallaCod=grupos[3];
+    const precioStr=grupos[grupos.length-2], importeStr=grupos[grupos.length-1];
     const precioUnitario=+precioStr.replace(/,/g,'');
     const importe=+importeStr.replace(/,/g,'');
     const cantidad=precioUnitario>0?Math.round(importe/precioUnitario):0;
