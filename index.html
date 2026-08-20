@@ -951,17 +951,18 @@ tbody td{padding:11px 14px;font-size:13.5px;vertical-align:middle;}
         <button class="btn btn-accent btn-sm" onclick="renderClientes()">🔍 Buscar</button>
         <button class="btn btn-ghost btn-sm" onclick="limpiarFiltrosClientes()">✕ Limpiar</button>
       </div>
-      <div style="background:var(--accent-light);border-radius:8px;padding:10px 14px;font-size:13px;margin-bottom:14px;">
-        ℹ️ Los números de esta pantalla ("compras recientes", "facturado") solo cuentan lo más reciente del sistema completo (no el historial completo de cada cliente) — para eso está el botón <strong>👁️ Historial</strong> en cada fila, que sí trae el total real y completo de ese cliente.
+      <div class="admin-only" style="display:none;background:var(--accent-light);border-radius:8px;padding:10px 14px;font-size:13px;margin-bottom:14px;flex-wrap:wrap;gap:10px;align-items:center;justify-content:space-between;">
+        <span>ℹ️ El número de compras y el total gastado de cada cliente ahora se actualizan solos con cada venta. Si tienes ventas de <strong>antes</strong> de este cambio, corre esto una vez para que se refleje tu historial completo.</span>
+        <button class="btn btn-ghost btn-sm" onclick="recalcularEstadisticasClientes()" style="white-space:nowrap;">🔄 Recalcular desde el historial</button>
       </div>
       <div style="display:flex;gap:14px;margin-bottom:14px;flex-wrap:wrap;">
         <div style="background:var(--bg-card);border:1px solid var(--border);border-radius:8px;padding:10px 14px;"><div style="font-size:11px;color:var(--ink-soft);font-weight:600;text-transform:uppercase;">Total clientes</div><div style="font-size:18px;font-weight:700;" id="cli-count">0</div></div>
-        <div class="admin-only" style="display:none;background:var(--bg-card);border:1px solid var(--border);border-radius:8px;padding:10px 14px;"><div style="font-size:11px;color:var(--ink-soft);font-weight:600;text-transform:uppercase;">Facturado (reciente)</div><div style="font-size:18px;font-weight:700;color:var(--green);" id="cli-total-facturado">$0</div></div>
+        <div class="admin-only" style="display:none;background:var(--bg-card);border:1px solid var(--border);border-radius:8px;padding:10px 14px;"><div style="font-size:11px;color:var(--ink-soft);font-weight:600;text-transform:uppercase;">Total facturado</div><div style="font-size:18px;font-weight:700;color:var(--green);" id="cli-total-facturado">$0</div></div>
         <div style="background:var(--bg-card);border:1px solid var(--border);border-radius:8px;padding:10px 14px;"><div style="font-size:11px;color:var(--ink-soft);font-weight:600;text-transform:uppercase;">Empresas</div><div style="font-size:18px;font-weight:700;color:var(--gold);" id="cli-count-empresas">0</div></div>
       </div>
       <div class="table-wrap">
         <table>
-          <thead><tr><th>Nombre</th><th>Teléfono</th><th>Canal</th><th>Ciudad</th><th>Tipo</th><th>Registrado</th><th title="Solo cuenta lo más reciente del sistema — usa 👁️ Historial para ver el total real de este cliente">Compras recientes ⓘ</th><th title="Solo cuenta lo más reciente del sistema — usa 👁️ Historial para ver el total real de este cliente">Gastado (reciente) ⓘ</th><th>Acciones</th></tr></thead>
+          <thead><tr><th>Nombre</th><th>Teléfono</th><th>Canal</th><th>Ciudad</th><th>Tipo</th><th>Registrado</th><th>Compras</th><th>Total gastado</th><th>Acciones</th></tr></thead>
           <tbody id="tabla-clientes"></tbody>
         </table>
       </div>
@@ -4115,6 +4116,87 @@ async function descontarStockPlayerasDeVenta(itemsNuevos, itemsAnteriores){
   }
 }
 
+// ═══ ESTADÍSTICAS REALES DE CLIENTES (numCompras / totalGastado / saldoPendiente) ═══
+// Antes, la tabla de Clientes calculaba estos números filtrando el arreglo
+// `ventas` en memoria — que solo tiene las 50 ventas MÁS RECIENTES de todo
+// el negocio, no el historial completo de cada cliente. Con 80+ clientes,
+// casi todos salían en $0 aunque sí tuvieran compras reales.
+// Ahora cada cliente guarda sus propios totales directamente en su
+// documento (pl_clientes), y se actualizan solos cada vez que se guarda,
+// edita o elimina una venta — así la tabla siempre muestra el número real
+// sin tener que consultar todo el historial cada vez que se abre la pantalla.
+async function ajustarEstadisticaCliente(nombreCliente, deltaCompras, deltaTotal, deltaSaldo){
+  if(!nombreCliente) return;
+  const norm=s=>(s||'').toString().trim().toLowerCase();
+  const cliente=clientes.find(c=>norm(c.nombre)===norm(nombreCliente));
+  if(!cliente) return; // venta a "Público en general" o a alguien sin cliente registrado — no hay a quién actualizarle
+  const numCompras=Math.max(0,(+cliente.numCompras||0)+deltaCompras);
+  const totalGastado=Math.max(0,+((+cliente.totalGastado||0)+deltaTotal).toFixed(2));
+  const saldoPendiente=Math.max(0,+((+cliente.saldoPendiente||0)+deltaSaldo).toFixed(2));
+  await setDoc(doc(db,'pl_clientes',cliente.id),{...cliente,numCompras,totalGastado,saldoPendiente});
+  // Reflejar en memoria de inmediato, sin esperar a que llegue el snapshot en vivo
+  cliente.numCompras=numCompras; cliente.totalGastado=totalGastado; cliente.saldoPendiente=saldoPendiente;
+}
+
+// Compara la venta vieja (si es edición) contra la nueva y ajusta las
+// estadísticas del cliente correspondiente — incluyendo el caso de que el
+// nombre del cliente haya cambiado entre una versión y otra.
+async function actualizarEstadisticasClientePorVenta(ventaVieja, ventaNueva){
+  const clienteViejo=ventaVieja?.cliente||null;
+  const clienteNuevo=ventaNueva?.cliente||null;
+  if(clienteViejo && clienteViejo===clienteNuevo){
+    // Mismo cliente: solo se ajusta el dinero (ya contaba como 1 compra desde antes)
+    await ajustarEstadisticaCliente(clienteNuevo, 0, (+ventaNueva.total||0)-(+ventaVieja.total||0), (+ventaNueva.saldo||0)-(+ventaVieja.saldo||0));
+  } else {
+    if(clienteViejo) await ajustarEstadisticaCliente(clienteViejo, -1, -(+ventaVieja.total||0), -(+ventaVieja.saldo||0));
+    if(clienteNuevo) await ajustarEstadisticaCliente(clienteNuevo, 1, (+ventaNueva.total||0), (+ventaNueva.saldo||0));
+  }
+}
+
+// Recalcula desde cero, para TODOS los clientes, revisando el historial
+// completo de ventas en Firestore. Se usa una sola vez para corregir los
+// datos históricos que quedaron en $0 antes de este cambio — de aquí en
+// adelante ya no hace falta, porque cada venta se va sumando/restando sola.
+window.recalcularEstadisticasClientes=async function(){
+  if(!confirm('Esto va a revisar TODO tu historial de ventas y recalcular el número de compras y total gastado de cada cliente desde cero. Puede tardar un momento si tienes muchas ventas. ¿Continuar?')) return;
+  mostrarProgreso('⏳ Recalculando estadísticas de clientes...', 'Revisando todo tu historial de ventas');
+  try{
+    const snap=await getDocs(collection(db,'pl_ventas'));
+    const todasVentas=snap.docs.map(d=>d.data());
+    const norm=s=>(s||'').toString().trim().toLowerCase();
+    const acumulado={}; // nombreNormalizado -> {numCompras, totalGastado, saldoPendiente}
+    todasVentas.forEach(v=>{
+      const key=norm(v.cliente);
+      if(!key) return;
+      if(!acumulado[key]) acumulado[key]={numCompras:0,totalGastado:0,saldoPendiente:0};
+      acumulado[key].numCompras++;
+      acumulado[key].totalGastado+=+v.total||0;
+      acumulado[key].saldoPendiente+=+v.saldo||0;
+    });
+    let actualizados=0;
+    let batch=writeBatch(db);
+    let enBatch=0;
+    for(const c of clientes){
+      const datos=acumulado[norm(c.nombre)]||{numCompras:0,totalGastado:0,saldoPendiente:0};
+      batch.set(doc(db,'pl_clientes',c.id),{...c,
+        numCompras:datos.numCompras,
+        totalGastado:+datos.totalGastado.toFixed(2),
+        saldoPendiente:+datos.saldoPendiente.toFixed(2)
+      });
+      enBatch++; actualizados++;
+      if(enBatch>=450){ await batch.commit(); batch=writeBatch(db); enBatch=0; }
+    }
+    if(enBatch>0) await batch.commit();
+    ocultarProgreso();
+    toast(`✅ Estadísticas recalculadas para ${actualizados} cliente(s)`);
+  }catch(err){
+    console.error('Error recalculando estadísticas de clientes:', err);
+    ocultarProgreso();
+    toast('⚠️ Ocurrió un error — revisa la consola');
+  }
+};
+
+
 window.guardarVenta=async function(){
   if(window._ventaItems.length===0){toast('⚠️ Agrega al menos un producto');return;}
   const canal2=document.getElementById('v-canal').value;
@@ -4206,6 +4288,8 @@ window.guardarVenta=async function(){
   await ajustarStockInsumoAuto('cmyk', totalCcColor-prevTotalCcColor);
   // Descuento automático de stock de Playeras en blanco (cruce tipo/género/talla/color/marca)
   await descontarStockPlayerasDeVenta(window._ventaItems, ventaOriginal?.items||[]);
+  // Mantener actualizadas las estadísticas reales del cliente (compras/total/saldo)
+  await actualizarEstadisticasClientePorVenta(ventaOriginal, data);
   closeModal('modal-venta');
   toast('✅ Venta guardada — Folio: '+folioVal);
   // No recargamos "las 50 más recientes" (eso borraría de la vista una venta
@@ -5106,6 +5190,8 @@ window.eliminarVenta=async function(id){
     await ajustarStockInsumoAuto('blanca', -((+ventaVieja.tintaBlanca||0)*cantVieja));
     await ajustarStockInsumoAuto('cmyk', -((+ventaVieja.tintaColor||0)*cantVieja));
     await descontarStockPlayerasDeVenta([], ventaVieja.items||[]);
+    // Restar esta venta de las estadísticas del cliente
+    await actualizarEstadisticasClientePorVenta(ventaVieja, null);
   }
   toast('🗑 Venta eliminada');
   await cargarVentas(true);
@@ -6958,10 +7044,7 @@ window.renderClientes=function(soloConFiltro){
   });
 
   let totalFacturado=0;
-  lista.forEach(c=>{
-    const ventasCliente=ventas.filter(v=>v.cliente?.toLowerCase()===c.nombre?.toLowerCase());
-    totalFacturado+=ventasCliente.reduce((s,v)=>s+(+v.total||0),0);
-  });
+  lista.forEach(c=>{ totalFacturado+=+c.totalGastado||0; });
   if(countEl) countEl.textContent=lista.length+' resultado'+(lista.length===1?'':'s')+' de '+clientes.length+' total';
   if(totalEl) totalEl.textContent=fmtMoney(totalFacturado);
   if(empresasEl) empresasEl.textContent=lista.filter(c=>c.tipo==='Empresa').length;
@@ -6974,18 +7057,23 @@ window.renderClientes=function(soloConFiltro){
   const canalColorCli={Local:'badge-blue',WhatsApp:'badge-green','Foráneo':'badge-gold','Mercado Libre':'badge-gold',Amazon:'badge-green',Shopify:'badge-green',Otro:'badge-gray'};
 
   tbody.innerHTML=lista.map(c=>{
+    // "Ciudades" es informativo nada más — sale de lo que haya cargado en
+    // memoria (ventas recientes); el número de compras y el total gastado
+    // SÍ son el dato real completo, porque viven en el propio documento del
+    // cliente y se actualizan solos con cada venta (ver actualizarEstadisticasClientePorVenta).
     const ventasCliente=ventas.filter(v=>v.cliente?.toLowerCase()===c.nombre?.toLowerCase());
-    const totalGastado=ventasCliente.reduce((s,v)=>s+(+v.total||0),0);
     const ciudades=[...new Set(ventasCliente.map(v=>v.ciudad).filter(Boolean))].join(', ');
+    const numCompras=+c.numCompras||0;
+    const totalGastado=+c.totalGastado||0;
     const fechaReg=c.creado?c.creado.slice(0,10):'—';
     return`<tr>
-      <td style="font-weight:600;">${c.nombre}${ventasCliente.length>=3?' <span class="badge badge-gold" style="font-size:10px;" title="3+ compras">🔥 Recurrente</span>':''}</td>
+      <td style="font-weight:600;">${c.nombre}${numCompras>=3?' <span class="badge badge-gold" style="font-size:10px;" title="3+ compras">🔥 Recurrente</span>':''}</td>
       <td>${c.tel||'—'}</td>
       <td><span class="badge ${canalColorCli[c.canal]||'badge-gray'}">${c.canal||'—'}</span></td>
       <td style="font-size:12px;">${ciudades||c.ciudad||'—'}</td>
       <td><span class="badge ${(c.tipo||'Particular')==='Empresa'?'badge-gold':'badge-gray'}" style="font-size:10px;">${c.tipo||'Particular'}</span></td>
       <td style="font-size:12px;">${fechaReg}</td>
-      <td>${ventasCliente.length}</td>
+      <td>${numCompras}</td>
       <td style="font-weight:700;color:var(--green);">${isAdmin?fmtMoney(totalGastado):'—'}</td>
       <td style="display:flex;gap:4px;flex-wrap:wrap;">
         <button class="btn btn-ghost btn-sm" onclick="verHistorialCliente('${c.id}')" title="Ver todas sus compras">👁️ Historial</button>
@@ -8257,14 +8345,19 @@ window.renderProveedores=function renderProveedores(){
 
   // Compras de un proveedor: suma las de Insumos (colección pl_compras) MÁS
   // las de Playeras en blanco (colección pl_compras_playeras, campo "marca").
-  // Antes solo se contaban las de Insumos, así que a los proveedores de tela
-  // (Yazbek, Euro Cotton, etc.) siempre les salía $0 aunque ya tuvieran compras
-  // registradas desde "Registrar compra" o "Importar factura" en Playeras.
+  // La comparación es POR CONTENIDO (no exacta): el registro en Proveedores
+  // a veces trae texto extra alrededor (ej. "Playera y Mas (Yazbek)"), pero
+  // lo que se captura en una compra es solo "Yazbek" — así que se hace match
+  // si uno de los dos nombres está contenido dentro del otro.
+  const nombresCoinciden=(a,b)=>{
+    const na=(a||'').toLowerCase().trim(), nb=(b||'').toLowerCase().trim();
+    if(!na||!nb) return false;
+    return na===nb || na.includes(nb) || nb.includes(na);
+  };
   const comprasDeProveedor=nombre=>{
-    const norm=(nombre||'').toLowerCase();
-    const deInsumos=compras.filter(c=>(c.proveedor||'').toLowerCase()===norm)
+    const deInsumos=compras.filter(c=>nombresCoinciden(c.proveedor,nombre))
       .map(c=>({costoTotal:+c.costoTotal||0}));
-    const dePlayeras=(comprasPlayeras||[]).filter(c=>(c.marca||'').toLowerCase()===norm)
+    const dePlayeras=(comprasPlayeras||[]).filter(c=>nombresCoinciden(c.marca,nombre))
       .map(c=>({costoTotal:+c.costoTotal||0}));
     return [...deInsumos, ...dePlayeras];
   };
