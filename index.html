@@ -438,7 +438,7 @@ tbody td{padding:11px 14px;font-size:13.5px;vertical-align:middle;}
       <!-- Reporte de gastos -->
       <div style="margin-top:28px;">
         <div style="font-weight:700;font-size:15px;margin-bottom:14px;">📊 Reporte de Gastos</div>
-        <div style="display:grid;grid-template-columns:1fr 1fr;gap:18px;" id="reporte-gastos-contenido">
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:18px;" id="gastos-reporte-categoria-wrap">
           <div class="card">
             <div style="font-weight:700;font-size:14px;margin-bottom:12px;">📂 Por Categoría</div>
             <div id="gastos-por-categoria"></div>
@@ -794,6 +794,7 @@ tbody td{padding:11px 14px;font-size:13.5px;vertical-align:middle;}
         <button class="btn btn-ghost btn-sm admin-only" style="display:none;" onclick="descargarPlantillaFacturaPlayeras()">⬇️ Plantilla</button>
         <button class="btn btn-ghost admin-only" style="display:none;" onclick="abrirCatalogoMarcas()">⚙️ Catálogo de Marcas</button>
         <button class="btn btn-ghost admin-only" style="display:none;" onclick="abrirHistorialFacturasPlayeras()">📋 Historial de Facturas</button>
+        <button class="btn btn-ghost admin-only" style="display:none;" onclick="abrirReporteInventarioPlayeras()">📄 Reporte de Inventario</button>
         <button class="btn btn-accent admin-only" style="display:none;" onclick="openPlayeraModal()">+ Agregar Playera</button>
       </div>
     </div>
@@ -1995,6 +1996,34 @@ tbody td{padding:11px 14px;font-size:13.5px;vertical-align:middle;}
 </div>
 
 <!-- MODAL CATÁLOGO DE MARCAS (tallas, colores y precio por marca) -->
+<div class="modal-overlay" id="modal-reporte-inventario-playeras">
+  <div class="modal" style="max-width:480px;">
+    <div class="modal-header"><h2>📄 Reporte de Inventario</h2><button class="modal-close" onclick="closeModal('modal-reporte-inventario-playeras')">×</button></div>
+    <div class="modal-body">
+      <div class="form-group full" style="margin-bottom:14px;">
+        <label>Agrupado por Proveedor / Marca → Género → Talla → Color, con sus totales.</label>
+      </div>
+      <div class="form-group full" style="margin-bottom:14px;">
+        <label style="display:flex;align-items:center;gap:8px;font-weight:400;cursor:pointer;">
+          <input type="checkbox" id="ri-usar-filtros" style="accent-color:var(--accent);width:16px;height:16px;">
+          Usar los filtros que tengo activos ahorita en la pantalla (si no, trae todo el inventario)
+        </label>
+      </div>
+      <div class="form-group full">
+        <label>Formato</label>
+        <div style="display:flex;gap:10px;margin-top:6px;">
+          <button class="btn btn-primary" style="flex:1;" onclick="generarReporteInventarioPlayeras('pdf')">📄 Solo PDF</button>
+          <button class="btn btn-accent" style="flex:1;" onclick="generarReporteInventarioPlayeras('excel')">📊 Solo Excel</button>
+        </div>
+        <button class="btn btn-teal" style="width:100%;margin-top:10px;" onclick="generarReporteInventarioPlayeras('ambos')">📄📊 Ambos</button>
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-ghost" onclick="closeModal('modal-reporte-inventario-playeras')">Cancelar</button>
+    </div>
+  </div>
+</div>
+
 <div class="modal-overlay" id="modal-historial-facturas-playeras">
   <div class="modal" style="max-width:920px;">
     <div class="modal-header"><h2>📋 Historial de Facturas de Playeras</h2><button class="modal-close" onclick="closeModal('modal-historial-facturas-playeras')">×</button></div>
@@ -6016,76 +6045,6 @@ window.setRangoReporte=function(tipo){
   if(typeof generarReporteActivo==='function') generarReporteActivo();
 };
 
-window.generarReporte=function(){
-  const desde=document.getElementById('reporte-desde').value;
-  const hasta=document.getElementById('reporte-hasta').value;
-  if(!desde||!hasta){toast('⚠️ Selecciona el rango de fechas');return;}
-  const ventasPer=ventas.filter(v=>v.fecha>=desde&&v.fecha<=hasta);
-  const gastosPer=gastos.filter(g=>g.fecha>=desde&&g.fecha<=hasta);
-  const totalVentas=ventasPer.reduce((s,v)=>s+(+v.total||0),0);
-  const totalGastos=gastosPer.reduce((s,g)=>s+(+g.monto||0),0);
-  const utilidad=totalVentas-totalGastos;
-  const totalUnidades=ventasPer.reduce((s,v)=>s+(+v.cantidad||0),0);
-
-  // Por talla
-  const porTalla={};
-  ventasPer.forEach(v=>{if(v.talla){porTalla[v.talla]=(porTalla[v.talla]||0)+(+v.cantidad||0);}});
-  // Por color
-  const porColor={};
-  ventasPer.forEach(v=>{if(v.color){porColor[v.color]=(porColor[v.color]||0)+(+v.cantidad||0);}});
-  // Por género
-  const porGenero={};
-  ventasPer.forEach(v=>{if(v.genero){porGenero[v.genero]=(porGenero[v.genero]||0)+(+v.cantidad||0);}});
-  // Por canal
-  const porCanal={};
-  ventasPer.forEach(v=>{porCanal[v.canal]=(porCanal[v.canal]||0)+(+v.total||0);});
-  // Por categoría gasto
-  const porCatGasto={};
-  gastosPer.forEach(g=>{porCatGasto[g.categoria]=(porCatGasto[g.categoria]||0)+(+g.monto||0);});
-
-  document.getElementById('btn-export-pdf').style.display='inline-flex';
-  document.getElementById('btn-export-excel').style.display='inline-flex';
-  // Guardar datos para exportar
-  window._reporteData = { desde, hasta, ventasPer, gastosPer, totalVentas, totalGastos, utilidad, totalUnidades, porTalla, porColor, porCanal, porCatGasto };
-  const el=document.getElementById('reporte-contenido');
-  el.innerHTML=`
-    <div class="stats-row" style="margin-bottom:18px;">
-      <div class="stat-card stat-green"><div class="label">Total Ventas</div><div class="value">${fmtMoney(totalVentas)}</div></div>
-      <div class="stat-card stat-red"><div class="label">Total Gastos</div><div class="value">${fmtMoney(totalGastos)}</div></div>
-      <div class="stat-card ${utilidad>=0?'stat-teal':'stat-red'}"><div class="label">Utilidad</div><div class="value">${fmtMoney(utilidad)}</div></div>
-      <div class="stat-card stat-blue"><div class="label">Unidades vendidas</div><div class="value">${totalUnidades}</div></div>
-      <div class="stat-card stat-gold"><div class="label">Ticket promedio</div><div class="value">${ventasPer.length>0?fmtMoney(totalVentas/ventasPer.length):'$0'}</div></div>
-    </div>
-    <div style="display:grid;grid-template-columns:1fr 1fr;gap:18px;margin-bottom:18px;">
-      <div class="card"><div style="font-weight:700;font-size:14px;margin-bottom:12px;">📊 Ventas por Canal</div>
-        ${Object.entries(porCanal).sort((a,b)=>b[1]-a[1]).map(([k,v])=>`<div style="display:flex;justify-content:space-between;padding:7px 0;border-bottom:1px solid var(--border);"><span>${k}</span><strong>${fmtMoney(v)}</strong></div>`).join('')||'<p style="color:var(--ink-soft);font-size:13px;">Sin datos</p>'}
-      </div>
-      <div class="card"><div style="font-weight:700;font-size:14px;margin-bottom:12px;">👕 Ventas por Talla</div>
-        ${Object.entries(porTalla).sort((a,b)=>b[1]-a[1]).map(([k,v])=>`<div style="display:flex;justify-content:space-between;padding:7px 0;border-bottom:1px solid var(--border);"><span>${k}</span><strong>${v} pzas</strong></div>`).join('')||'<p style="color:var(--ink-soft);font-size:13px;">Sin datos</p>'}
-      </div>
-      <div class="card"><div style="font-weight:700;font-size:14px;margin-bottom:12px;">🎨 Ventas por Color</div>
-        ${Object.entries(porColor).sort((a,b)=>b[1]-a[1]).map(([k,v])=>`<div style="display:flex;justify-content:space-between;padding:7px 0;border-bottom:1px solid var(--border);"><span>${k}</span><strong>${v} pzas</strong></div>`).join('')||'<p style="color:var(--ink-soft);font-size:13px;">Sin datos</p>'}
-      </div>
-      <div class="card"><div style="font-weight:700;font-size:14px;margin-bottom:12px;">💸 Gastos por Categoría</div>
-        ${Object.entries(porCatGasto).sort((a,b)=>b[1]-a[1]).map(([k,v])=>`<div style="display:flex;justify-content:space-between;padding:7px 0;border-bottom:1px solid var(--border);"><span>${k}</span><strong>${fmtMoney(v)}</strong></div>`).join('')||'<p style="color:var(--ink-soft);font-size:13px;">Sin datos</p>'}
-      </div>
-    </div>
-    <div class="card" style="margin-bottom:18px;"><div style="font-weight:700;font-size:14px;margin-bottom:12px;">🖨️ Consumo de Tinta</div>
-      <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:12px;">
-        <div style="background:var(--bg);border-radius:8px;padding:12px;"><div style="font-size:11px;font-weight:600;color:var(--ink-soft);text-transform:uppercase;margin-bottom:4px;">Tinta blanca total</div><div style="font-size:20px;font-weight:700;">${ventasPer.reduce((s,v)=>s+(+v.tintaBlanca||0)*(+v.cantidad||1),0).toFixed(2)} cc</div></div>
-        <div style="background:var(--bg);border-radius:8px;padding:12px;"><div style="font-size:11px;font-weight:600;color:var(--ink-soft);text-transform:uppercase;margin-bottom:4px;">Tinta CMYK total</div><div style="font-size:20px;font-weight:700;">${ventasPer.reduce((s,v)=>s+(+v.tintaColor||0)*(+v.cantidad||1),0).toFixed(2)} cc</div></div>
-        <div style="background:var(--bg);border-radius:8px;padding:12px;"><div style="font-size:11px;font-weight:600;color:var(--ink-soft);text-transform:uppercase;margin-bottom:4px;">Costo total tinta</div><div style="font-size:20px;font-weight:700;color:var(--red);">${fmtMoney(ventasPer.reduce((s,v)=>s+(+v.costoTinta||0),0))}</div></div>
-        <div style="background:var(--bg);border-radius:8px;padding:12px;"><div style="font-size:11px;font-weight:600;color:var(--ink-soft);text-transform:uppercase;margin-bottom:4px;">Costo tinta/playera</div><div style="font-size:20px;font-weight:700;">${totalUnidades>0?fmtMoney(ventasPer.reduce((s,v)=>s+(+v.costoTinta||0),0)/totalUnidades):'$0'}</div></div>
-      </div>
-    </div>
-    <div class="card"><div style="font-weight:700;font-size:14px;margin-bottom:12px;">📋 Estado de Resultados</div>
-      <div style="display:flex;justify-content:space-between;padding:8px 0;border-bottom:1px solid var(--border);"><span>Ingresos por ventas</span><strong style="color:var(--green);">${fmtMoney(totalVentas)}</strong></div>
-      <div style="display:flex;justify-content:space-between;padding:8px 0;border-bottom:1px solid var(--border);"><span>Gastos fijos</span><strong style="color:var(--red);">${fmtMoney(gastosPer.filter(g=>g.tipo==='Fijo').reduce((s,g)=>s+(+g.monto||0),0))}</strong></div>
-      <div style="display:flex;justify-content:space-between;padding:8px 0;border-bottom:1px solid var(--border);"><span>Gastos variables</span><strong style="color:var(--red);">${fmtMoney(gastosPer.filter(g=>g.tipo==='Variable').reduce((s,g)=>s+(+g.monto||0),0))}</strong></div>
-      <div style="display:flex;justify-content:space-between;padding:10px 0;font-size:16px;font-weight:700;"><span>UTILIDAD NETA</span><span style="color:${utilidad>=0?'var(--green)':'var(--red)'};">${fmtMoney(utilidad)}</span></div>
-    </div>
-  `;
-};
 
 // ─── PLAYERAS ───
 window.openPlayeraModal=function(id){
@@ -6214,7 +6173,11 @@ window.guardarPlayera=async function(){
   toast('✅ Playera guardada');
 };
 
-window.renderPlayeras=function renderPlayeras(){
+// Aplica los filtros actuales de la pantalla de Playeras (búsqueda, género,
+// talla, color, categoría, proveedor, modelo) sobre el inventario completo.
+// La usan tanto renderPlayeras() como el Reporte de Inventario, para no
+// duplicar la misma lógica de filtrado en dos lugares.
+function filtrarListaPlayerasActual(){
   const search=(document.getElementById('search-playeras')||{value:''}).value.toLowerCase();
   const talla=(document.getElementById('filter-talla')||{value:''}).value;
   const color=(document.getElementById('filter-color-p')||{value:''}).value;
@@ -6222,7 +6185,132 @@ window.renderPlayeras=function renderPlayeras(){
   const catFiltro=(document.getElementById('filter-categoria-p')||{value:''}).value;
   const provFiltro=(document.getElementById('filter-proveedor-p')||{value:''}).value;
   const modeloFiltro=(document.getElementById('filter-modelo-p')||{value:''}).value;
+  return playeras.filter(p=>{
+    const ms=!search||p.nombre?.toLowerCase().includes(search)||p.color?.toLowerCase().includes(search)||p.talla?.toLowerCase().includes(search)||p.proveedor?.toLowerCase().includes(search)||p.genero?.toLowerCase().includes(search)||(p.modelo||'').toLowerCase().includes(search)||(p.categoria||'').toLowerCase().includes(search);
+    const mt=!talla||p.talla===talla;
+    const mc=!color||p.color===color;
+    const mg=!genero||p.genero===genero;
+    const mcat=!catFiltro||p.categoria===catFiltro;
+    const mprov=!provFiltro||p.proveedor===provFiltro;
+    const mmod=!modeloFiltro||p.modelo===modeloFiltro;
+    return ms&&mt&&mc&&mg&&mcat&&mprov&&mmod;
+  });
+}
 
+// ═══ REPORTE DE INVENTARIO (Marca → Género → Talla → Color, con totales) ═══
+window.abrirReporteInventarioPlayeras=function(){
+  document.getElementById('ri-usar-filtros').checked=false;
+  openModal('modal-reporte-inventario-playeras');
+};
+
+// Agrupa una lista de playeras en la jerarquía Marca > Género > Talla > Color,
+// y arma una lista PLANA de "filas" (cada una marcada con su tipo: dato o
+// subtotal) para poder generarlas igual tanto en PDF como en Excel.
+function construirFilasReporteInventario(lista){
+  const porMarca={};
+  lista.forEach(p=>{
+    const marca=p.proveedor||'Sin proveedor';
+    const genero=p.genero||'Sin género';
+    const talla=p.talla||'Sin talla';
+    if(!porMarca[marca]) porMarca[marca]={};
+    if(!porMarca[marca][genero]) porMarca[marca][genero]={};
+    if(!porMarca[marca][genero][talla]) porMarca[marca][genero][talla]=[];
+    porMarca[marca][genero][talla].push({
+      color:p.color||'Sin color', modelo:p.modelo||'', stock:+p.stock||0, costo:+p.costo||0,
+      valor:(+p.stock||0)*(+p.costo||0)
+    });
+  });
+
+  const filas=[];
+  let totalGeneralPzas=0, totalGeneralValor=0;
+  Object.keys(porMarca).sort().forEach(marca=>{
+    let marcaPzas=0, marcaValor=0;
+    Object.keys(porMarca[marca]).sort().forEach(genero=>{
+      let generoPzas=0, generoValor=0;
+      Object.keys(porMarca[marca][genero]).sort().forEach(talla=>{
+        let tallaPzas=0, tallaValor=0;
+        porMarca[marca][genero][talla].forEach(c=>{
+          filas.push({tipo:'dato', marca, genero, talla, color:c.color, modelo:c.modelo, stock:c.stock, costo:c.costo, valor:c.valor});
+          tallaPzas+=c.stock; tallaValor+=c.valor;
+        });
+        filas.push({tipo:'subtotal-talla', marca, genero, talla, stock:tallaPzas, valor:tallaValor});
+        generoPzas+=tallaPzas; generoValor+=tallaValor;
+      });
+      filas.push({tipo:'subtotal-genero', marca, genero, stock:generoPzas, valor:generoValor});
+      marcaPzas+=generoPzas; marcaValor+=generoValor;
+    });
+    filas.push({tipo:'subtotal-marca', marca, stock:marcaPzas, valor:marcaValor});
+    totalGeneralPzas+=marcaPzas; totalGeneralValor+=marcaValor;
+  });
+  filas.push({tipo:'total-general', stock:totalGeneralPzas, valor:totalGeneralValor});
+  return filas;
+}
+
+window.generarReporteInventarioPlayeras=function(formato){
+  const usarFiltros=document.getElementById('ri-usar-filtros').checked;
+  const lista=usarFiltros?filtrarListaPlayerasActual():playeras;
+  if(lista.length===0){toast('⚠️ No hay playeras para reportar con esos filtros');return;}
+  const filas=construirFilasReporteInventario(lista);
+  if(formato==='pdf'||formato==='ambos') _reporteInventarioPDF(filas, usarFiltros);
+  if(formato==='excel'||formato==='ambos') _reporteInventarioExcel(filas, usarFiltros);
+  closeModal('modal-reporte-inventario-playeras');
+  toast('✅ Reporte generado');
+};
+
+function _reporteInventarioPDF(filas, usarFiltros){
+  if(typeof window.jspdf==='undefined'){toast('⚠️ Cargando librería PDF, intenta de nuevo en un momento');return;}
+  const {jsPDF}=window.jspdf;
+  const doc=new jsPDF();
+  doc.setFillColor(24,24,27);doc.rect(0,0,210,28,'F');
+  doc.setTextColor(106,171,31);doc.setFontSize(16);doc.setFont('helvetica','bold');
+  doc.text('PLAYERAS BELOMA',14,12);
+  doc.setTextColor(255,255,255);doc.setFontSize(10);doc.setFont('helvetica','normal');
+  doc.text(`Reporte de Inventario de Playeras${usarFiltros?' (con filtros activos)':''} — ${fmtFecha(hoy())}`,14,20);
+
+  const body=filas.map(f=>{
+    if(f.tipo==='dato') return [f.marca, f.genero, f.talla, f.color, f.modelo||'—', String(f.stock), fmtMoney(f.costo), fmtMoney(f.valor)];
+    if(f.tipo==='subtotal-talla') return [{content:`Subtotal ${f.marca} · ${f.genero} · Talla ${f.talla}`,colSpan:6,styles:{fontStyle:'bold',fillColor:[245,245,240]}}, {content:String(f.stock),styles:{fontStyle:'bold',fillColor:[245,245,240]}}, {content:fmtMoney(f.valor),styles:{fontStyle:'bold',fillColor:[245,245,240]}}];
+    if(f.tipo==='subtotal-genero') return [{content:`Subtotal ${f.marca} · ${f.genero}`,colSpan:6,styles:{fontStyle:'bold',fillColor:[232,245,208]}}, {content:String(f.stock),styles:{fontStyle:'bold',fillColor:[232,245,208]}}, {content:fmtMoney(f.valor),styles:{fontStyle:'bold',fillColor:[232,245,208]}}];
+    if(f.tipo==='subtotal-marca') return [{content:`TOTAL ${f.marca}`,colSpan:6,styles:{fontStyle:'bold',fillColor:[24,24,27],textColor:[255,255,255]}}, {content:String(f.stock),styles:{fontStyle:'bold',fillColor:[24,24,27],textColor:[255,255,255]}}, {content:fmtMoney(f.valor),styles:{fontStyle:'bold',fillColor:[24,24,27],textColor:[255,255,255]}}];
+    if(f.tipo==='total-general') return [{content:'TOTAL GENERAL DEL INVENTARIO',colSpan:6,styles:{fontStyle:'bold',fillColor:[106,171,31],textColor:[255,255,255],fontSize:10}}, {content:String(f.stock),styles:{fontStyle:'bold',fillColor:[106,171,31],textColor:[255,255,255]}}, {content:fmtMoney(f.valor),styles:{fontStyle:'bold',fillColor:[106,171,31],textColor:[255,255,255]}}];
+    return [];
+  });
+
+  doc.autoTable({
+    startY:35,
+    head:[['Marca','Género','Talla','Color','Modelo','Piezas','Costo unit.','Valor']],
+    body,
+    headStyles:{fillColor:[24,24,27],fontSize:8},
+    styles:{fontSize:8},
+    columnStyles:{5:{halign:'right'},6:{halign:'right'},7:{halign:'right'}}
+  });
+  doc.save(`inventario-playeras-${hoy()}.pdf`);
+}
+
+function _reporteInventarioExcel(filas, usarFiltros){
+  if(!window.XLSX){toast('⚠️ Librería Excel no disponible');return;}
+  const filasHoja=[
+    ['Reporte de Inventario de Playeras'+(usarFiltros?' (con filtros activos)':''), '', '', '', '', '', '', ''],
+    [`Generado: ${fmtFecha(hoy())}`, '', '', '', '', '', '', ''],
+    [],
+    ['Marca','Género','Talla','Color','Modelo','Piezas','Costo unitario','Valor']
+  ];
+  filas.forEach(f=>{
+    if(f.tipo==='dato') filasHoja.push([f.marca, f.genero, f.talla, f.color, f.modelo||'', f.stock, f.costo, f.valor]);
+    else if(f.tipo==='subtotal-talla') filasHoja.push([`— Subtotal ${f.marca} · ${f.genero} · Talla ${f.talla}`,'','','','', f.stock,'', f.valor]);
+    else if(f.tipo==='subtotal-genero') filasHoja.push([`—— Subtotal ${f.marca} · ${f.genero}`,'','','','', f.stock,'', f.valor]);
+    else if(f.tipo==='subtotal-marca') filasHoja.push([`TOTAL ${f.marca}`,'','','','', f.stock,'', f.valor]);
+    else if(f.tipo==='total-general') filasHoja.push(['TOTAL GENERAL DEL INVENTARIO','','','','', f.stock,'', f.valor]);
+  });
+  const wb=XLSX.utils.book_new();
+  const ws=XLSX.utils.aoa_to_sheet(filasHoja);
+  ws['!cols']=[{wch:22},{wch:14},{wch:10},{wch:16},{wch:14},{wch:10},{wch:14},{wch:14}];
+  XLSX.utils.book_append_sheet(wb,ws,'Inventario');
+  XLSX.writeFile(wb,`inventario-playeras-${hoy()}.xlsx`);
+}
+
+
+window.renderPlayeras=function renderPlayeras(){
   // Refrescar las opciones de los filtros de proveedor y modelo con los que
   // realmente hay en inventario (sin perder el que esté seleccionado)
   const selProvFiltro=document.getElementById('filter-proveedor-p');
@@ -6238,16 +6326,7 @@ window.renderPlayeras=function renderPlayeras(){
     selModeloFiltro.innerHTML='<option value="">Todos los modelos</option>'+modelosEnInventario.map(m=>`<option${m===actualM?' selected':''}>${m}</option>`).join('');
   }
 
-  let lista=playeras.filter(p=>{
-    const ms=!search||p.nombre?.toLowerCase().includes(search)||p.color?.toLowerCase().includes(search)||p.talla?.toLowerCase().includes(search)||p.proveedor?.toLowerCase().includes(search)||p.genero?.toLowerCase().includes(search)||(p.modelo||'').toLowerCase().includes(search)||(p.categoria||'').toLowerCase().includes(search);
-    const mt=!talla||p.talla===talla;
-    const mc=!color||p.color===color;
-    const mg=!genero||p.genero===genero;
-    const mcat=!catFiltro||p.categoria===catFiltro;
-    const mprov=!provFiltro||p.proveedor===provFiltro;
-    const mmod=!modeloFiltro||p.modelo===modeloFiltro;
-    return ms&&mt&&mc&&mg&&mcat&&mprov&&mmod;
-  });
+  let lista=filtrarListaPlayerasActual();
 
   // Resumen: total en dinero del inventario (según los filtros activos) y
   // desglose de piezas/valor por proveedor — se recalcula con cada filtro.
@@ -6278,13 +6357,22 @@ window.renderPlayeras=function renderPlayeras(){
   const grid=document.getElementById('playeras-grid');
   const empty=document.getElementById('playeras-empty');
   if(!grid)return;
+  // Orden manual: si ya le diste un orden arrastrando tarjetas, se respeta;
+  // las que todavía no tienen orden asignado se van al final, alfabético.
+  lista=[...lista].sort((a,b)=>{
+    const oa=a.orden??Infinity, ob=b.orden??Infinity;
+    if(oa!==ob) return oa-ob;
+    return (a.nombre||'').localeCompare(b.nombre||'');
+  });
+  window._playerasListaActual=lista; // para que el drag & drop sepa el orden visible actual
   if(lista.length===0){grid.innerHTML='';empty.style.display='block';return;}
   empty.style.display='none';
   grid.innerHTML=lista.map(p=>{
     // El mínimo mismo no cuenta como bajo — solo por debajo de él (ej. si el
     // mínimo es 5, con 5 en stock se ve verde; con 4 o menos se ve rojo).
     const stockOk=+p.stock>=(+p.stockMin||0);
-    return`<div style="background:var(--bg-card);border:1px solid var(--border);border-radius:12px;padding:16px;position:relative;">
+    return`<div draggable="true" data-playera-id="${p.id}" ondragstart="onDragStartPlayera(event,'${p.id}')" ondragover="event.preventDefault();this.style.outline='2px dashed var(--accent)';" ondragleave="this.style.outline='';" ondrop="onDropPlayera(event,'${p.id}')" style="background:var(--bg-card);border:1px solid var(--border);border-radius:12px;padding:16px;position:relative;cursor:grab;">
+      <div style="position:absolute;top:8px;right:8px;font-size:14px;color:var(--ink-soft);opacity:0.5;" title="Arrástrala para reordenar">⠿</div>
       <div style="text-align:center;margin-bottom:12px;">
         ${p.imagen?`<img src="${p.imagen}" style="width:120px;height:120px;object-fit:cover;border-radius:8px;border:1px solid var(--border);">`:`<div style="width:120px;height:120px;border-radius:8px;background:var(--bg);border:1px solid var(--border);display:flex;align-items:center;justify-content:center;font-size:40px;margin:0 auto;">👕</div>`}
       </div>
@@ -6304,6 +6392,45 @@ window.renderPlayeras=function renderPlayeras(){
     </div>`;
   }).join('');
 }
+
+// ─── Arrastrar y soltar para reordenar las tarjetas de Playeras ───
+// El orden se guarda en el campo "orden" de cada playera (múltiplos de 10,
+// para dejar espacio a insertar entre dos sin tener que renumerar todo el
+// inventario). Solo se reordenan/renumeran las tarjetas que están visibles
+// en ese momento (según los filtros activos) — las demás no se tocan.
+let _playeraArrastrando=null;
+window.onDragStartPlayera=function(ev, id){
+  _playeraArrastrando=id;
+  ev.dataTransfer.effectAllowed='move';
+};
+window.onDropPlayera=async function(ev, idDestino){
+  ev.preventDefault();
+  ev.currentTarget.style.outline='';
+  if(!_playeraArrastrando || _playeraArrastrando===idDestino) return;
+  const lista=[...(window._playerasListaActual||[])];
+  const iOrigen=lista.findIndex(p=>p.id===_playeraArrastrando);
+  const iDestino=lista.findIndex(p=>p.id===idDestino);
+  if(iOrigen===-1||iDestino===-1) return;
+  const [movida]=lista.splice(iOrigen,1);
+  lista.splice(iDestino,0,movida);
+  _playeraArrastrando=null;
+
+  // Renumerar todas las tarjetas visibles según el nuevo orden (de 10 en 10)
+  // y guardar el campo "orden" de cada una.
+  try{
+    for(let i=0;i<lista.length;i++){
+      const nuevoOrden=(i+1)*10;
+      if(lista[i].orden!==nuevoOrden){
+        await setDoc(doc(db,'pl_playeras',lista[i].id),{...lista[i],orden:nuevoOrden});
+        lista[i].orden=nuevoOrden;
+      }
+    }
+    toast('✅ Orden actualizado');
+  }catch(err){
+    console.error('Error guardando el nuevo orden de playeras:', err);
+    toast('⚠️ No se pudo guardar el nuevo orden');
+  }
+};
 
 window.eliminarPlayera=async function(id){
   if(!confirm('¿Eliminar esta playera?'))return;
