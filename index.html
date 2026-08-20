@@ -3268,7 +3268,9 @@ function calcularAlertasProactivas(){
   }));
 
   // Playeras en blanco con stock bajo/crítico
-  const playCriticas=playeras.filter(p=>+p.stockMin>0&&+p.stock<=(+p.stockMin||0));
+  // Solo se avisa cuando el stock está POR DEBAJO del mínimo — si está
+  // justo en el mínimo (ej. 5 de 5), todavía no es motivo de alarma.
+  const playCriticas=playeras.filter(p=>+p.stockMin>0&&+p.stock<(+p.stockMin||0));
   playCriticas.forEach(p=>lista.push({
     severidad:'critica', icono:'👕', titulo:`Playera agotándose: ${p.nombre}`,
     detalle:`Stock: ${p.stock} pzas (mínimo ${p.stockMin}) — ${p.genero||''} ${p.talla||''} ${p.color||''}`.replace(/\s+/g,' ').trim(),
@@ -6122,7 +6124,9 @@ window.renderPlayeras=function renderPlayeras(){
   if(lista.length===0){grid.innerHTML='';empty.style.display='block';return;}
   empty.style.display='none';
   grid.innerHTML=lista.map(p=>{
-    const stockOk=+p.stock>(+p.stockMin||0);
+    // El mínimo mismo no cuenta como bajo — solo por debajo de él (ej. si el
+    // mínimo es 5, con 5 en stock se ve verde; con 4 o menos se ve rojo).
+    const stockOk=+p.stock>=(+p.stockMin||0);
     return`<div style="background:var(--bg-card);border:1px solid var(--border);border-radius:12px;padding:16px;position:relative;">
       <div style="text-align:center;margin-bottom:12px;">
         ${p.imagen?`<img src="${p.imagen}" style="width:120px;height:120px;object-fit:cover;border-radius:8px;border:1px solid var(--border);">`:`<div style="width:120px;height:120px;border-radius:8px;background:var(--bg);border:1px solid var(--border);display:flex;align-items:center;justify-content:center;font-size:40px;margin:0 auto;">👕</div>`}
