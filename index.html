@@ -6513,7 +6513,7 @@ window.importarFacturaPlayeras=async function(file){
     if(esPDF){
       _facturaPlayerasFilas=await procesarFacturaPDFYazbek(file);
       if(_facturaPlayerasFilas.length===0){
-        toast('⚠️ No se reconoció ninguna línea de producto en el PDF — por ahora este lector solo entiende el formato de factura de Yazbek (SimanG8 ERP)');
+        toast('⚠️ No se reconoció ninguna línea de producto en el PDF — por ahora este lector solo entiende las facturas de Yazbek y Euro Cotton');
         document.getElementById('input-importar-factura-playera').value='';
         return;
       }
@@ -6586,12 +6586,14 @@ window.importarFacturaPlayeras=async function(file){
   openModal('modal-importar-factura-playera');
 };
 
-// ═══ LECTOR DE PDF — FACTURA DE YAZBEK (SimanG8 ERP) ═══
-// Por ahora solo entiende el formato de factura de Yazbek (el proveedor que
-// ya nos dio la muestra). Si algún día usas el lector con otro proveedor y
-// no reconoce nada, avísame el formato de su factura para agregarlo.
-//
-// El código de cada línea viene como YA300-NEGMD: prefijo de género (A/J/N)
+// ═══ LECTORES DE PDF POR PROVEEDOR ═══
+// Cada proveedor tiene su propio formato de factura. Estas funciones reciben
+// el TEXTO ya extraído del PDF (no el archivo) y devuelven las líneas que
+// reconocieron — así se puede probar el texto contra varios formatos y usar
+// el que sí reconozca algo, sin tener que saber de antemano quién mandó la factura.
+
+// --- Yazbek (SimanG8 ERP) ---
+// El código de cada línea viene como YA300-NEGMD: prefijo de género (A/J/N/D)
 // + gramaje (300), guion, y sufijo de 3 letras de color + 2 de talla
 // (MD/GD/XG/2G...). El texto que se extrae de un PDF a veces sale
 // "desordenado" (cuando una descripción se parte en dos líneas, el número
@@ -6602,34 +6604,13 @@ const YAZBEK_COLOR_CODIGO={'NEG':'Negro','BCO':'Blanco','CAR':'Carbón','OLI':'O
 const YAZBEK_TALLA_CODIGO={'CH':'S','MD':'M','GD':'L','XG':'XL','2G':'2XL','3G':'3XL'};
 const YAZBEK_GENERO_PREFIJO={'A':'Hombre','J':'Juvenil','N':'Niño / Niña','D':'Mujer'};
 
-let _facturaPDFTextoCompleto='';
-
-async function extraerTextoPDF(file){
-  if(!window.pdfjsLib){ throw new Error('Librería de lectura de PDF no disponible'); }
-  pdfjsLib.GlobalWorkerOptions.workerSrc='https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
-  const buf=await file.arrayBuffer();
-  const pdf=await pdfjsLib.getDocument({data:buf}).promise;
-  let texto='';
-  for(let i=1;i<=pdf.numPages;i++){
-    const page=await pdf.getPage(i);
-    const content=await page.getTextContent();
-    texto += content.items.map(it=>it.str).join(' ') + '\n';
-  }
-  return texto;
-}
-
-async function procesarFacturaPDFYazbek(file){
-  const textoCrudo=await extraerTextoPDF(file);
-  _facturaPDFTextoCompleto=textoCrudo;
+function parsearTextoFacturaYazbek(textoCrudo){
   const texto=textoCrudo.replace(/\s+/g,' ');
-  // Busca cada línea de producto a partir del código Yazbek (ej. YA300-NEGMD).
   // El orden en que el PDF realmente entrega el texto NO es el orden visual
   // de las columnas — se confirmó con una factura real que el texto sale como
-  // "código ... descripción ... cantidad precio importe PZA" (cantidad y
-  // precio/importe DESPUÉS de la descripción, y "PZA" hasta el final — no
-  // antes de los números, como parecía por la vista impresa). Se prueba ese
+  // "código ... descripción ... cantidad precio importe PZA". Se prueba ese
   // orden primero; si algún día cambia el formato, se intenta el orden
-  // anterior como respaldo.
+  // anterior (el visual) como respaldo.
   const patronesOrdenados=[
     /Y([A-Z])(\d{3})-([A-Z]{3})(\d?[A-Z]{1,2})[\s\S]{0,100}?(\d+)\s+([\d,]+\.\d{2})\s+([\d,]+\.\d{2})\s+PZA/g,
     /Y([A-Z])(\d{3})-([A-Z]{3})(\d?[A-Z]{1,2})[^0-9]{0,3}\d{0,2}.{0,60}?PZA\D{0,10}?([\d,]+\.\d{2})\D{1,10}?([\d,]+\.\d{2})/g,
@@ -6669,6 +6650,89 @@ async function procesarFacturaPDFYazbek(file){
     });
   }
   return filas;
+}
+
+// --- Euro Cotton ---
+// Cada línea trae: [SKU 13 dígitos] Pieza [Unidades] [Importe] "EURO
+// [GÉNERO]/[TIPO]/C/R/[COLOR]/ T/[TALLA]" — ej. "EURO DAMA/BLUSA/C/R/BLA/ T/S".
+// A diferencia de Yazbek, aquí si viene la cantidad de piezas ya en un lugar
+// confiable (siempre junto al SKU y antes del importe), así que no hace
+// falta calcularla por división — pero igual se valida que Importe ÷
+// Cantidad dé un precio unitario razonable, por si acaso.
+const EUROCOTTON_COLOR_CODIGO={'BLA':'Blanco','NEG':'Negro','GRI':'Gris','ROJ':'Rojo','AZM':'Azul Marino','AZR':'Azul Rey','AZC':'Azul Cielo','MOR':'Morado','VER':'Verde','AMA':'Amarillo','NAR':'Naranja','BEI':'Beige','ARE':'Arena','FIU':'Fucsia','TUR':'Turquesa','VIN':'Vino','CHO':'Chocolate'};
+const EUROCOTTON_TALLA_CODIGO={'CH':'S','S':'S','MD':'M','LG':'L','XL':'XL','XXL':'2XL','XXXL':'3XL'};
+const EUROCOTTON_GENERO_TEXTO={'DAMA':'Mujer','CABALLERO':'Hombre','HOMBRE':'Hombre','NIÑO':'Niño / Niña','NIÑA':'Niño / Niña','JUVENIL':'Juvenil','UNISEX':'Unisex'};
+
+function parsearTextoFacturaEuroCotton(textoCrudo){
+  const texto=textoCrudo.replace(/\s+/g,' ');
+  const re=/(\d{10,14})\s+Pieza\s+(\d+)\s+([\d,]+\.\d{2})\s+(EURO[^0-9]+?T\/\w+)/g;
+  const coincidencias=[...texto.matchAll(re)];
+  const filas=[];
+  let i=0;
+  for(const m of coincidencias){
+    i++;
+    const [,sku,cantTexto,importeStr,descriptor]=m;
+    const cantidad=+cantTexto||0;
+    const importe=+importeStr.replace(/,/g,'');
+    const precioUnitario=cantidad>0?+(importe/cantidad).toFixed(4):0;
+    // descriptor ej: "EURO DAMA/BLUSA/C/R/BLA/ T/S"
+    const partes=descriptor.split('/').map(p=>p.trim());
+    const generoTxt=(partes[0]||'').replace(/^EURO\s+/i,'').trim().toUpperCase();
+    const colorCod=(partes[4]||'').toUpperCase();
+    const tallaMatch=descriptor.match(/T\/(\w+)/);
+    const tallaCod=tallaMatch?tallaMatch[1].toUpperCase():'';
+    const genero=EUROCOTTON_GENERO_TEXTO[generoTxt]||'';
+    const color=EUROCOTTON_COLOR_CODIGO[colorCod]||'';
+    const talla=EUROCOTTON_TALLA_CODIGO[tallaCod]||'';
+    const errores=[];
+    if(!genero) errores.push('género de factura desconocido: '+generoTxt);
+    if(!talla) errores.push('talla de factura desconocida: '+tallaCod);
+    if(!color) errores.push('color de factura desconocido: '+colorCod);
+    if(!cantidad||cantidad<=0) errores.push('cantidad inválida');
+    if(!precioUnitario||precioUnitario<=0) errores.push('sin precio');
+    const existente=(errores.length===0)?buscarPlayeraStock({tipo:'Playera',genero,talla,color,marca:'Euro Cotton',modelo:''}):null;
+    filas.push({
+      fila:i, proveedor:'Euro Cotton', modelo:'', modeloOriginalFactura:sku,
+      tipo:'Playera', genero, talla, color, cantidad, precioUnitario,
+      errores, existente, incluir:errores.length===0
+    });
+  }
+  return filas;
+}
+
+// Lista de lectores conocidos — se prueban en orden y se usa el primero que
+// reconozca al menos una línea. Si algún día usas el importador con un PDF
+// de un proveedor que no está aquí, no va a reconocer nada — avísame el
+// formato de esa factura para agregarlo a la lista.
+const LECTORES_PDF_PROVEEDOR=[
+  {nombre:'Yazbek', parser:parsearTextoFacturaYazbek},
+  {nombre:'Euro Cotton', parser:parsearTextoFacturaEuroCotton},
+];
+
+let _facturaPDFTextoCompleto='';
+
+async function extraerTextoPDF(file){
+  if(!window.pdfjsLib){ throw new Error('Librería de lectura de PDF no disponible'); }
+  pdfjsLib.GlobalWorkerOptions.workerSrc='https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+  const buf=await file.arrayBuffer();
+  const pdf=await pdfjsLib.getDocument({data:buf}).promise;
+  let texto='';
+  for(let i=1;i<=pdf.numPages;i++){
+    const page=await pdf.getPage(i);
+    const content=await page.getTextContent();
+    texto += content.items.map(it=>it.str).join(' ') + '\n';
+  }
+  return texto;
+}
+
+async function procesarFacturaPDFYazbek(file){
+  const textoCrudo=await extraerTextoPDF(file);
+  _facturaPDFTextoCompleto=textoCrudo;
+  for(const lector of LECTORES_PDF_PROVEEDOR){
+    const filas=lector.parser(textoCrudo);
+    if(filas.length>0) return filas; // ya encontró con este formato, no prueba los demás
+  }
+  return [];
 }
 
 function renderPreviewFacturaPlayeras(){
