@@ -299,7 +299,7 @@
           <input type="file" id="invArchivo" accept=".xlsx">
         </div>
         <div><button class="btn btn-primario" onclick="document.getElementById('invArchivo').files[0] && importarInventarioExcel(document.getElementById('invArchivo').files[0])">📥 Importar Excel</button></div>
-        <div><button class="btn btn-secundario" onclick="document.getElementById('invModalAgregar').classList.add('activo')">+ Agregar a mano</button></div>
+        <div><button class="btn btn-secundario" onclick="abrirModalInventarioAgregar()">+ Agregar a mano</button></div>
         <div><button class="btn btn-rojo" onclick="vaciarInventario()">🗑 Vaciar todo el inventario</button></div>
       </div>
       <div id="invStatus" style="display:none;margin-top:10px;padding:10px 14px;border-radius:8px;font-size:.85rem;font-weight:600;"></div>
@@ -333,26 +333,29 @@
 </div>
 <div class="modal-overlay" id="invModalAgregar">
   <div class="modal-box" style="max-width:480px;">
-    <h3>+ Agregar al inventario</h3>
+    <h3 id="inv-modal-titulo">+ Agregar al inventario</h3>
+    <input type="hidden" id="inv-add-id">
     <div class="modal-grid" style="grid-template-columns:1fr;">
       <div>
         <label>Género</label>
-        <select id="inv-add-genero">
+        <select id="inv-add-genero" onchange="actualizarTallasInventarioAgregar()">
           <option value="Caballero">Caballero</option>
           <option value="Dama">Dama</option>
           <option value="Niño">Niño</option>
           <option value="Niña">Niña</option>
           <option value="Juvenil">Juvenil</option>
           <option value="Unisex">Unisex</option>
+          <option value="Bebé">Bebé (playera)</option>
+          <option value="Pañalero Bebé">Pañalero Bebé</option>
         </select>
       </div>
       <div><label>Talla</label><select id="inv-add-talla"></select></div>
       <div><label>Color</label><input type="text" id="inv-add-color" placeholder="Ej. Negro"></div>
       <div><label>Descripción (igual a como la escribes al capturar)</label><input type="text" id="inv-add-descripcion" placeholder="Ej. AKIRA 121"></div>
-      <div><label>Piezas</label><input type="number" id="inv-add-cantidad" value="1" min="1"></div>
+      <div><label>Piezas</label><input type="number" id="inv-add-cantidad" value="1" min="0"></div>
     </div>
     <div class="fila-acciones">
-      <button class="btn btn-secundario" onclick="document.getElementById('invModalAgregar').classList.remove('activo')">Cancelar</button>
+      <button class="btn btn-secundario" onclick="cerrarModalInventarioAgregar()">Cancelar</button>
       <button class="btn btn-primario" onclick="guardarInventarioManual()">Guardar</button>
     </div>
   </div>
@@ -459,8 +462,8 @@ document.addEventListener("DOMContentLoaded", ()=>{
 });
 
 let itemIdCounter = 0;
-const GENEROS_DISPONIBLES = ["Caballero","Dama","Niño","Niña","Juvenil","Unisex","Pañalero Bebé"];
-const TALLAS_POR_GENERO = {"Caballero": ["CH","M","G","XL","XXL","XXXL"],"Dama": ["CH","M","G","XL","XXL"],"Niño": ["CH","M","G","XL"],"Niña": ["CH","M","G","XL"],"Juvenil": ["CH","M","G","XL"],"Unisex": ["CH","M","G","XL","XXL"],"Pañalero Bebé": ["3 meses","6 meses","9 meses","12 meses","18 meses","24 meses"]};
+const GENEROS_DISPONIBLES = ["Caballero","Dama","Niño","Niña","Juvenil","Unisex","Bebé","Pañalero Bebé"];
+const TALLAS_POR_GENERO = {"Caballero": ["CH","M","G","XL","XXL","XXXL"],"Dama": ["CH","M","G","XL","XXL"],"Niño": ["CH","M","G","XL"],"Niña": ["CH","M","G","XL"],"Juvenil": ["CH","M","G","XL"],"Unisex": ["CH","M","G","XL","XXL"],"Bebé": ["Talla 1","Talla 2","Talla 3"],"Pañalero Bebé": ["3 meses","6 meses","9 meses","12 meses","18 meses","24 meses"]};
 // Géneros/prendas que solo se manejan en ciertos colores. El Pañalero de Bebé
 // únicamente se maneja en BLANCO, así que su selector de color queda limitado.
 const COLORES_POR_GENERO = {"Pañalero Bebé": ["Blanco"]};
@@ -483,6 +486,7 @@ const GENERO_PD_A_PLAYERAS = {
   'Niña':{genero:'Niño / Niña',tipo:'Playera'},
   'Juvenil':{genero:'Juvenil',tipo:'Playera'},
   'Unisex':{genero:'Unisex',tipo:'Playera'},
+  'Bebé':{genero:'Bebé',tipo:'Playera'},
   'Pañalero Bebé':{genero:'Bebé',tipo:'Pañalero'}
 };
 const TALLA_PD_A_PLAYERAS = {'CH':'S','M':'M','G':'L','XL':'XL','XXL':'2XL','XXXL':'3XL'};
@@ -1385,7 +1389,10 @@ function renderInventario(){
     <td>${i.descripcion}</td>
     <td style="font-size:.78rem;color:#888;">${i.categoria||"—"}</td>
     <td><strong>${i.cantidad||0}</strong></td>
-    <td><button class="btn btn-rojo btn-chico" onclick="eliminarInventarioItem('${i.id}')">✕</button></td>
+    <td style="white-space:nowrap;">
+      <button class="btn btn-secundario btn-chico" onclick="editarInventarioItem('${i.id}')">✏️</button>
+      <button class="btn btn-rojo btn-chico" onclick="eliminarInventarioItem('${i.id}')">✕</button>
+    </td>
   </tr>`).join("");
 }
 
@@ -1419,37 +1426,85 @@ function mostrarInvStatus(texto, tipo){
   el.style.color = tipo==="err" ? "#b91c1c" : tipo==="ok" ? "#15803d" : "#92600a";
 }
 
+window.abrirModalInventarioAgregar = function(){
+  document.getElementById("inv-modal-titulo").textContent = "+ Agregar al inventario";
+  document.getElementById("inv-add-id").value = "";
+  document.getElementById("inv-add-genero").value = "Caballero";
+  document.getElementById("inv-add-color").value = "";
+  document.getElementById("inv-add-descripcion").value = "";
+  document.getElementById("inv-add-cantidad").value = "1";
+  actualizarTallasInventarioAgregar();
+  document.getElementById("invModalAgregar").classList.add("activo");
+};
+
+window.editarInventarioItem = function(id){
+  const item = inventarioCache.find(i=>i.id===id);
+  if(!item){ mostrarMsg("No se encontró ese diseño.", "error"); return; }
+  document.getElementById("inv-modal-titulo").textContent = "✏️ Editar diseño del inventario";
+  document.getElementById("inv-add-id").value = item.id;
+  document.getElementById("inv-add-genero").value = item.genero || "Caballero";
+  actualizarTallasInventarioAgregar();
+  document.getElementById("inv-add-talla").value = item.talla || "";
+  document.getElementById("inv-add-color").value = item.color || "";
+  document.getElementById("inv-add-descripcion").value = item.descripcion || "";
+  document.getElementById("inv-add-cantidad").value = item.cantidad || 0;
+  document.getElementById("invModalAgregar").classList.add("activo");
+};
+
+window.cerrarModalInventarioAgregar = function(){
+  document.getElementById("invModalAgregar").classList.remove("activo");
+  document.getElementById("inv-add-id").value = "";
+};
+
+// Llena el select de tallas del modal de agregar/editar según el género
+// elegido — reutiliza la misma tabla de tallas por género que ya existe
+// para la captura de pedidos.
+window.actualizarTallasInventarioAgregar = function(){
+  const genero = document.getElementById("inv-add-genero").value;
+  const sel = document.getElementById("inv-add-talla");
+  const tallaActual = sel.value;
+  sel.innerHTML = opcionesTalla(genero, tallaActual);
+};
+
 window.guardarInventarioManual = async function(){
+  const idEditando = document.getElementById("inv-add-id").value;
   const genero = document.getElementById("inv-add-genero").value;
   const talla = document.getElementById("inv-add-talla").value;
   const color = document.getElementById("inv-add-color").value.trim();
   const descripcion = document.getElementById("inv-add-descripcion").value.trim();
-  const cantidad = parseInt(document.getElementById("inv-add-cantidad").value)||1;
+  const cantidad = parseInt(document.getElementById("inv-add-cantidad").value);
   if(!descripcion || !talla){ mostrarMsg("Falta talla o descripción.", "error"); return; }
-  const clave = claveInventario(genero, talla, descripcion);
-  const existente = inventarioCache.find(i=>claveInventario(i.genero,i.talla,i.descripcion)===clave);
-  if(existente){
-    const nuevaCant = (+existente.cantidad||0) + cantidad;
-    await db.collection(COL_INVENTARIO).doc(existente.id).update({cantidad:nuevaCant});
-    existente.cantidad = nuevaCant;
+  if(isNaN(cantidad) || cantidad<0){ mostrarMsg("La cantidad de piezas no es válida.", "error"); return; }
+
+  if(idEditando){
+    // Modo edición: se sobreescribe EXACTAMENTE ese registro (no se suma a
+    // nada ni se busca coincidencia con otro diseño) — así se puede corregir
+    // una cantidad mal capturada, como en este caso.
+    const data = {genero, talla: normTalla(talla), color: color||"", descripcion, cantidad};
+    await db.collection(COL_INVENTARIO).doc(idEditando).update(data);
+    const idx = inventarioCache.findIndex(i=>i.id===idEditando);
+    if(idx!==-1) inventarioCache[idx] = {...inventarioCache[idx], ...data};
+    mostrarMsg("✅ Diseño actualizado.", "ok");
   } else {
-    const ref = await db.collection(COL_INVENTARIO).add({
-      genero, talla: normTalla(talla), color: color||"", descripcion, categoria: "Manual", cantidad
-    });
-    inventarioCache.push({id:ref.id, genero, talla:normTalla(talla), color, descripcion, categoria:"Manual", cantidad});
+    const clave = claveInventario(genero, talla, descripcion);
+    const existente = inventarioCache.find(i=>claveInventario(i.genero,i.talla,i.descripcion)===clave);
+    if(existente){
+      const nuevaCant = (+existente.cantidad||0) + cantidad;
+      await db.collection(COL_INVENTARIO).doc(existente.id).update({cantidad:nuevaCant});
+      existente.cantidad = nuevaCant;
+    } else {
+      const ref = await db.collection(COL_INVENTARIO).add({
+        genero, talla: normTalla(talla), color: color||"", descripcion, categoria: "Manual", cantidad
+      });
+      inventarioCache.push({id:ref.id, genero, talla:normTalla(talla), color, descripcion, categoria:"Manual", cantidad});
+    }
+    mostrarMsg("✅ Agregado al inventario.", "ok");
   }
-  document.getElementById("invModalAgregar").classList.remove("activo");
+  cerrarModalInventarioAgregar();
   document.getElementById("inv-add-descripcion").value = "";
   llenarFiltrosInventario();
   renderInventario();
-  mostrarMsg("✅ Agregado al inventario.", "ok");
 };
-document.getElementById("inv-add-genero").addEventListener("change", ()=>{
-  const sel = document.getElementById("inv-add-talla");
-  const g = document.getElementById("inv-add-genero").value;
-  sel.innerHTML = opcionesTalla(g, "");
-});
-document.getElementById("inv-add-genero").dispatchEvent(new Event("change"));
 
 // ── Importar el Excel de inventario ──
 window.importarInventarioExcel = async function(file){
