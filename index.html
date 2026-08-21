@@ -3621,6 +3621,14 @@ window.openVentaModal=async function(tipo, ventaId){
       }
       renderItemsVenta();
       if(v.metodoPago) selPago(v.metodoPago, true);
+      // El método principal (Efectivo/Transferencia/Depósito/Tarjeta) ya se
+      // restaura arriba con selPago(), pero eso solo muestra el panel
+      // correcto — la SUB-opción (en qué tienda se depositó, o si fue
+      // Débito/Crédito) nunca se estaba restaurando, así que al reabrir la
+      // venta se veía como si nunca se hubiera elegido nada ahí.
+      if(v.metodoPago==='deposito' && v.lugDeposito) selDeposito(v.lugDeposito);
+      if(v.metodoPago==='tarjeta' && v.tipoTarjeta) selTipoTarjeta(v.tipoTarjeta);
+      if(v.bancoOrigen && document.getElementById('v-banco-origen')) document.getElementById('v-banco-origen').value=v.bancoOrigen;
       if(v.metodoPago==='efectivo') calcCambio();
       toggleEnvioFields();
       document.getElementById('modal-venta-title').textContent='Editar Venta';
@@ -6764,152 +6772,283 @@ window.importarFacturaPlayeras=async function(file){
 };
 
 // ═══ LECTORES DE PDF POR PROVEEDOR ═══
-// Cada proveedor tiene su propio formato de factura. Estas funciones reciben
-// el TEXTO ya extraído del PDF (no el archivo) y devuelven las líneas que
-// reconocieron — así se puede probar el texto contra varios formatos y usar
-// el que sí reconozca algo, sin tener que saber de antemano quién mandó la factura.
+// Cada proveedor tiene su propio formato de factura. La extracción de texto
+// usa reconstrucción de RENGLONES por coordenadas (agrupa el texto del PDF
+// por posición Y, y dentro de cada fila ordena por X) — así se recupera el
+// orden visual REAL de cada línea, en vez de la lista plana y a veces
+// desordenada que entrega pdf.js de fábrica (esto fue lo que causaba que la
+// cantidad se "perdiera" en descripciones que se parten en dos líneas).
+// Con renglones ya reconstruidos, cada línea de producto se puede leer con
+// un solo regex ancla — ya no hace falta calcular la cantidad como
+// Importe÷Precio como se hacía antes, se lee directo y es más confiable.
 
-// --- Yazbek (SimanG8 ERP) ---
+const GENERO_TEXTO_A_PLAYERAS={'CABALLERO':'Hombre','DAMA':'Mujer','NIÑO':'Niño / Niña','NIÑA':'Niño / Niña','JUVENIL':'Juvenil','BEBÉ':'Bebé','BEBE':'Bebé','ADULTO':'Hombre'};
+
+// --- Yazbek / Grupo Playeras y Maz (SimanG8 ERP) ---
 // El código de cada línea viene como YA300-NEGMD: prefijo de género (A/J/N/D)
 // + gramaje (300), guion, y sufijo de 3 letras de color + 2 de talla
-// (MD/GD/XG/2G...). El texto que se extrae de un PDF a veces sale
-// "desordenado" (cuando una descripción se parte en dos líneas, el número
-// de cantidad se corre de lugar) — por eso la cantidad real NO se lee del
-// texto directamente, se calcula como Importe ÷ Precio, que es mucho más
-// confiable porque esos dos números siempre se quedan juntos.
+// (MD/GD/XG/2G...).
 const YAZBEK_COLOR_CODIGO={'NEG':'Negro','BCO':'Blanco','CAR':'Carbón','OLI':'Olivo','MRR':'Marrón','ROJ':'Rojo','AZU':'Azul','GRI':'Gris','MOR':'Morado','VER':'Verde','AMA':'Amarillo','NAR':'Naranja','ARE':'Arena','BEI':'Beige','TUR':'Turquesa','CEL':'Celeste','FIU':'Fucsia'};
 const YAZBEK_TALLA_CODIGO={'CH':'S','MD':'M','GD':'L','XG':'XL','2G':'2XL','3G':'3XL'};
 const YAZBEK_GENERO_PREFIJO={'A':'Hombre','J':'Juvenil','N':'Niño / Niña','D':'Mujer'};
+const RE_ITEM_GPM=/^\s*(\d+)\s+(\d{6,10})\s+([A-Z0-9]+-[A-Z0-9]+)\s+(.+?)\s+PZA\s+([\d,]+\.\d{2})\s+([\d,]+\.\d{2})\s*$/;
+const RE_STOP_GPM=/^(SimanG8|SubTotal|IVA|Total de piezas|Observaciones|Total:|Divisa|Importe en letra|Metodo de pago|Cant\.\s+Clave SAT)/i;
 
-function parsearTextoFacturaYazbek(textoCrudo){
-  const texto=textoCrudo.replace(/\s+/g,' ');
-  // El orden en que el PDF realmente entrega el texto NO es el orden visual
-  // de las columnas — se confirmó con una factura real que el texto sale como
-  // "código ... descripción ... cantidad precio importe PZA". Se prueba ese
-  // orden primero; si algún día cambia el formato, se intenta el orden
-  // anterior (el visual) como respaldo.
-  const patronesOrdenados=[
-    /Y([A-Z])(\d{3})-([A-Z]{3})(\d?[A-Z]{1,2})[\s\S]{0,100}?(\d+)\s+([\d,]+\.\d{2})\s+([\d,]+\.\d{2})\s+PZA/g,
-    /Y([A-Z])(\d{3})-([A-Z]{3})(\d?[A-Z]{1,2})[^0-9]{0,3}\d{0,2}.{0,60}?PZA\D{0,10}?([\d,]+\.\d{2})\D{1,10}?([\d,]+\.\d{2})/g,
-  ];
-  let coincidencias=[];
-  for(const re of patronesOrdenados){
-    coincidencias=[...texto.matchAll(re)];
-    if(coincidencias.length>0) break; // ya encontró con este patrón, no prueba el otro
-  }
+function parsearRenglonesYazbek(renglonesPorPagina){
   const filas=[];
   let i=0;
-  for(const m of coincidencias){
-    i++;
-    // El primer patrón trae 7 grupos (con cantidad de texto, que no se usa);
-    // el segundo trae 6. En ambos casos los últimos dos son precio e importe.
-    const grupos=m.slice(1).filter(g=>g!==undefined);
-    const prefLetra=grupos[0], numero=grupos[1], colorCod=grupos[2], tallaCod=grupos[3];
-    const precioStr=grupos[grupos.length-2], importeStr=grupos[grupos.length-1];
-    const precioUnitario=+precioStr.replace(/,/g,'');
-    const importe=+importeStr.replace(/,/g,'');
-    const cantidad=precioUnitario>0?Math.round(importe/precioUnitario):0;
-    const color=YAZBEK_COLOR_CODIGO[colorCod]||'';
-    const talla=YAZBEK_TALLA_CODIGO[tallaCod]||'';
-    const genero=YAZBEK_GENERO_PREFIJO[prefLetra]||'';
-    const modelo=traducirCodigoFacturaYazbek('Y'+prefLetra+numero)||('Y'+prefLetra+numero);
-    const errores=[];
-    if(!genero) errores.push('género de factura desconocido: '+prefLetra);
-    if(!talla) errores.push('talla de factura desconocida: '+tallaCod);
-    if(!color) errores.push('color de factura desconocido: '+colorCod);
-    if(!cantidad||cantidad<=0) errores.push('cantidad inválida');
-    if(!precioUnitario||precioUnitario<=0) errores.push('sin precio');
-    const existente=(errores.length===0)?buscarPlayeraStock({tipo:'Playera',genero,talla,color,marca:'Yazbek',modelo}):null;
-    filas.push({
-      fila:i, proveedor:'Yazbek', modelo, modeloOriginalFactura:'Y'+prefLetra+numero+'-'+colorCod+tallaCod,
-      tipo:'Playera', genero, talla, color, cantidad, precioUnitario,
-      errores, existente, incluir:errores.length===0
-    });
-  }
+  renglonesPorPagina.forEach(lineas=>{
+    let inicio=lineas.findIndex(l=>/Cant\.\s+Clave SAT/i.test(l));
+    inicio=inicio===-1?0:inicio+1;
+    let pendiente=null;
+    for(let li=inicio; li<lineas.length; li++){
+      const linea=lineas[li];
+      if(!linea||!linea.trim()) continue;
+      if(RE_STOP_GPM.test(linea)) break;
+      const m=linea.match(RE_ITEM_GPM);
+      if(m){
+        const[,cantTxt,,codigoCompleto,,precioStr,importeStr]=m;
+        const mCod=codigoCompleto.match(/^Y([A-Z])(\d{3})-([A-Z]{3})(\d?[A-Z]{1,2})$/);
+        if(!mCod){ pendiente=null; continue; }
+        const[,prefLetra,numero,colorCod,tallaCod]=mCod;
+        i++;
+        const cantidad=+cantTxt||0;
+        const precioUnitario=+precioStr.replace(/,/g,'');
+        const color=YAZBEK_COLOR_CODIGO[colorCod]||'';
+        const talla=YAZBEK_TALLA_CODIGO[tallaCod]||'';
+        const genero=YAZBEK_GENERO_PREFIJO[prefLetra]||'';
+        const modelo=traducirCodigoFacturaYazbek('Y'+prefLetra+numero)||('Y'+prefLetra+numero);
+        const errores=[];
+        if(!genero) errores.push('género de factura desconocido: '+prefLetra);
+        if(!talla) errores.push('talla de factura desconocida: '+tallaCod);
+        if(!color) errores.push('color de factura desconocido: '+colorCod);
+        if(!cantidad||cantidad<=0) errores.push('cantidad inválida');
+        if(!precioUnitario||precioUnitario<=0) errores.push('sin precio');
+        const existente=(errores.length===0)?buscarPlayeraStock({tipo:'Playera',genero,talla,color,marca:'Yazbek',modelo}):null;
+        pendiente={fila:i, proveedor:'Yazbek', modelo, modeloOriginalFactura:codigoCompleto,
+          tipo:'Playera', genero, talla, color, cantidad, precioUnitario,
+          errores, existente, incluir:errores.length===0};
+        filas.push(pendiente);
+      }
+    }
+  });
   return filas;
 }
 
-// --- Euro Cotton ---
-// Cada línea trae: [SKU 13 dígitos] Pieza [Unidades] [Importe] "EURO
-// [GÉNERO]/[TIPO]/C/R/[COLOR]/ T/[TALLA]" — ej. "EURO DAMA/BLUSA/C/R/BLA/ T/S".
-// A diferencia de Yazbek, aquí si viene la cantidad de piezas ya en un lugar
-// confiable (siempre junto al SKU y antes del importe), así que no hace
-// falta calcularla por división — pero igual se valida que Importe ÷
-// Cantidad dé un precio unitario razonable, por si acaso.
-const EUROCOTTON_COLOR_CODIGO={'BLA':'Blanco','NEG':'Negro','GRI':'Gris','ROJ':'Rojo','AZM':'Azul Marino','AZR':'Azul Rey','AZC':'Azul Cielo','MOR':'Morado','VER':'Verde','AMA':'Amarillo','NAR':'Naranja','BEI':'Beige','ARE':'Arena','FIU':'Fucsia','TUR':'Turquesa','VIN':'Vino','CHO':'Chocolate'};
+// --- Playerytees / Euro Cotton (mismo formato de tabla, distinto emisor) ---
+// Descripción tipo "EURO DAMA/BLUSA/C/R/BLA/ T/S": género, tipo de prenda,
+// corte de cuello, color y talla separados por "/".
+const EUROCOTTON_COLOR_CODIGO={'BLA':'Blanco','NEG':'Negro','GRI':'Gris','ROJ':'Rojo','AZM':'Azul Marino','AZR':'Azul Rey','AZC':'Azul Cielo','AZU':'Azul','MOR':'Morado','VER':'Verde','AMA':'Amarillo','NAR':'Naranja','BEI':'Beige','ARE':'Arena','FIU':'Fucsia','TUR':'Turquesa','VIN':'Vino','CHO':'Chocolate','MAR':'Marino','NAT':'Natural'};
 const EUROCOTTON_TALLA_CODIGO={'CH':'S','S':'S','MD':'M','LG':'L','XL':'XL','XXL':'2XL','XXXL':'3XL'};
-const EUROCOTTON_GENERO_TEXTO={'DAMA':'Mujer','CABALLERO':'Hombre','HOMBRE':'Hombre','NIÑO':'Niño / Niña','NIÑA':'Niño / Niña','JUVENIL':'Juvenil','UNISEX':'Unisex'};
+const RE_ITEM_PYT=/^\s*([A-Z0-9][A-Z0-9\-\/]*)\s+(.+?)\s+(?:IVA\s+\d+%\s+)?(PZA|Pieza)\s+(\d+)\s+([\d,]+\.\d+)\s+([\d,]+\.\d{2})\s*$/i;
+const RE_STOP_PYT=/^(Cadena original|Sello digital|Este documento|Fecha de certificación|Régimen fiscal del emisor)/i;
 
-function parsearTextoFacturaEuroCotton(textoCrudo){
-  const texto=textoCrudo.replace(/\s+/g,' ');
-  const re=/(\d{10,14})\s+Pieza\s+(\d+)\s+([\d,]+\.\d{2})\s+(EURO[^0-9]+?T\/\w+)/g;
-  const coincidencias=[...texto.matchAll(re)];
+function limpiarContinuacionPYT(linea){
+  let l=linea.replace(/\bH87\s*\/\s*Pieza\b/gi,'');
+  l=l.replace(/\b\d{6,10}\/[A-Za-zÀ-ÿ()\-\s]+/gi,'');
+  l=l.replace(/^\s*\d{6,10}\s*$/,'');
+  return l.trim();
+}
+
+function decomponerEuroCotton(descripcion){
+  const partes=descripcion.split('/').map(p=>p.trim());
+  const generoTxt=(partes[0]||'').replace(/^EURO\s+/i,'').trim().toUpperCase();
+  let colorCod='';
+  for(const p of partes){ if(EUROCOTTON_COLOR_CODIGO[p.toUpperCase()]){ colorCod=p.toUpperCase(); break; } }
+  const tallaMatch=descripcion.match(/T\/?\s*([A-Z0-9]+)\s*$/i);
+  const tallaCod=tallaMatch?tallaMatch[1].toUpperCase():'';
+  return {
+    genero:GENERO_TEXTO_A_PLAYERAS[generoTxt]||'',
+    color:EUROCOTTON_COLOR_CODIGO[colorCod]||'',
+    talla:EUROCOTTON_TALLA_CODIGO[tallaCod]||''
+  };
+}
+
+function parsearRenglonesEuroCotton(renglonesPorPagina, nombreProveedor){
   const filas=[];
   let i=0;
-  for(const m of coincidencias){
-    i++;
-    const [,sku,cantTexto,importeStr,descriptor]=m;
-    const cantidad=+cantTexto||0;
-    const importe=+importeStr.replace(/,/g,'');
-    const precioUnitario=cantidad>0?+(importe/cantidad).toFixed(4):0;
-    // descriptor ej: "EURO DAMA/BLUSA/C/R/BLA/ T/S"
-    const partes=descriptor.split('/').map(p=>p.trim());
-    const generoTxt=(partes[0]||'').replace(/^EURO\s+/i,'').trim().toUpperCase();
-    const colorCod=(partes[4]||'').toUpperCase();
-    const tallaMatch=descriptor.match(/T\/(\w+)/);
-    const tallaCod=tallaMatch?tallaMatch[1].toUpperCase():'';
-    const genero=EUROCOTTON_GENERO_TEXTO[generoTxt]||'';
-    const color=EUROCOTTON_COLOR_CODIGO[colorCod]||'';
-    const talla=EUROCOTTON_TALLA_CODIGO[tallaCod]||'';
-    const errores=[];
-    if(!genero) errores.push('género de factura desconocido: '+generoTxt);
-    if(!talla) errores.push('talla de factura desconocida: '+tallaCod);
-    if(!color) errores.push('color de factura desconocido: '+colorCod);
-    if(!cantidad||cantidad<=0) errores.push('cantidad inválida');
-    if(!precioUnitario||precioUnitario<=0) errores.push('sin precio');
-    const existente=(errores.length===0)?buscarPlayeraStock({tipo:'Playera',genero,talla,color,marca:'Euro Cotton',modelo:''}):null;
-    filas.push({
-      fila:i, proveedor:'Euro Cotton', modelo:'', modeloOriginalFactura:sku,
-      tipo:'Playera', genero, talla, color, cantidad, precioUnitario,
-      errores, existente, incluir:errores.length===0
-    });
-  }
+  renglonesPorPagina.forEach(lineas=>{
+    let inicio=lineas.findIndex(l=>/Art[ií]culo\s+Nombre\s+U\.med\./i.test(l));
+    inicio=inicio===-1?0:inicio+1;
+    let descripcionAcumulada='';
+    let filaPendiente=null;
+    for(let li=inicio; li<lineas.length; li++){
+      const linea=lineas[li];
+      if(!linea||!linea.trim()) continue;
+      if(RE_STOP_PYT.test(linea)) break;
+      const m=linea.match(RE_ITEM_PYT);
+      if(m){
+        const[,,nombre,,cantTxt,precioStr,importeStr]=m;
+        i++;
+        const cantidad=+cantTxt||0;
+        const precioUnitario=+(precioStr.replace(/,/g,''));
+        const desc=nombre.trim();
+        const dec=decomponerEuroCotton(desc);
+        const errores=[];
+        if(!dec.genero) errores.push('género de factura desconocido en: '+desc);
+        if(!dec.talla) errores.push('talla de factura desconocida en: '+desc);
+        if(!dec.color) errores.push('color de factura desconocido en: '+desc);
+        if(!cantidad||cantidad<=0) errores.push('cantidad inválida');
+        if(!precioUnitario||precioUnitario<=0) errores.push('sin precio');
+        const existente=(errores.length===0)?buscarPlayeraStock({tipo:'Playera',genero:dec.genero,talla:dec.talla,color:dec.color,marca:nombreProveedor,modelo:''}):null;
+        filas.push({fila:i, proveedor:nombreProveedor, modelo:'', modeloOriginalFactura:desc,
+          tipo:'Playera', genero:dec.genero, talla:dec.talla, color:dec.color, cantidad, precioUnitario,
+          errores, existente, incluir:errores.length===0});
+      }
+    }
+  });
   return filas;
 }
 
-// Lista de lectores conocidos — se prueban en orden y se usa el primero que
-// reconozca al menos una línea. Si algún día usas el importador con un PDF
-// de un proveedor que no está aquí, no va a reconocer nada — avísame el
-// formato de esa factura para agregarlo a la lista.
-const LECTORES_PDF_PROVEEDOR=[
-  {nombre:'Yazbek', parser:parsearTextoFacturaYazbek},
-  {nombre:'Euro Cotton', parser:parsearTextoFacturaEuroCotton},
-];
+// --- Gildan / Grupo Mi Playera ---
+const TALLA_MAP_GLD={'G':'Grande','M':'Mediana','S':'Chica','EG':'Extra Grande','2EG':'Doble Extra Grande','GRANDE':'Grande','MEDIANA':'Mediana','CHICA':'Chica','XL':'Extra Grande','2XL':'Doble Extra Grande','3XL':'Triple Extra Grande'};
+const GILDAN_TALLA_A_PLAYERAS={'Chica':'S','Mediana':'M','Grande':'L','Extra Grande':'XL','Doble Extra Grande':'2XL','Triple Extra Grande':'3XL'};
+const RE_ITEM_GLD=/^\s*([\d,]+\.\d{2})\s+([A-Z]{2,3})\s+(.+?)\s+(\d{6,10})\s+(.+?)\s+([\d,]+\.\d+)\s+([\d,]+\.\d{2})\s*$/i;
+
+function limpiarContinuacionGLD(linea){
+  let l=linea.replace(/Clave SAT/gi,'');
+  l=l.replace(/^\s*\d{5,10}\s*$/,'');
+  return l.trim();
+}
+
+function decomponerGildan(atributo, descripcion){
+  const mColor=(atributo||'').match(/^([^(]+)/);
+  const color=mColor?mColor[1].trim():(atributo||'').trim();
+  let d=descripcion.replace(/^\([^)]*\)\s*/,'').replace(/\s*Clave SAT\s*/i,' ').trim();
+  const tokens=d.split(/\s+/);
+  let generoTxt='', tallaTxt='';
+  for(let ti=0; ti<tokens.length; ti++){
+    const tokenU=tokens[ti].toUpperCase();
+    if(GENEROS_PROVEEDOR_GLD.includes(tokenU)||tokenU==='ADULTO'){
+      generoTxt=tokenU;
+      if(ti+1<tokens.length){
+        const sig=tokens[ti+1].toUpperCase();
+        tallaTxt=TALLA_MAP_GLD[sig]||sig;
+      }
+      break;
+    }
+  }
+  return {
+    color,
+    genero:GENERO_TEXTO_A_PLAYERAS[generoTxt]||'',
+    talla:GILDAN_TALLA_A_PLAYERAS[tallaTxt]||''
+  };
+}
+const GENEROS_PROVEEDOR_GLD=['BEBÉ','BEBE','NIÑO','NIÑA','CABALLERO','DAMA','JUVENIL'];
+
+function parsearRenglonesGildan(renglonesPorPagina){
+  const filas=[];
+  let i=0;
+  renglonesPorPagina.forEach(lineas=>{
+    let inicio=lineas.findIndex(l=>/CANTIDAD\s+UNIDAD\s+ATRIBUTO\s+REMISION/i.test(l));
+    inicio=inicio===-1?0:inicio+1;
+    for(let li=inicio; li<lineas.length; li++){
+      const linea=lineas[li];
+      if(!linea||!linea.trim()) continue;
+      if(/^TOTAL/i.test(linea.trim())||/Cadena original|Importe Letra/i.test(linea)) break;
+      const m=linea.match(RE_ITEM_GLD);
+      if(m){
+        const[,cantTxt,,atributo,,desc,precioStr,importeStr]=m;
+        i++;
+        const cantidad=+cantTxt||0;
+        const precioUnitario=+(precioStr.replace(/,/g,''));
+        const dec=decomponerGildan(atributo.trim(), desc.trim());
+        const errores=[];
+        if(!dec.genero) errores.push('género de factura desconocido en: '+desc);
+        if(!dec.talla) errores.push('talla de factura desconocida en: '+desc);
+        if(!dec.color) errores.push('sin color');
+        if(!cantidad||cantidad<=0) errores.push('cantidad inválida');
+        if(!precioUnitario||precioUnitario<=0) errores.push('sin precio');
+        const existente=(errores.length===0)?buscarPlayeraStock({tipo:'Playera',genero:dec.genero,talla:dec.talla,color:dec.color,marca:'Gildan',modelo:''}):null;
+        filas.push({fila:i, proveedor:'Gildan', modelo:'', modeloOriginalFactura:desc,
+          tipo:'Playera', genero:dec.genero, talla:dec.talla, color:dec.color, cantidad, precioUnitario,
+          errores, existente, incluir:errores.length===0});
+      }
+    }
+  });
+  return filas;
+}
+
+// Detecta de qué proveedor es la factura según encabezados/RFC característicos
+// de cada formato — así se corre solo el parser correcto, en vez de probar
+// todos a ciegas.
+function detectarFormatoFactura(renglonesPorPagina){
+  const texto=renglonesPorPagina.flat().join('\n');
+  if(/Cant\.\s+Clave SAT/i.test(texto)) return 'grupo_playeras';
+  if(/Art[ií]culo\s+Nombre\s+U\.med\./i.test(texto)) return 'playerytees';
+  if(/CANTIDAD\s+UNIDAD\s+ATRIBUTO\s+REMISION/i.test(texto)) return 'gildan';
+  return 'desconocido';
+}
+function detectarNombreProveedorFactura(formato, renglonesPorPagina){
+  if(formato==='grupo_playeras') return 'Yazbek';
+  if(formato==='gildan') return 'Gildan';
+  if(formato==='playerytees'){
+    const texto=renglonesPorPagina.flat().join('\n');
+    if(/FEQE6410293U2/.test(texto)) return 'Playerytees';
+    if(/LOSD7802142Q1/.test(texto)) return 'Euro Cotton';
+    return 'Euro Cotton'; // por default, es el formato más visto de este grupo
+  }
+  return 'Desconocido';
+}
 
 let _facturaPDFTextoCompleto='';
+let _facturaPDFRenglones=null; // se guarda para poder mostrar el "Total de piezas" real de la factura
 
-async function extraerTextoPDF(file){
+// Extrae el texto del PDF reconstruyendo RENGLONES reales por coordenadas:
+// agrupa el texto por posición Y (con tolerancia, para que una misma fila
+// visual quede junta aunque el PDF la haya grabado con pequeños desfaces),
+// y dentro de cada fila ordena de izquierda a derecha por posición X. Esto
+// evita el problema de que pdf.js a veces entrega el texto "desordenado"
+// cuando una descripción larga se parte en dos líneas.
+async function extraerRenglonesPDF(file){
   if(!window.pdfjsLib){ throw new Error('Librería de lectura de PDF no disponible'); }
   pdfjsLib.GlobalWorkerOptions.workerSrc='https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
   const buf=await file.arrayBuffer();
   const pdf=await pdfjsLib.getDocument({data:buf}).promise;
-  let texto='';
-  for(let i=1;i<=pdf.numPages;i++){
-    const page=await pdf.getPage(i);
+  const renglonesPorPagina=[];
+  for(let p=1; p<=pdf.numPages; p++){
+    const page=await pdf.getPage(p);
     const content=await page.getTextContent();
-    texto += content.items.map(it=>it.str).join(' ') + '\n';
+    const items=content.items.filter(it=>it.str&&it.str.trim()!=='');
+    const TOLERANCIA_Y=2.5;
+    const filas=[];
+    items.forEach(it=>{
+      const y=it.transform[5];
+      let fila=filas.find(f=>Math.abs(f.y-y)<TOLERANCIA_Y);
+      if(!fila){ fila={y,items:[]}; filas.push(fila); }
+      fila.items.push(it);
+    });
+    filas.sort((a,b)=>b.y-a.y);
+    filas.forEach(f=>f.items.sort((a,b)=>a.transform[4]-b.transform[4]));
+    const lineas=filas.map(f=>{
+      let texto=''; let prevEnd=null;
+      f.items.forEach(it=>{
+        const x=it.transform[4];
+        if(prevEnd!==null){
+          const gap=x-prevEnd;
+          const umbral=(it.height||8)*0.18;
+          if(gap>umbral) texto+=' ';
+        }
+        texto+=it.str;
+        prevEnd=x+(it.width||it.str.length*4);
+      });
+      return texto;
+    });
+    renglonesPorPagina.push(lineas);
   }
-  return texto;
+  return renglonesPorPagina;
 }
 
 async function procesarFacturaPDFYazbek(file){
-  const textoCrudo=await extraerTextoPDF(file);
-  _facturaPDFTextoCompleto=textoCrudo;
-  for(const lector of LECTORES_PDF_PROVEEDOR){
-    const filas=lector.parser(textoCrudo);
-    if(filas.length>0) return filas; // ya encontró con este formato, no prueba los demás
-  }
-  return [];
+  const renglonesPorPagina=await extraerRenglonesPDF(file);
+  _facturaPDFRenglones=renglonesPorPagina;
+  _facturaPDFTextoCompleto=renglonesPorPagina.flat().join('\n');
+  const formato=detectarFormatoFactura(renglonesPorPagina);
+  const nombreProveedor=detectarNombreProveedorFactura(formato, renglonesPorPagina);
+  if(formato==='grupo_playeras') return parsearRenglonesYazbek(renglonesPorPagina);
+  if(formato==='playerytees') return parsearRenglonesEuroCotton(renglonesPorPagina, nombreProveedor);
+  if(formato==='gildan') return parsearRenglonesGildan(renglonesPorPagina);
+  return []; // formato no reconocido — por ahora solo Yazbek, Euro Cotton/Playerytees y Gildan
 }
 
 function renderPreviewFacturaPlayeras(){
