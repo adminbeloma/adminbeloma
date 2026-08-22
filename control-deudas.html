@@ -1,0 +1,1119 @@
+<!DOCTYPE html>
+<html lang="es-MX">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Salida — control de deudas</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Archivo:wght@500;600;700&family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+:root{
+  --tinta:#F1F4F2;
+  --acero:#FFFFFF;
+  --acero-alto:#E7EDEA;
+  --linea:#D6DFDB;
+  --hueso:#16211F;
+  --hueso-tenue:#667872;
+  --hundido:#EDF1EF;
+  --jade:#2E8B67;
+  --ambar:#A9741A;
+  --oxido:#B4443C;
+  --violeta:#6350A0;
+  --sombra:0 1px 2px rgba(22,33,31,.05);
+  --r:10px;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+html{-webkit-text-size-adjust:100%}
+body{
+  background:var(--tinta);
+  -webkit-font-smoothing:antialiased;
+  color:var(--hueso);
+  font-family:"IBM Plex Sans",system-ui,sans-serif;
+  font-size:15px;
+  line-height:1.5;
+  padding:0 0 80px;
+}
+.wrap{max-width:940px;margin:0 auto;padding:0 18px}
+
+/* ---------- tipografia ---------- */
+h1,h2,h3{font-family:"Archivo",sans-serif;font-weight:600;letter-spacing:-0.01em}
+.num{font-family:"IBM Plex Mono",monospace;font-variant-numeric:tabular-nums}
+.eyebrow{
+  font-family:"IBM Plex Mono",monospace;
+  font-size:11px;letter-spacing:.14em;text-transform:uppercase;
+  color:var(--hueso-tenue);
+}
+
+/* ---------- encabezado ---------- */
+.top{
+  border-bottom:1px solid var(--linea);
+  padding:20px 0 18px;margin-bottom:26px;
+  display:flex;align-items:baseline;justify-content:space-between;gap:14px;flex-wrap:wrap;
+}
+.top h1{font-size:21px}
+.top h1 span{color:var(--hueso-tenue);font-weight:500}
+.modo{
+  font-family:"IBM Plex Mono",monospace;font-size:11px;
+  padding:4px 9px;border-radius:99px;border:1px solid var(--linea);
+  color:var(--hueso-tenue);white-space:nowrap;
+}
+.modo.vivo{color:var(--jade);border-color:rgba(46,139,103,.45);background:rgba(46,139,103,.07)}
+
+/* ---------- hero ---------- */
+.hero{
+  background:var(--acero);
+  border:1px solid var(--linea);
+  border-radius:var(--r);
+  padding:24px 22px;
+  margin-bottom:14px;
+  box-shadow:var(--sombra);
+}
+.hero-cifra{
+  display:flex;align-items:flex-end;gap:14px;flex-wrap:wrap;
+  margin:8px 0 4px;
+}
+.hero-cifra .grande{
+  font-family:"Archivo",sans-serif;font-weight:700;
+  font-size:clamp(34px,8vw,52px);line-height:1;letter-spacing:-.03em;
+}
+.hero-cifra .sub{color:var(--hueso-tenue);font-size:14px;padding-bottom:5px}
+.hero-nota{color:var(--hueso-tenue);font-size:13.5px;max-width:56ch;margin-top:10px}
+
+/* barra de avance */
+.avance{margin-top:18px}
+.avance-riel{
+  height:9px;background:var(--hundido);border-radius:99px;overflow:hidden;
+  border:1px solid var(--linea);
+}
+.avance-fill{height:100%;background:linear-gradient(90deg,#59B38C,var(--jade));border-radius:99px;transition:width .5s ease}
+.avance-pie{display:flex;justify-content:space-between;margin-top:7px;font-size:12.5px;color:var(--hueso-tenue)}
+
+/* ---------- escenarios ---------- */
+.escenarios{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-bottom:14px}
+.esc{
+  background:var(--acero);border:1px solid var(--linea);border-radius:var(--r);
+  padding:14px 14px 15px;position:relative;overflow:hidden;box-shadow:var(--sombra);
+}
+.esc::before{content:"";position:absolute;left:0;top:0;bottom:0;width:3px}
+.esc.piso::before{background:var(--oxido)}
+.esc.media::before{background:var(--jade)}
+.esc.alto::before{background:var(--violeta)}
+.esc .fecha{font-family:"Archivo",sans-serif;font-weight:600;font-size:17px;margin-top:6px}
+.esc .meses{font-size:12.5px;color:var(--hueso-tenue);margin-top:2px}
+.esc .interes{font-size:12px;color:var(--ambar);margin-top:8px;font-family:"IBM Plex Mono",monospace}
+.esc.media{background:var(--acero-alto)}
+
+/* ---------- grafica ---------- */
+.grafica{
+  background:var(--acero);border:1px solid var(--linea);border-radius:var(--r);
+  padding:18px 16px 12px;margin-bottom:26px;box-shadow:var(--sombra);
+}
+.grafica svg{width:100%;height:200px;display:block;overflow:visible}
+.leyenda{display:flex;gap:16px;flex-wrap:wrap;margin-top:12px;font-size:12.5px;color:var(--hueso-tenue)}
+.leyenda i{display:inline-block;width:18px;height:2px;vertical-align:middle;margin-right:6px}
+
+/* ---------- secciones ---------- */
+section{margin-bottom:30px}
+.sec-head{
+  display:flex;align-items:baseline;justify-content:space-between;
+  gap:12px;margin-bottom:12px;padding-bottom:8px;border-bottom:1px solid var(--linea);
+}
+.sec-head h2{font-size:15px}
+.sec-head .dato{font-family:"IBM Plex Mono",monospace;font-size:13px;color:var(--hueso-tenue)}
+
+/* ---------- tarjetas de deuda ---------- */
+.deuda{
+  background:var(--acero);border:1px solid var(--linea);border-radius:var(--r);
+  padding:14px 15px;margin-bottom:9px;box-shadow:var(--sombra);
+}
+.deuda-fila1{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+.deuda-nombre{font-weight:600;font-size:15px}
+.chip{
+  font-family:"IBM Plex Mono",monospace;font-size:10.5px;letter-spacing:.06em;
+  text-transform:uppercase;padding:2px 7px;border-radius:4px;
+  border:1px solid var(--linea);color:var(--hueso-tenue);
+}
+.chip.tarjeta{color:var(--oxido);border-color:rgba(180,68,60,.35);background:rgba(180,68,60,.06)}
+.chip.prestamo{color:var(--violeta);border-color:rgba(99,80,160,.35);background:rgba(99,80,160,.06)}
+.chip.proveedor{color:var(--ambar);border-color:rgba(169,116,26,.35);background:rgba(169,116,26,.07)}
+.deuda-saldo{margin-left:auto;font-family:"IBM Plex Mono",monospace;font-size:16px;font-weight:500}
+.deuda-fila2{
+  display:flex;gap:16px;flex-wrap:wrap;margin-top:9px;
+  font-size:12.5px;color:var(--hueso-tenue);
+}
+.deuda-fila2 b{color:var(--hueso);font-weight:500;font-family:"IBM Plex Mono",monospace}
+.deuda-barra{height:5px;background:var(--hundido);border-radius:99px;margin-top:11px;overflow:hidden}
+.deuda-barra div{height:100%;background:var(--jade);border-radius:99px}
+.deuda-acciones{display:flex;gap:8px;margin-top:11px;flex-wrap:wrap}
+.alerta-fecha{color:var(--ambar);font-size:12.5px;margin-top:8px;font-family:"IBM Plex Mono",monospace}
+.alerta-fecha.vencida{color:var(--oxido)}
+
+/* ---------- controles ---------- */
+button{
+  font-family:"IBM Plex Sans",sans-serif;font-size:13px;font-weight:500;
+  background:transparent;color:var(--hueso);
+  border:1px solid var(--linea);border-radius:7px;
+  padding:7px 13px;cursor:pointer;transition:.15s;
+}
+button:hover{background:var(--acero-alto);border-color:#B9C6C1}
+button:focus-visible{outline:2px solid var(--jade);outline-offset:2px}
+button.primario{background:var(--jade);border-color:var(--jade);color:#FFFFFF;font-weight:600}
+button.primario:hover{background:#25795A;border-color:#25795A}
+button.sutil{color:var(--hueso-tenue);border-color:transparent;padding:7px 9px}
+button.sutil:hover{color:var(--oxido);background:transparent}
+
+.toggle{display:inline-flex;border:1px solid var(--linea);border-radius:7px;overflow:hidden}
+.toggle button{border:0;border-radius:0;padding:7px 14px;color:var(--hueso-tenue)}
+.toggle button.on{background:var(--acero-alto);color:var(--hueso)}
+
+input,select{
+  font-family:"IBM Plex Sans",sans-serif;font-size:14px;
+  background:#FFFFFF;color:var(--hueso);
+  border:1px solid var(--linea);border-radius:7px;
+  padding:9px 11px;width:100%;
+}
+input:focus,select:focus{outline:none;border-color:var(--jade)}
+input.num-in{font-family:"IBM Plex Mono",monospace}
+label{display:block;font-size:12px;color:var(--hueso-tenue);margin-bottom:5px}
+.campos{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:12px}
+.form{
+  background:var(--acero);border:1px solid var(--linea);border-radius:var(--r);
+  padding:16px;margin-top:10px;
+}
+.form-pie{display:flex;gap:9px;margin-top:14px;flex-wrap:wrap}
+
+/* ---------- ingresos ---------- */
+.ing-resumen{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-bottom:12px}
+.ing-caja{background:var(--acero);border:1px solid var(--linea);border-radius:var(--r);padding:13px}
+.ing-caja .v{font-family:"IBM Plex Mono",monospace;font-size:17px;margin-top:5px}
+.ing-caja.piso .v{color:var(--oxido)}
+.ing-caja.media .v{color:var(--jade)}
+.ing-caja.alto .v{color:var(--violeta)}
+.lista-mes{
+  display:flex;align-items:center;gap:12px;
+  padding:9px 13px;border:1px solid var(--linea);border-radius:7px;
+  margin-bottom:6px;background:var(--acero);font-size:14px;
+}
+.lista-mes .m{font-family:"IBM Plex Mono",monospace;color:var(--hueso-tenue);min-width:74px}
+.lista-mes .f{font-size:12.5px;color:var(--hueso-tenue)}
+.lista-mes .v{margin-left:auto;font-family:"IBM Plex Mono",monospace}
+
+/* ---------- capacidad ---------- */
+.capacidad{
+  background:var(--acero);border:1px solid var(--linea);border-radius:var(--r);
+  padding:16px;display:grid;gap:9px;
+}
+.cap-fila{display:flex;justify-content:space-between;font-size:14px;gap:12px}
+.cap-fila span:last-child{font-family:"IBM Plex Mono",monospace}
+.cap-fila.total{border-top:1px solid var(--linea);padding-top:9px;font-weight:600}
+.cap-fila.total span:last-child{color:var(--jade);font-size:16px}
+
+.aviso{
+  border:1px solid rgba(180,68,60,.4);background:rgba(180,68,60,.07);
+  color:#8E332C;border-radius:var(--r);padding:13px 15px;font-size:13.5px;margin-bottom:14px;
+}
+.vacio{color:var(--hueso-tenue);font-size:13.5px;padding:16px 0}
+.oculto{display:none !important}
+
+/* ---------- pantalla de acceso ---------- */
+.puerta{
+  position:fixed;inset:0;z-index:50;
+  background:var(--tinta);
+  display:flex;align-items:center;justify-content:center;padding:22px;
+}
+.puerta-caja{
+  background:var(--acero);border:1px solid var(--linea);border-radius:var(--r);
+  box-shadow:0 4px 24px rgba(22,33,31,.08);
+  padding:28px 26px;width:100%;max-width:360px;
+}
+.puerta-caja h2{font-size:19px;margin-bottom:4px}
+.puerta-caja p{color:var(--hueso-tenue);font-size:13.5px;margin-bottom:20px}
+.puerta-campo{margin-bottom:12px}
+.puerta-caja button.primario{width:100%;padding:11px;font-size:14px;margin-top:6px}
+.puerta-error{
+  color:var(--oxido);font-size:13px;margin-top:12px;
+  min-height:18px;
+}
+.puerta-estado{color:var(--hueso-tenue);font-size:13px;text-align:center}
+
+@media(max-width:640px){
+  .escenarios,.ing-resumen{grid-template-columns:1fr}
+  .esc.media{order:-1}
+  .deuda-saldo{margin-left:0;width:100%}
+}
+@media(prefers-reduced-motion:reduce){*{transition:none !important;animation:none !important}}
+</style>
+</head>
+<body>
+<div class="puerta oculto" id="puerta">
+  <div class="puerta-caja">
+    <div id="puertaForm">
+      <h2>Salida</h2>
+      <p>Control de deudas personales. Entra con tu cuenta.</p>
+      <div class="puerta-campo">
+        <label for="pCorreo">Correo</label>
+        <input id="pCorreo" type="email" autocomplete="username" placeholder="tu@correo.com">
+      </div>
+      <div class="puerta-campo">
+        <label for="pClave">Contraseña</label>
+        <input id="pClave" type="password" autocomplete="current-password" placeholder="••••••••">
+      </div>
+      <button class="primario" id="btnEntrar">Entrar</button>
+      <div class="puerta-error" id="puertaError"></div>
+    </div>
+    <div class="puerta-estado oculto" id="puertaCargando">Conectando…</div>
+  </div>
+</div>
+
+<div class="wrap">
+
+  <div class="top">
+    <h1>Salida <span>— control de deudas</span></h1>
+    <div style="display:flex;align-items:center;gap:9px">
+      <div class="modo" id="modo">cargando…</div>
+      <button class="sutil oculto" id="btnSalir">Salir</button>
+    </div>
+  </div>
+
+  <!-- HERO -->
+  <div class="hero">
+    <div class="eyebrow">Fecha realista de liquidación</div>
+    <div class="hero-cifra">
+      <div class="grande" id="heroFecha">—</div>
+      <div class="sub" id="heroMeses"></div>
+    </div>
+    <div class="hero-nota" id="heroNota">Captura tus deudas e ingresos para calcular.</div>
+    <div class="avance">
+      <div class="avance-riel"><div class="avance-fill" id="avanceFill" style="width:0%"></div></div>
+      <div class="avance-pie">
+        <span id="avanceTxt">0% liquidado</span>
+        <span class="num" id="avanceSaldo">—</span>
+      </div>
+    </div>
+  </div>
+
+  <div id="avisoCapacidad" class="aviso oculto"></div>
+
+  <!-- ESCENARIOS -->
+  <div class="escenarios">
+    <div class="esc piso">
+      <div class="eyebrow">Mes flojo</div>
+      <div class="fecha" id="fPiso">—</div>
+      <div class="meses" id="mPiso"></div>
+      <div class="interes" id="iPiso"></div>
+    </div>
+    <div class="esc media">
+      <div class="eyebrow">Mes típico</div>
+      <div class="fecha" id="fMedia">—</div>
+      <div class="meses" id="mMedia"></div>
+      <div class="interes" id="iMedia"></div>
+    </div>
+    <div class="esc alto">
+      <div class="eyebrow">Mes bueno</div>
+      <div class="fecha" id="fAlto">—</div>
+      <div class="meses" id="mAlto"></div>
+      <div class="interes" id="iAlto"></div>
+    </div>
+  </div>
+
+  <!-- GRAFICA -->
+  <div class="grafica">
+    <div class="eyebrow">Saldo proyectado</div>
+    <svg id="graf" viewBox="0 0 700 200" preserveAspectRatio="none" aria-label="Proyección de saldo"></svg>
+    <div class="leyenda">
+      <span><i style="background:#B4443C"></i>Mes flojo</span>
+      <span><i style="background:#2E8B67"></i>Mes típico</span>
+      <span><i style="background:#6350A0"></i>Mes bueno</span>
+    </div>
+  </div>
+
+  <!-- ESTRATEGIA -->
+  <section>
+    <div class="sec-head">
+      <h2>Orden de ataque</h2>
+      <div class="dato" id="estrategiaNota"></div>
+    </div>
+    <div class="toggle" id="toggleEstrategia">
+      <button data-e="avalancha" class="on">Avalancha</button>
+      <button data-e="bola">Bola de nieve</button>
+    </div>
+  </section>
+
+  <!-- DEUDAS -->
+  <section>
+    <div class="sec-head">
+      <h2>Deudas</h2>
+      <div class="dato" id="totalDeuda">—</div>
+    </div>
+    <div id="listaDeudas"></div>
+    <div class="form-pie"><button id="btnNuevaDeuda">+ Agregar deuda</button></div>
+
+    <div class="form oculto" id="formDeuda">
+      <div class="campos">
+        <div>
+          <label for="dNombre">Nombre</label>
+          <input id="dNombre" placeholder="Tarjeta Banorte">
+        </div>
+        <div>
+          <label for="dTipo">Tipo</label>
+          <select id="dTipo">
+            <option value="tarjeta">Tarjeta de crédito</option>
+            <option value="prestamo">Préstamo con pago fijo</option>
+            <option value="proveedor">Crédito de proveedor</option>
+          </select>
+        </div>
+        <div>
+          <label for="dSaldo">Saldo actual (MXN)</label>
+          <input id="dSaldo" type="number" step="0.01" class="num-in" placeholder="0.00">
+        </div>
+        <div>
+          <label for="dTasa">Tasa anual %</label>
+          <input id="dTasa" type="number" step="0.01" class="num-in" placeholder="0">
+        </div>
+        <div>
+          <label for="dPago">Pago mínimo mensual</label>
+          <input id="dPago" type="number" step="0.01" class="num-in" placeholder="0.00">
+        </div>
+        <div id="wrapFechaLim">
+          <label for="dFechaLim">Fecha límite (opcional)</label>
+          <input id="dFechaLim" type="date">
+        </div>
+      </div>
+      <div class="form-pie">
+        <button class="primario" id="btnGuardarDeuda">Guardar deuda</button>
+        <button id="btnCancelarDeuda">Cancelar</button>
+      </div>
+    </div>
+  </section>
+
+  <!-- INGRESOS -->
+  <section>
+    <div class="sec-head">
+      <h2>Ingresos por mes</h2>
+      <div class="dato" id="ingNota"></div>
+    </div>
+    <div class="ing-resumen">
+      <div class="ing-caja piso"><div class="eyebrow">Piso</div><div class="v" id="vPiso">—</div></div>
+      <div class="ing-caja media"><div class="eyebrow">Mediana</div><div class="v" id="vMedia">—</div></div>
+      <div class="ing-caja alto"><div class="eyebrow">Alto</div><div class="v" id="vAlto">—</div></div>
+    </div>
+    <div id="listaIngresos"></div>
+    <div class="form-pie"><button id="btnNuevoIngreso">+ Registrar mes</button></div>
+
+    <div class="form oculto" id="formIngreso">
+      <div class="campos">
+        <div>
+          <label for="iMes">Mes</label>
+          <input id="iMes" type="month">
+        </div>
+        <div>
+          <label for="iFuente">Fuente</label>
+          <select id="iFuente">
+            <option value="Playeras Beloma">Playeras Beloma</option>
+            <option value="Seguro Ahorras">Seguro Ahorras</option>
+            <option value="Otro">Otro</option>
+          </select>
+        </div>
+        <div>
+          <label for="iMonto">Monto neto (MXN)</label>
+          <input id="iMonto" type="number" step="0.01" class="num-in" placeholder="0.00">
+        </div>
+      </div>
+      <div class="form-pie">
+        <button class="primario" id="btnGuardarIngreso">Guardar</button>
+        <button id="btnCancelarIngreso">Cancelar</button>
+      </div>
+    </div>
+  </section>
+
+  <!-- GASTOS FIJOS -->
+  <section>
+    <div class="sec-head">
+      <h2>Gastos fijos mensuales</h2>
+      <div class="dato" id="totalGastos">—</div>
+    </div>
+    <div id="listaGastos"></div>
+    <div class="form-pie"><button id="btnNuevoGasto">+ Agregar gasto</button></div>
+
+    <div class="form oculto" id="formGasto">
+      <div class="campos">
+        <div>
+          <label for="gConcepto">Concepto</label>
+          <input id="gConcepto" placeholder="Renta">
+        </div>
+        <div>
+          <label for="gMonto">Monto mensual</label>
+          <input id="gMonto" type="number" step="0.01" class="num-in" placeholder="0.00">
+        </div>
+      </div>
+      <div class="form-pie">
+        <button class="primario" id="btnGuardarGasto">Guardar</button>
+        <button id="btnCancelarGasto">Cancelar</button>
+      </div>
+    </div>
+  </section>
+
+  <!-- CAPACIDAD -->
+  <section>
+    <div class="sec-head"><h2>Capacidad de pago</h2></div>
+    <div class="capacidad" id="capacidad"></div>
+  </section>
+
+</div>
+
+<script type="module">
+/* ==========================================================
+   CONFIGURACIÓN
+   Pega aquí tu config de Firebase para que guarde en la nube.
+   Si lo dejas vacío, funciona en memoria con datos de ejemplo.
+   ========================================================== */
+const FIREBASE_CONFIG = {
+  apiKey: "AIzaSyDh-ucS4iDdYDhg5RiM1CvpreMvzbN8jHU",
+  authDomain: "gastos-felipe-da377.firebaseapp.com",
+  projectId: "gastos-felipe-da377",
+  storageBucket: "gastos-felipe-da377.firebasestorage.app",
+  messagingSenderId: "287782164031",
+  appId: "1:287782164031:web:861a3d0507d03c07b08a8a"
+};
+const COLECCION = "finanzas_personales";
+// El documento se llama igual que tu UID de Firebase Auth.
+// Así las reglas de Firestore quedan cerradas sin escribir tu UID a mano.
+
+/* ==========================================================
+   ESTADO
+   ========================================================== */
+let estado = {
+  deudas: [],
+  ingresos: [],
+  gastos: [],
+  estrategia: "avalancha"
+};
+let db = null, docRef = null, modoNube = false;
+
+const fmt = n => new Intl.NumberFormat("es-MX",{style:"currency",currency:"MXN",maximumFractionDigits:0}).format(n||0);
+const fmt2 = n => new Intl.NumberFormat("es-MX",{style:"currency",currency:"MXN",minimumFractionDigits:2}).format(n||0);
+const $ = id => document.getElementById(id);
+const uid = () => Math.random().toString(36).slice(2,10);
+
+/* ==========================================================
+   PERSISTENCIA Y ACCESO
+   ========================================================== */
+let auth = null, fs = null;
+
+async function iniciar(){
+  const tieneConfig = FIREBASE_CONFIG && FIREBASE_CONFIG.projectId;
+
+  if(!tieneConfig){
+    $("modo").textContent = "modo prueba — pega tu config de Firebase";
+    sembrarEjemplo();
+    render();
+    return;
+  }
+
+  abrirPuerta(true); // muestra "Conectando…"
+
+  let authMod;
+  try{
+    const [{ initializeApp }, fsMod, aMod] = await Promise.all([
+      import("https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js"),
+      import("https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js"),
+      import("https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js")
+    ]);
+    fs = fsMod; authMod = aMod;
+    const app = initializeApp(FIREBASE_CONFIG, "salidaDeudas");
+    db = fs.getFirestore(app);
+    auth = authMod.getAuth(app);
+    window._auth = authMod;
+  }catch(e){
+    console.error(e);
+    cerrarPuerta();
+    $("modo").textContent = "sin conexión — datos locales";
+    sembrarEjemplo();
+    render();
+    return;
+  }
+
+  authMod.onAuthStateChanged(auth, async (usuario) => {
+    if(!usuario){
+      estado = {deudas:[], ingresos:[], gastos:[], estrategia:"avalancha"};
+      docRef = null; modoNube = false;
+      $("btnSalir").classList.add("oculto");
+      $("modo").textContent = "sin sesión";
+      $("modo").classList.remove("vivo");
+      render();
+      abrirPuerta(false);
+      return;
+    }
+    docRef = fs.doc(db, COLECCION, usuario.uid);
+    try{
+      const snap = await fs.getDoc(docRef);
+      if(snap.exists()) estado = Object.assign(estado, snap.data());
+      modoNube = true;
+      $("modo").textContent = usuario.email;
+      $("modo").classList.add("vivo");
+      $("btnSalir").classList.remove("oculto");
+      cerrarPuerta();
+      render();
+    }catch(e){
+      console.error(e);
+      abrirPuerta(false);
+      mostrarErrorPuerta("Entraste, pero Firestore no deja leer. Revisa las reglas.");
+    }
+  });
+}
+
+function abrirPuerta(cargando){
+  $("puerta").classList.remove("oculto");
+  $("puertaForm").classList.toggle("oculto", !!cargando);
+  $("puertaCargando").classList.toggle("oculto", !cargando);
+}
+function cerrarPuerta(){
+  $("puerta").classList.add("oculto");
+  $("puertaError").textContent = "";
+  $("pClave").value = "";
+}
+function mostrarErrorPuerta(msg){ $("puertaError").textContent = msg; }
+
+async function entrar(){
+  const correo = $("pCorreo").value.trim();
+  const clave  = $("pClave").value;
+  if(!correo || !clave){ mostrarErrorPuerta("Escribe tu correo y contraseña."); return; }
+  $("btnEntrar").disabled = true;
+  $("btnEntrar").textContent = "Entrando…";
+  mostrarErrorPuerta("");
+  try{
+    await window._auth.signInWithEmailAndPassword(auth, correo, clave);
+  }catch(e){
+    const mensajes = {
+      "auth/invalid-credential":      "Correo o contraseña incorrectos.",
+      "auth/invalid-email":           "Ese correo no tiene forma de correo.",
+      "auth/user-not-found":          "No hay cuenta con ese correo.",
+      "auth/wrong-password":          "Contraseña incorrecta.",
+      "auth/too-many-requests":       "Demasiados intentos. Espera unos minutos.",
+      "auth/network-request-failed":  "Sin conexión."
+    };
+    mostrarErrorPuerta(mensajes[e.code] || "No se pudo entrar. Revisa la consola.");
+  }finally{
+    $("btnEntrar").disabled = false;
+    $("btnEntrar").textContent = "Entrar";
+  }
+}
+
+async function salir(){
+  if(auth) await window._auth.signOut(auth);
+}
+
+async function guardar(){
+  render();
+  if(!modoNube || !docRef) return;
+  try{
+    await fs.setDoc(docRef, estado);
+  }catch(e){
+    console.error("No se pudo guardar:", e);
+    $("modo").textContent = "error al guardar — revisa la consola";
+    $("modo").classList.remove("vivo");
+  }
+}
+
+function sembrarEjemplo(){
+  const hoy = new Date();
+  const mesTexto = d => `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}`;
+  const atras = n => { const d=new Date(hoy); d.setMonth(d.getMonth()-n); return mesTexto(d); };
+  estado.deudas = [
+    {id:uid(),nombre:"Tarjeta Banorte",tipo:"tarjeta",saldo:38000,saldoInicial:52000,tasa:52,pagoMin:1900,fechaLim:""},
+    {id:uid(),nombre:"Tarjeta BBVA",tipo:"tarjeta",saldo:14500,saldoInicial:18000,tasa:44,pagoMin:800,fechaLim:""},
+    {id:uid(),nombre:"Préstamo camioneta",tipo:"prestamo",saldo:62000,saldoInicial:95000,tasa:18,pagoMin:4100,fechaLim:""},
+    {id:uid(),nombre:"Yazbek — crédito 30 días",tipo:"proveedor",saldo:9800,saldoInicial:9800,tasa:0,pagoMin:9800,fechaLim:""}
+  ];
+  estado.ingresos = [
+    {id:uid(),mes:atras(5),fuente:"Playeras Beloma",monto:48000},
+    {id:uid(),mes:atras(4),fuente:"Playeras Beloma",monto:31000},
+    {id:uid(),mes:atras(3),fuente:"Playeras Beloma",monto:67000},
+    {id:uid(),mes:atras(2),fuente:"Playeras Beloma",monto:42000},
+    {id:uid(),mes:atras(1),fuente:"Playeras Beloma",monto:55000},
+    {id:uid(),mes:atras(3),fuente:"Seguro Ahorras",monto:12000},
+    {id:uid(),mes:atras(1),fuente:"Seguro Ahorras",monto:8000}
+  ];
+  estado.gastos = [
+    {id:uid(),concepto:"Renta casa",monto:9000},
+    {id:uid(),concepto:"Despensa",monto:11000},
+    {id:uid(),concepto:"Servicios y celular",monto:3200},
+    {id:uid(),concepto:"Escuela",monto:4500}
+  ];
+}
+
+/* ==========================================================
+   CÁLCULO DE ESCENARIOS DE INGRESO
+   No promediamos: el promedio miente en los meses flojos.
+   Piso = mes más bajo. Mediana = mes típico. Alto = percentil 80.
+   ========================================================== */
+function totalesPorMes(){
+  const mapa = {};
+  estado.ingresos.forEach(i => { mapa[i.mes] = (mapa[i.mes]||0) + Number(i.monto||0); });
+  return Object.keys(mapa).sort().map(m => ({mes:m, total:mapa[m]}));
+}
+
+function escenariosIngreso(){
+  const meses = totalesPorMes().slice(-12);
+  if(!meses.length) return {piso:0, media:0, alto:0, n:0};
+  const v = meses.map(m=>m.total).sort((a,b)=>a-b);
+  const pct = p => {
+    if(v.length===1) return v[0];
+    const i = (v.length-1)*p, lo = Math.floor(i), hi = Math.ceil(i);
+    return v[lo] + (v[hi]-v[lo])*(i-lo);
+  };
+  return {piso:v[0], media:pct(0.5), alto:pct(0.8), n:meses.length};
+}
+
+const totalGastosFijos = () => estado.gastos.reduce((s,g)=>s+Number(g.monto||0),0);
+const totalDeudaActual = () => estado.deudas.reduce((s,d)=>s+Number(d.saldo||0),0);
+const totalMinimos     = () => estado.deudas.filter(d=>Number(d.saldo)>0)
+                                            .reduce((s,d)=>s+Number(d.pagoMin||0),0);
+
+/* ==========================================================
+   SIMULACIÓN DE LIQUIDACIÓN
+   Mes a mes: se genera interés, se cubren mínimos, y todo el
+   sobrante ataca una sola deuda según la estrategia.
+   ========================================================== */
+function simular(capacidad, estrategia){
+  const deudas = estado.deudas
+    .filter(d => Number(d.saldo) > 0)
+    .map(d => ({saldo:Number(d.saldo), tasa:Number(d.tasa||0)/100/12, min:Number(d.pagoMin||0)}));
+
+  if(!deudas.length) return {meses:0, interes:0, curva:[0], viable:true};
+  if(capacidad <= 0) return {viable:false};
+
+  const curva = [deudas.reduce((s,d)=>s+d.saldo,0)];
+  let interes = 0, mes = 0;
+  const TOPE = 480; // 40 años
+
+  while(mes < TOPE){
+    const antes = deudas.reduce((s,d)=>s+d.saldo,0);
+    if(antes <= 0.5) break;
+
+    // 1. interés del mes
+    deudas.forEach(d => {
+      if(d.saldo > 0){ const i = d.saldo * d.tasa; d.saldo += i; interes += i; }
+    });
+
+    // 2. pagos mínimos
+    let disp = capacidad;
+    deudas.forEach(d => {
+      if(d.saldo > 0 && disp > 0){
+        const p = Math.min(d.min, d.saldo, disp);
+        d.saldo -= p; disp -= p;
+      }
+    });
+
+    // 3. el sobrante ataca en orden
+    const orden = [...deudas].filter(d=>d.saldo>0).sort((a,b)=>
+      estrategia === "avalancha" ? b.tasa - a.tasa : a.saldo - b.saldo
+    );
+    for(const d of orden){
+      if(disp <= 0) break;
+      const p = Math.min(d.saldo, disp);
+      d.saldo -= p; disp -= p;
+    }
+
+    mes++;
+    const despues = deudas.reduce((s,d)=>s+d.saldo,0);
+    curva.push(Math.max(0, despues));
+    if(despues >= antes - 0.5) return {viable:false, ahogado:true}; // no avanza
+    if(despues <= 0.5) break;
+  }
+
+  if(mes >= TOPE) return {viable:false, ahogado:true};
+  return {meses:mes, interes, curva, viable:true};
+}
+
+function fechaEnMeses(n){
+  const d = new Date();
+  d.setDate(1);
+  d.setMonth(d.getMonth() + n);
+  return d.toLocaleDateString("es-MX",{month:"long", year:"numeric"});
+}
+const capitalizar = s => s.charAt(0).toUpperCase() + s.slice(1);
+
+/* ==========================================================
+   RENDER
+   ========================================================== */
+function render(){
+  renderDeudas();
+  renderIngresos();
+  renderGastos();
+  renderCapacidadYProyeccion();
+  document.querySelectorAll("#toggleEstrategia button").forEach(b =>
+    b.classList.toggle("on", b.dataset.e === estado.estrategia));
+  $("estrategiaNota").textContent = estado.estrategia === "avalancha"
+    ? "primero la de tasa más alta — pagas menos intereses"
+    : "primero la de saldo más chico — se sienten victorias antes";
+}
+
+function renderDeudas(){
+  const cont = $("listaDeudas");
+  cont.innerHTML = "";
+  if(!estado.deudas.length){
+    cont.innerHTML = '<div class="vacio">Todavía no hay deudas registradas.</div>';
+    $("totalDeuda").textContent = "—";
+    return;
+  }
+  const etq = {tarjeta:"Tarjeta", prestamo:"Préstamo", proveedor:"Proveedor"};
+  const hoy = new Date(); hoy.setHours(0,0,0,0);
+
+  estado.deudas.forEach(d => {
+    const ini = Number(d.saldoInicial) || Number(d.saldo) || 1;
+    const pagado = Math.max(0, ini - Number(d.saldo));
+    const pct = Math.min(100, Math.round(pagado / ini * 100));
+
+    let alerta = "";
+    if(d.fechaLim){
+      const lim = new Date(d.fechaLim + "T00:00:00");
+      const dias = Math.round((lim - hoy) / 86400000);
+      if(dias < 0)        alerta = `<div class="alerta-fecha vencida">Venció hace ${Math.abs(dias)} días</div>`;
+      else if(dias <= 15) alerta = `<div class="alerta-fecha">Vence en ${dias} días</div>`;
+    }
+
+    const el = document.createElement("div");
+    el.className = "deuda";
+    el.innerHTML = `
+      <div class="deuda-fila1">
+        <span class="deuda-nombre"></span>
+        <span class="chip ${d.tipo}">${etq[d.tipo]||d.tipo}</span>
+        <span class="deuda-saldo">${fmt(d.saldo)}</span>
+      </div>
+      <div class="deuda-fila2">
+        <span>Tasa <b>${Number(d.tasa||0).toFixed(1)}%</b> anual</span>
+        <span>Mínimo <b>${fmt(d.pagoMin)}</b></span>
+        <span>Interés del mes <b>${fmt(Number(d.saldo)*Number(d.tasa||0)/100/12)}</b></span>
+      </div>
+      ${alerta}
+      <div class="deuda-barra"><div style="width:${pct}%"></div></div>
+      <div class="deuda-fila2" style="margin-top:6px">
+        <span>${pct}% liquidado · ${fmt(pagado)} de ${fmt(ini)}</span>
+      </div>
+      <div class="deuda-acciones">
+        <button data-abono="${d.id}">Registrar abono</button>
+        <button data-edit="${d.id}" class="sutil">Editar saldo</button>
+        <button data-borrar="${d.id}" class="sutil">Eliminar</button>
+      </div>`;
+    el.querySelector(".deuda-nombre").textContent = d.nombre;
+    cont.appendChild(el);
+  });
+
+  $("totalDeuda").textContent = fmt(totalDeudaActual()) + " en total";
+
+  cont.querySelectorAll("[data-abono]").forEach(b => b.onclick = () => abonar(b.dataset.abono));
+  cont.querySelectorAll("[data-edit]").forEach(b => b.onclick = () => editarSaldo(b.dataset.edit));
+  cont.querySelectorAll("[data-borrar]").forEach(b => b.onclick = () => {
+    const d = estado.deudas.find(x=>x.id===b.dataset.borrar);
+    if(confirm(`¿Eliminar "${d.nombre}"?`)){
+      estado.deudas = estado.deudas.filter(x=>x.id!==b.dataset.borrar);
+      guardar();
+    }
+  });
+}
+
+function abonar(id){
+  const d = estado.deudas.find(x=>x.id===id);
+  const txt = prompt(`Abono a ${d.nombre}\nSaldo actual: ${fmt2(d.saldo)}\n\n¿De cuánto?`, "");
+  if(txt === null) return;
+  const monto = parseFloat(txt.replace(/[^0-9.]/g,""));
+  if(!isFinite(monto) || monto <= 0) return;
+  d.saldo = Math.max(0, Number(d.saldo) - monto);
+  guardar();
+}
+
+function editarSaldo(id){
+  const d = estado.deudas.find(x=>x.id===id);
+  const txt = prompt(`Saldo real de ${d.nombre}`, String(d.saldo));
+  if(txt === null) return;
+  const monto = parseFloat(txt.replace(/[^0-9.]/g,""));
+  if(!isFinite(monto) || monto < 0) return;
+  d.saldo = monto;
+  if(monto > Number(d.saldoInicial||0)) d.saldoInicial = monto;
+  guardar();
+}
+
+function renderIngresos(){
+  const meses = totalesPorMes().slice(-12).reverse();
+  const cont = $("listaIngresos");
+  cont.innerHTML = "";
+  const e = escenariosIngreso();
+
+  $("vPiso").textContent  = e.n ? fmt(e.piso)  : "—";
+  $("vMedia").textContent = e.n ? fmt(e.media) : "—";
+  $("vAlto").textContent  = e.n ? fmt(e.alto)  : "—";
+  $("ingNota").textContent = e.n
+    ? `${e.n} ${e.n===1?"mes":"meses"} de historial`
+    : "sin historial";
+
+  if(!meses.length){
+    cont.innerHTML = '<div class="vacio">Registra al menos 3 meses para que las estimaciones sirvan de algo.</div>';
+    return;
+  }
+
+  meses.forEach(m => {
+    const fuentes = estado.ingresos.filter(i => i.mes === m.mes);
+    const el = document.createElement("div");
+    el.className = "lista-mes";
+    const [a,mm] = m.mes.split("-");
+    const nombreMes = new Date(a, mm-1, 1).toLocaleDateString("es-MX",{month:"short",year:"2-digit"});
+    el.innerHTML = `
+      <span class="m">${nombreMes}</span>
+      <span class="f"></span>
+      <span class="v">${fmt(m.total)}</span>
+      <button class="sutil" data-delmes="${m.mes}">×</button>`;
+    el.querySelector(".f").textContent = fuentes.map(f=>f.fuente).join(" + ");
+    cont.appendChild(el);
+  });
+
+  cont.querySelectorAll("[data-delmes]").forEach(b => b.onclick = () => {
+    estado.ingresos = estado.ingresos.filter(i => i.mes !== b.dataset.delmes);
+    guardar();
+  });
+}
+
+function renderGastos(){
+  const cont = $("listaGastos");
+  cont.innerHTML = "";
+  if(!estado.gastos.length){
+    cont.innerHTML = '<div class="vacio">Sin gastos fijos capturados.</div>';
+    $("totalGastos").textContent = "—";
+    return;
+  }
+  estado.gastos.forEach(g => {
+    const el = document.createElement("div");
+    el.className = "lista-mes";
+    el.innerHTML = `<span class="f2"></span><span class="v">${fmt(g.monto)}</span>
+                    <button class="sutil" data-delgasto="${g.id}">×</button>`;
+    el.querySelector(".f2").textContent = g.concepto;
+    cont.appendChild(el);
+  });
+  $("totalGastos").textContent = fmt(totalGastosFijos()) + " al mes";
+  cont.querySelectorAll("[data-delgasto]").forEach(b => b.onclick = () => {
+    estado.gastos = estado.gastos.filter(g => g.id !== b.dataset.delgasto);
+    guardar();
+  });
+}
+
+function renderCapacidadYProyeccion(){
+  const e = escenariosIngreso();
+  const gastos = totalGastosFijos();
+  const caps = {
+    piso:  e.piso  - gastos,
+    media: e.media - gastos,
+    alto:  e.alto  - gastos
+  };
+  const minimos = totalMinimos();
+
+  $("capacidad").innerHTML = `
+    <div class="cap-fila"><span>Ingreso típico (mediana)</span><span>${fmt(e.media)}</span></div>
+    <div class="cap-fila"><span>− Gastos fijos</span><span>${fmt(gastos)}</span></div>
+    <div class="cap-fila total"><span>Disponible para deuda</span><span>${fmt(caps.media)}</span></div>
+    <div class="cap-fila" style="color:var(--hueso-tenue);font-size:13px">
+      <span>Suma de pagos mínimos</span><span>${fmt(minimos)}</span>
+    </div>`;
+
+  const aviso = $("avisoCapacidad");
+  if(estado.deudas.length && caps.piso < minimos && caps.piso > 0){
+    aviso.classList.remove("oculto");
+    aviso.textContent = `En un mes flojo te quedan ${fmt(caps.piso)} y tus mínimos suman ${fmt(minimos)}. Ese mes no alcanza: o guardas colchón en los meses buenos, o hay que renegociar algo.`;
+  }else if(estado.deudas.length && caps.media <= minimos){
+    aviso.classList.remove("oculto");
+    aviso.textContent = `Aun en un mes típico tus mínimos (${fmt(minimos)}) se comen todo lo disponible (${fmt(caps.media)}). Sin bajar gastos fijos o subir ingreso, la deuda no baja.`;
+  }else{
+    aviso.classList.add("oculto");
+  }
+
+  const sims = {
+    piso:  simular(caps.piso,  estado.estrategia),
+    media: simular(caps.media, estado.estrategia),
+    alto:  simular(caps.alto,  estado.estrategia)
+  };
+
+  pintarEscenario("Piso", sims.piso);
+  pintarEscenario("Media", sims.media);
+  pintarEscenario("Alto", sims.alto);
+  pintarHero(sims.media, sims.piso, caps.media);
+  pintarGrafica(sims);
+}
+
+function pintarEscenario(sufijo, sim){
+  const f = $("f"+sufijo), m = $("m"+sufijo), i = $("i"+sufijo);
+  if(!sim.viable){
+    f.textContent = "No alcanza";
+    m.textContent = "el saldo no baja con ese ingreso";
+    i.textContent = "";
+    return;
+  }
+  if(sim.meses === 0){
+    f.textContent = "Libre";
+    m.textContent = "sin deuda registrada";
+    i.textContent = "";
+    return;
+  }
+  f.textContent = capitalizar(fechaEnMeses(sim.meses));
+  const a = Math.floor(sim.meses/12), r = sim.meses%12;
+  m.textContent = a ? `${sim.meses} meses (${a} año${a>1?"s":""}${r?` y ${r} m`:""})` : `${sim.meses} meses`;
+  i.textContent = sim.interes > 1 ? `${fmt(sim.interes)} en intereses` : "sin intereses";
+}
+
+function pintarHero(simMedia, simPiso, capMedia){
+  const totalIni = estado.deudas.reduce((s,d)=>s+(Number(d.saldoInicial)||Number(d.saldo)||0),0);
+  const actual = totalDeudaActual();
+  const pct = totalIni > 0 ? Math.min(100, Math.round((totalIni-actual)/totalIni*100)) : 0;
+
+  $("avanceFill").style.width = pct + "%";
+  $("avanceTxt").textContent = `${pct}% liquidado`;
+  $("avanceSaldo").textContent = `${fmt(actual)} restantes`;
+
+  if(!estado.deudas.length){
+    $("heroFecha").textContent = "Sin deuda";
+    $("heroMeses").textContent = "";
+    $("heroNota").textContent = "Agrega tus deudas para calcular la salida.";
+    return;
+  }
+  if(!simMedia.viable){
+    $("heroFecha").textContent = "No alcanza";
+    $("heroMeses").textContent = "";
+    $("heroNota").textContent = "Con el ingreso típico y los gastos fijos actuales, el saldo no baja. Ajusta gastos o revisa las tasas.";
+    return;
+  }
+  $("heroFecha").textContent = capitalizar(fechaEnMeses(simMedia.meses));
+  $("heroMeses").textContent = `en ${simMedia.meses} meses`;
+
+  const dif = simPiso.viable ? simPiso.meses - simMedia.meses : null;
+  $("heroNota").textContent = dif !== null && dif > 0
+    ? `Si todos los meses fueran flojos, te tomaría ${dif} meses más. Cada peso que abones por encima de ${fmt(Math.round(capMedia))} adelanta esta fecha.`
+    : `Cada peso que abones por encima de ${fmt(Math.round(capMedia))} al mes adelanta esta fecha.`;
+}
+
+function pintarGrafica(sims){
+  const svg = $("graf");
+  const W = 700, H = 200, P = 6;
+  const curvas = [
+    {c: sims.alto.viable  ? sims.alto.curva  : null, color:"#6350A0"},
+    {c: sims.media.viable ? sims.media.curva : null, color:"#2E8B67"},
+    {c: sims.piso.viable  ? sims.piso.curva  : null, color:"#B4443C"}
+  ].filter(x => x.c && x.c.length > 1);
+
+  if(!curvas.length){
+    svg.innerHTML = `<text x="${W/2}" y="${H/2}" fill="#667872" font-size="13"
+      text-anchor="middle" font-family="IBM Plex Sans">Sin proyección todavía</text>`;
+    return;
+  }
+
+  const maxX = Math.max(...curvas.map(c => c.c.length - 1));
+  const maxY = Math.max(...curvas.map(c => c.c[0]));
+  const px = i => P + (i / maxX) * (W - P*2);
+  const py = v => H - P - (v / maxY) * (H - P*2);
+
+  let html = "";
+  // línea base
+  html += `<line x1="${P}" y1="${H-P}" x2="${W-P}" y2="${H-P}" stroke="#C6D2CD" stroke-width="1"/>`;
+  // guías por año
+  for(let a = 12; a <= maxX; a += 12){
+    html += `<line x1="${px(a)}" y1="${P}" x2="${px(a)}" y2="${H-P}" stroke="#E4EAE7" stroke-width="1"/>`;
+    html += `<text x="${px(a)}" y="${H-P-4}" fill="#8B9A94" font-size="9"
+      font-family="IBM Plex Mono" text-anchor="middle">${a/12}a</text>`;
+  }
+
+  curvas.forEach(({c,color}) => {
+    const d = c.map((v,i) => `${i?"L":"M"}${px(i).toFixed(1)},${py(v).toFixed(1)}`).join(" ");
+    html += `<path d="${d}" fill="none" stroke="${color}" stroke-width="2"
+      stroke-linejoin="round" stroke-linecap="round"/>`;
+    html += `<circle cx="${px(c.length-1)}" cy="${py(0)}" r="3.5" fill="${color}"/>`;
+  });
+
+  svg.innerHTML = html;
+}
+
+/* ==========================================================
+   FORMULARIOS
+   ========================================================== */
+function alternar(id, mostrar){ $(id).classList.toggle("oculto", !mostrar); }
+
+$("btnNuevaDeuda").onclick = () => { alternar("formDeuda", true); $("dNombre").focus(); };
+$("btnCancelarDeuda").onclick = () => alternar("formDeuda", false);
+$("dTipo").onchange = () => {
+  $("wrapFechaLim").style.display = $("dTipo").value === "proveedor" ? "" : "none";
+  if($("dTipo").value === "proveedor" && !$("dTasa").value) $("dTasa").value = 0;
+};
+$("dTipo").onchange();
+
+$("btnGuardarDeuda").onclick = () => {
+  const nombre = $("dNombre").value.trim();
+  const saldo = parseFloat($("dSaldo").value);
+  if(!nombre || !isFinite(saldo) || saldo <= 0){
+    alert("Falta el nombre o el saldo de la deuda.");
+    return;
+  }
+  estado.deudas.push({
+    id: uid(),
+    nombre,
+    tipo: $("dTipo").value,
+    saldo,
+    saldoInicial: saldo,
+    tasa: parseFloat($("dTasa").value) || 0,
+    pagoMin: parseFloat($("dPago").value) || 0,
+    fechaLim: $("dTipo").value === "proveedor" ? $("dFechaLim").value : ""
+  });
+  ["dNombre","dSaldo","dTasa","dPago","dFechaLim"].forEach(i => $(i).value = "");
+  alternar("formDeuda", false);
+  guardar();
+};
+
+$("btnNuevoIngreso").onclick = () => {
+  alternar("formIngreso", true);
+  if(!$("iMes").value){
+    const d = new Date();
+    $("iMes").value = `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}`;
+  }
+  $("iMonto").focus();
+};
+$("btnCancelarIngreso").onclick = () => alternar("formIngreso", false);
+$("btnGuardarIngreso").onclick = () => {
+  const mes = $("iMes").value, monto = parseFloat($("iMonto").value);
+  if(!mes || !isFinite(monto) || monto <= 0){
+    alert("Falta el mes o el monto.");
+    return;
+  }
+  const fuente = $("iFuente").value;
+  const ya = estado.ingresos.find(i => i.mes === mes && i.fuente === fuente);
+  if(ya) ya.monto = monto;
+  else estado.ingresos.push({id:uid(), mes, fuente, monto});
+  $("iMonto").value = "";
+  alternar("formIngreso", false);
+  guardar();
+};
+
+$("btnNuevoGasto").onclick = () => { alternar("formGasto", true); $("gConcepto").focus(); };
+$("btnCancelarGasto").onclick = () => alternar("formGasto", false);
+$("btnGuardarGasto").onclick = () => {
+  const concepto = $("gConcepto").value.trim();
+  const monto = parseFloat($("gMonto").value);
+  if(!concepto || !isFinite(monto) || monto <= 0){
+    alert("Falta el concepto o el monto.");
+    return;
+  }
+  estado.gastos.push({id:uid(), concepto, monto});
+  $("gConcepto").value = ""; $("gMonto").value = "";
+  alternar("formGasto", false);
+  guardar();
+};
+
+document.querySelectorAll("#toggleEstrategia button").forEach(b => b.onclick = () => {
+  estado.estrategia = b.dataset.e;
+  guardar();
+});
+
+$("btnEntrar").onclick = entrar;
+$("btnSalir").onclick = salir;
+$("pClave").addEventListener("keydown", e => { if(e.key === "Enter") entrar(); });
+$("pCorreo").addEventListener("keydown", e => { if(e.key === "Enter") $("pClave").focus(); });
+
+iniciar();
+</script>
+</body>
+</html>
