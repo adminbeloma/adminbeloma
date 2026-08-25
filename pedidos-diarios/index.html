@@ -956,9 +956,12 @@ async function buscarPedidoExistente(){
     }
     const doc = snap.docs[0];
     pedidoExistente = {id: doc.id, ...doc.data()};
+    const fechaPedido = pedidoExistente.fecha || hoyISO();
+    const esOtroDia = fechaPedido !== hoyISO();
     document.getElementById("infoPedidoExistente").style.display = "block";
     document.getElementById("infoPedidoExistenteTexto").textContent =
-      `✏️ Se van a AGREGAR las prendas de abajo al pedido "${pedidoExistente.folio}" (${pedidoExistente.cliente}, ya tiene ${pedidoExistente.totalPiezas} pieza(s)).`;
+      `✏️ Se van a AGREGAR las prendas de abajo al pedido "${pedidoExistente.folio}" (${pedidoExistente.cliente}, fecha: ${fechaPedido}, ya tiene ${pedidoExistente.totalPiezas} pieza(s)).` +
+      (esOtroDia ? ` ⚠️ Es de OTRO DÍA — no se va a descontar inventario.` : '');
     mostrarMsg("Pedido encontrado. Agrega las prendas nuevas en la tabla y presiona 'Guardar todo'.", "ok");
   }catch(err){
     mostrarMsg("Error al buscar: " + err.message, "error");
@@ -982,9 +985,15 @@ async function guardarPedido(){
   // resto del sistema (varias prendas del mismo paquete = varios renglones
   // que comparten folio, NO un solo renglón con todo apachurrado adentro). ----
   if(pedidoExistente){
+    // OJO: aquí la fecha que importa es la del pedido ENCONTRADO
+    // (pedidoExistente.fecha), no la del campo "Fecha del pedido" de arriba
+    // — ese campo no tiene nada que ver cuando estás agregando renglones a
+    // un folio que ya existe de otro día.
+    const esFechaHoyExistente = (pedidoExistente.fecha || hoyISO()) === hoyISO();
     const confirmar = confirm(
       `Vas a agregar ${items.length} prenda(s) NUEVA(S) al folio "${pedidoExistente.folio}" ` +
-      `(cliente: ${pedidoExistente.cliente || pedidoExistente.canal}).\n\n` +
+      `(cliente: ${pedidoExistente.cliente || pedidoExistente.canal}, fecha del pedido: ${pedidoExistente.fecha || '(sin fecha)'}).\n\n` +
+      (esFechaHoyExistente ? '' : '⚠️ Este pedido es de OTRO DÍA — no se va a descontar inventario por estas prendas nuevas.\n\n') +
       `¿Es correcto? Si en realidad querías un PEDIDO NUEVO E INDEPENDIENTE (otra persona, ` +
       `sin relación con este folio), dale Cancelar aquí y primero presiona el botón ` +
       `"Cancelar" junto al recuadro de búsqueda de folio, arriba.`
@@ -1009,7 +1018,7 @@ async function guardarPedido(){
           orden: ordenBase++,
           creadoEn: firebase.firestore.FieldValue.serverTimestamp()
         });
-        const sinMatch = esFechaHoy ? await descontarStockPlayerasDePedido(itemsPedido, []) : [];
+        const sinMatch = esFechaHoyExistente ? await descontarStockPlayerasDePedido(itemsPedido, []) : [];
         if(sinMatch.length) sinMatchAcumulado.push(sinMatch);
         guardados++;
       }
@@ -1562,13 +1571,13 @@ window.revisarInventarioAlCapturar = async function(trId){
   const tr = document.getElementById(trId);
   if(!tr) return;
   if(tr.querySelector(".it-propia")?.checked) return; // el cliente trae su propia playera — no hay nada que cruzar
-  // Si el pedido es para una fecha DISTINTA a hoy (captura de un día
-  // anterior), no se toca ningún inventario — ni el de playeras estampadas
-  // ni el de playeras en blanco. Se asume que esa pieza ya se resolvió/usó
-  // en su momento, y descontarla ahora solo inflaría el movimiento de hoy
-  // con algo que ya pasó.
-  const fechaSel = document.getElementById("fFecha")?.value;
-  if(fechaSel && fechaSel !== hoyISO()) return;
+  // Si el pedido es para una fecha DISTINTA a hoy, no se toca ningún
+  // inventario — ni el de playeras estampadas ni el de playeras en blanco.
+  // Cuando se está agregando a un pedido YA EXISTENTE (buscado por folio),
+  // la fecha que manda es la de ESE pedido (pedidoExistente.fecha), no la
+  // del campo "Fecha del pedido" de arriba (que en ese modo no aplica).
+  const fechaARevisar = pedidoExistente ? (pedidoExistente.fecha||hoyISO()) : document.getElementById("fFecha")?.value;
+  if(fechaARevisar && fechaARevisar !== hoyISO()) return;
   const descripcionInput = tr.querySelector(".it-desc");
   const tallaSelect = tr.querySelector(".it-talla");
   if(!descripcionInput || !tallaSelect) return;
