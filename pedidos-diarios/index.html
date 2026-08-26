@@ -592,7 +592,7 @@ function avisarSinMatchPlayeras(listaSinMatch){
 
 function hoyISO(){ const d = new Date(); return d.getFullYear()+"-"+String(d.getMonth()+1).padStart(2,"0")+"-"+String(d.getDate()).padStart(2,"0"); }
 function mostrarFechaHoy(){ const opciones = {weekday:'long', year:'numeric', month:'long', day:'numeric'}; document.getElementById("fechaHoyTxt").textContent = new Date().toLocaleDateString('es-MX', opciones); }
-function mostrarMsg(texto, tipo){ const el = document.getElementById("msgGlobal"); el.textContent = texto; el.className = "msg " + tipo; setTimeout(()=>{ el.className = "msg"; }, 3500); }
+function mostrarMsg(texto, tipo){ const el = document.getElementById("msgGlobal"); el.textContent = texto; el.className = "msg " + tipo; const duracion = tipo==="error" ? 10000 : 3500; setTimeout(()=>{ el.className = "msg"; }, duracion); }
 
 document.querySelectorAll(".tab-btn").forEach(btn=>{
   btn.addEventListener("click", ()=>{
