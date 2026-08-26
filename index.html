@@ -2202,7 +2202,7 @@ tbody td{padding:11px 14px;font-size:13.5px;vertical-align:middle;}
 </div>
 
 <!-- MODAL CLIENTE -->
-<div class="modal-overlay" id="modal-cliente">
+<div class="modal-overlay" id="modal-cliente" style="z-index:1002;">
   <div class="modal">
     <div class="modal-header"><h2>Nuevo Cliente</h2><button class="modal-close" onclick="confirmarCerrarModal('modal-cliente')">×</button></div>
     <div class="modal-body">
@@ -3643,7 +3643,7 @@ window.openVentaModal=async function(tipo, ventaId){
   if(tipo!=='edit'){
     onCanalChange(); // solo para venta nueva — en edición ya se restauró folio/envío arriba
   } else {
-    toggleEnvioFields(); // por si acaso, sin tocar el folio ya restaurado
+    actualizarCamposSegunCanal(document.getElementById('v-canal').value); // método de pago, cliente, envío, campos ML — sin tocar el folio
   }
   openModal('modal-venta');
 };
@@ -12419,8 +12419,20 @@ const CANALES_MARKETPLACE = ['Mercado Libre','Amazon','Shopify'];
 
 window.onCanalChange = function(){
   const canal = document.getElementById('v-canal').value;
-  toggleEnvioFields();
   asignarFolioSegunCanal(canal);
+  actualizarCamposSegunCanal(canal);
+};
+
+// Todo lo que depende del canal PERO nunca debe tocar el folio (por eso está
+// separado de asignarFolioSegunCanal): visibilidad del método de pago,
+// textos/botón de cliente, campos de ciudad/estado de ML, y campos de envío.
+// Se llama tanto al cambiar el canal a mano (onCanalChange) como al ABRIR
+// una venta para EDITAR — antes, al editar, esto nunca se recalculaba, así
+// que si en algún momento se editaba/creaba una venta de Mercado
+// Libre/Amazon/Shopify (que oculta el método de pago), esa sección se
+// quedaba oculta para TODAS las ventas siguientes hasta recargar la página.
+function actualizarCamposSegunCanal(canal){
+  toggleEnvioFields();
 
   // Método de pago: ocultar en marketplaces
   const secPago = document.getElementById('v-metodo-pago-section');
@@ -12428,7 +12440,6 @@ window.onCanalChange = function(){
 
   // Cliente: comportamiento según canal
   const clienteInput = document.getElementById('v-cliente');
-  const clienteBuscarWrap = document.getElementById('v-cliente-buscar-wrap');
   const clienteLabel = document.getElementById('v-cliente-label');
   if(CANALES_MARKETPLACE.includes(canal)){
     if(clienteInput) clienteInput.placeholder = 'Nombre del cliente';
@@ -12448,7 +12459,7 @@ window.onCanalChange = function(){
   const mlEstadoGroup = document.getElementById('v-ml-estado-group');
   if(mlCiudadGroup) mlCiudadGroup.style.display = canal==='Mercado Libre' ? '' : 'none';
   if(mlEstadoGroup) mlEstadoGroup.style.display = canal==='Mercado Libre' ? '' : 'none';
-};
+}
 
 // ══════════════════════════════════════════════════════
 //  BÚSQUEDA DE CLIENTES EN NUEVA VENTA
