@@ -4203,7 +4203,9 @@ async function ajustarStockPlayerasPorConsumos(consumos, signo){
     const p=buscarPlayeraStock(c);
     if(!p){ sinMatch.push(c); continue; }
     const nuevoStock=Math.max(0,+(+p.stock-signo*c.cantidad).toFixed(2));
-    await setDoc(doc(db,'pl_playeras',p.id),{...p,stock:nuevoStock});
+    // {merge:true} para tocar SOLO el stock — nunca el resto del documento
+    // (costo, nombre, etc.), sin importar qué tan fresca esté la copia local.
+    await setDoc(doc(db,'pl_playeras',p.id),{stock:nuevoStock},{merge:true});
     p.stock=nuevoStock; // refleja el cambio en el arreglo local por si otro consumo de esta misma venta apunta al mismo producto
   }
   return sinMatch;
@@ -6175,7 +6177,7 @@ window.guardarPlayera=async function(){
   const colorSel=document.getElementById('p-color').value;
   const colorFinal=colorSel==='Otro'?document.getElementById('p-color-otro').value.trim():colorSel;
   const existentePrev=playeras.find(x=>x.id===id);
-  const data={id,nombre,tipo:document.getElementById('p-tipo').value,genero:document.getElementById('p-genero').value,categoria:document.getElementById('p-categoria').value,talla:tallaFinal,color:colorFinal,stock:+document.getElementById('p-stock').value||0,stockMin:+document.getElementById('p-stock-min').value||0,proveedor:proveedorFinal,modelo:modeloFinal,costo:+document.getElementById('p-costo').value||0,notas:document.getElementById('p-notas').value,imagen:imagenUrl,creado:existentePrev?.creado||new Date().toISOString()};
+  const data={id,nombre,tipo:document.getElementById('p-tipo').value,genero:document.getElementById('p-genero').value,categoria:document.getElementById('p-categoria').value,talla:tallaFinal,color:colorFinal,stock:+document.getElementById('p-stock').value||0,stockMin:+document.getElementById('p-stock-min').value||0,proveedor:proveedorFinal,modelo:modeloFinal,costo:+document.getElementById('p-costo').value||0,notas:document.getElementById('p-notas').value,imagen:imagenUrl,creado:existentePrev?.creado||new Date().toISOString(),orden:existentePrev?.orden};
   await setDoc(doc(db,'pl_playeras',id),data);
   closeModal('modal-playera');
   toast('✅ Playera guardada');
@@ -6425,11 +6427,17 @@ window.onDropPlayera=async function(ev, idDestino){
 
   // Renumerar todas las tarjetas visibles según el nuevo orden (de 10 en 10)
   // y guardar el campo "orden" de cada una.
+  // IMPORTANTE: se usa {merge:true} para tocar SOLO el campo "orden" — antes
+  // se mandaba el objeto completo ({...lista[i]}), lo cual sobreescribía
+  // TODO el documento (incluido el costo) con lo que hubiera en memoria en
+  // ese momento. Si esa copia local no estaba 100% al día (por ejemplo con
+  // dos pestañas abiertas, o alguien más editando al mismo tiempo), el
+  // precio se revertía sin que nadie lo hubiera tocado a propósito.
   try{
     for(let i=0;i<lista.length;i++){
       const nuevoOrden=(i+1)*10;
       if(lista[i].orden!==nuevoOrden){
-        await setDoc(doc(db,'pl_playeras',lista[i].id),{...lista[i],orden:nuevoOrden});
+        await setDoc(doc(db,'pl_playeras',lista[i].id),{orden:nuevoOrden},{merge:true});
         lista[i].orden=nuevoOrden;
       }
     }
@@ -6622,7 +6630,10 @@ async function aplicarLineaCompraPlayera(c, cant, costoUnitNuevo, fecha, referen
       const costoPrev=+existente.costo||0;
       const stockNuevo=stockPrev+cant;
       const costoPromedio=stockNuevo>0?((stockPrev*costoPrev)+(cant*costoUnitNuevo))/stockNuevo:costoUnitNuevo;
-      await setDoc(doc(db,'pl_playeras',existente.id),{...existente,stock:+stockNuevo.toFixed(2),costo:+costoPromedio.toFixed(2)});
+      // {merge:true} para tocar SOLO stock y costo — nunca el resto del
+      // documento (nombre, categoría, imagen, notas...), sin importar qué
+      // tan fresca esté la copia local en memoria en ese momento.
+      await setDoc(doc(db,'pl_playeras',existente.id),{stock:+stockNuevo.toFixed(2),costo:+costoPromedio.toFixed(2)},{merge:true});
     } else {
       const nuevoId=uid();
       await setDoc(doc(db,'pl_playeras',nuevoId),{
