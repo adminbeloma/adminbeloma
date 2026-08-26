@@ -3535,6 +3535,11 @@ window.openVentaModal=async function(tipo, ventaId){
   document.getElementById('venta-id').value='';
   ['v-cliente','v-notas','v-proveedor','v-banco-origen'].forEach(f=>{const el=document.getElementById(f);if(el)el.value='';});
   document.getElementById('v-fecha').value=hoy();
+  // Poner el valor por código NO dispara el "onchange" del campo — así que
+  // sin esto, si en una venta anterior habías puesto otra fecha y viste la
+  // advertencia de "no es hoy", esa advertencia se quedaba pegada en
+  // pantalla con la fecha vieja aunque el campo ya mostrara la correcta.
+  verificarFechaVenta();
   document.getElementById('v-canal').value=tipo==='ml'?'Mercado Libre':'Local';
   document.getElementById('v-descuento').value='0';
   document.getElementById('v-total').value='';
@@ -3573,6 +3578,7 @@ window.openVentaModal=async function(tipo, ventaId){
     if(v){
       document.getElementById('venta-id').value=v.id;
       document.getElementById('v-fecha').value=v.fecha||hoy();
+      verificarFechaVenta(); // igual que al abrir nueva venta — si no, el aviso de "otra fecha" se puede quedar pegado de una venta anterior
       document.getElementById('v-canal').value=v.canal||'Local';
       document.getElementById('v-cliente').value=v.cliente||'';
       document.getElementById('v-descuento').value=v.descuento||0;
