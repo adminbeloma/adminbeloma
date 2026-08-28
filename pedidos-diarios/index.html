@@ -663,7 +663,7 @@ function agregarFilaNuevaHoy(){
     <td><input type="text" class="nh-cliente" placeholder="Nombre / opcional"></td>
     <td><input type="text" class="nh-ciudad" placeholder="Ciudad" value="Mazatlán, Sinaloa"></td>
     <td><select class="nh-genero" onchange="onGeneroFilaChangeNH('${id}')">${opcionesGenero("Caballero")}</select></td>
-    <td><select class="nh-talla">${opcionesTalla("Caballero","")}</select></td>
+    <td><select class="nh-talla" onchange="revisarInventarioAlCapturar('${id}','nh-')">${opcionesTalla("Caballero","")}</select></td>
     <td>
       <select class="nh-color" onchange="onColorFilaChangeNH('${id}')">${opcionesColor("Negro","Caballero")}</select>
       <input type="text" class="nh-color-otro" placeholder="Especifica el color" style="margin-top:4px;display:none;">
@@ -676,7 +676,7 @@ function agregarFilaNuevaHoy(){
       <select class="nh-modelo" onchange="onModeloFilaChangeNH('${id}')">${opcionesModelo("","")}</select>
       <input type="text" class="nh-modelo-otro" placeholder="Especifica el modelo" style="margin-top:4px;display:none;">
     </td>
-    <td><input type="text" class="nh-desc" placeholder="Diseño / descripción"></td>
+    <td><input type="text" class="nh-desc" placeholder="Diseño / descripción" onblur="revisarInventarioAlCapturar('${id}','nh-')"></td>
     <td style="text-align:center;">
       <label style="display:flex;flex-direction:column;align-items:center;gap:2px;font-size:.68rem;cursor:pointer;" title="El cliente trae su propia playera — no se descuenta nada del inventario">
         <input type="checkbox" class="nh-propia">
@@ -733,6 +733,7 @@ async function guardarNuevosHoy(){
         color, marca, modelo,
         descripcion: tr.querySelector(".nh-desc").value.trim(),
         cantidad: parseInt(tr.querySelector(".nh-cant").value) || 1,
+        desdeInventarioImpreso: tr.dataset.desdeInventarioImpreso==='1',
         clientePropiaPlayera: tr.querySelector(".nh-propia")?.checked||false
       }];
       await db.collection(COLECCION).add({
@@ -792,7 +793,7 @@ function agregarFilaItem(valores){
     <td><input type="text" class="it-cliente" placeholder="Nombre / opcional"></td>
     <td><input type="text" class="it-ciudad" placeholder="Ciudad"></td>
     <td><select class="it-genero" onchange="onGeneroFilaChange('${id}')">${opcionesGenero(generoInicial)}</select></td>
-    <td><select class="it-talla">${opcionesTalla(generoInicial, valores?valores.talla:"")}</select></td>
+    <td><select class="it-talla" onchange="revisarInventarioAlCapturar('${id}')">${opcionesTalla(generoInicial, valores?valores.talla:"")}</select></td>
     <td>
       <select class="it-color" onchange="onColorFilaChange('${id}')">${opcionesColor(esColorOtro ? "Otro" : colorInicial, generoInicial)}</select>
       <input type="text" class="it-color-otro" placeholder="Especifica el color" style="margin-top:4px;display:${esColorOtro?'block':'none'};" value="${esColorOtro?colorInicial:''}">
@@ -1567,26 +1568,32 @@ window.onClientePropiaChange=function(trId){
 // así, al guardar el pedido, NO se le descuenta también una playera en
 // blanco: esa pieza ya estaba hecha desde antes, no se va a imprimir una
 // nueva ahora, así que no tiene caso restarle al inventario de tela cruda.
-window.revisarInventarioAlCapturar = async function(trId){
+// Funciona igual desde "Capturar pedido" (prefijo "it-") y desde "Pedidos
+// de hoy" (prefijo "nh-") — antes solo existía en el primero.
+window.revisarInventarioAlCapturar = async function(trId, prefijo){
+  prefijo = prefijo || "it-";
   const tr = document.getElementById(trId);
   if(!tr) return;
-  if(tr.querySelector(".it-propia")?.checked) return; // el cliente trae su propia playera — no hay nada que cruzar
+  if(tr.querySelector("."+prefijo+"propia")?.checked) return; // el cliente trae su propia playera — no hay nada que cruzar
   // Si el pedido es para una fecha DISTINTA a hoy, no se toca ningún
   // inventario — ni el de playeras estampadas ni el de playeras en blanco.
-  // Cuando se está agregando a un pedido YA EXISTENTE (buscado por folio),
-  // la fecha que manda es la de ESE pedido (pedidoExistente.fecha), no la
-  // del campo "Fecha del pedido" de arriba (que en ese modo no aplica).
-  const fechaARevisar = pedidoExistente ? (pedidoExistente.fecha||hoyISO()) : document.getElementById("fFecha")?.value;
-  if(fechaARevisar && fechaARevisar !== hoyISO()) return;
-  const descripcionInput = tr.querySelector(".it-desc");
-  const tallaSelect = tr.querySelector(".it-talla");
+  // "Pedidos de hoy" (nh-) siempre es para hoy, por definición — solo
+  // "Capturar pedido" (it-) tiene el campo de fecha editable. Cuando se
+  // está agregando a un pedido YA EXISTENTE (buscado por folio), la fecha
+  // que manda es la de ESE pedido (pedidoExistente.fecha), no la del campo
+  // "Fecha del pedido" de arriba (que en ese modo no aplica).
+  if(prefijo==="it-"){
+    const fechaARevisar = pedidoExistente ? (pedidoExistente.fecha||hoyISO()) : document.getElementById("fFecha")?.value;
+    if(fechaARevisar && fechaARevisar !== hoyISO()) return;
+  }
+  const descripcionInput = tr.querySelector("."+prefijo+"desc");
+  const tallaSelect = tr.querySelector("."+prefijo+"talla");
   if(!descripcionInput || !tallaSelect) return;
   const descripcion = descripcionInput.value.trim();
   const talla = tallaSelect.value;
   if(!descripcion || !talla) return;
   if(!inventarioCache.length) await cargarInventarioSilencioso();
 
-  const clave = claveInventario("", talla, descripcion); // se ignora género en la búsqueda para no perder coincidencias
   const match = inventarioCache.find(i=>
     normTalla(i.talla)===normTalla(talla) &&
     normDescripcion(i.descripcion)===normDescripcion(descripcion) &&
