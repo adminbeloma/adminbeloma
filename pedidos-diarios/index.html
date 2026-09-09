@@ -605,6 +605,16 @@ document.querySelectorAll(".tab-btn").forEach(btn=>{
   });
 });
 
+// Atajo desde Histórico: te lleva directo a "Capturar pedido" con el folio
+// ya buscado, listo para que agregues el renglón nuevo sin tener que
+// copiar el folio a mano y cambiar de pestaña tú mismo.
+window.agregarRenglonAPedidoHistorico = function(folio){
+  document.querySelector('.tab-btn[data-tab="captura"]').click();
+  document.getElementById("buscarFolioExistente").value = folio;
+  buscarPedidoExistente();
+  document.getElementById("buscarFolioExistente").scrollIntoView({behavior:"smooth", block:"center"});
+};
+
 window.onTipoClienteChange = function(){
   if(document.getElementById("fTipoCliente").value === "Local"){
     document.querySelectorAll("#itemsBody .it-ciudad").forEach(inp=>{ if(!inp.value.trim()) inp.value = "Mazatlán, Sinaloa"; });
@@ -1983,6 +1993,7 @@ async function buscarHistorico(){
         <td>${p.fecha}</td><td>${p.folio}</td><td>${badgeCanal(p.canal)}</td>
         <td>${p.cliente}</td><td>${p.ciudad||'—'}</td><td>${p.tipoCliente}</td><td>${p.totalPiezas}</td>
         <td style="white-space:nowrap;">
+          <button class="btn btn-secundario btn-chico" onclick="agregarRenglonAPedidoHistorico('${p.folio}')" title="Agregar otra prenda a este mismo folio">➕</button>
           <button class="btn btn-secundario btn-chico" onclick="abrirEditarPedido('${p.id}','historico')">✏️</button>
           <button class="btn btn-rojo btn-chico" onclick="eliminarPedido('${p.id}','historico')">🗑</button>
         </td>
