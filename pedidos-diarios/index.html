@@ -254,6 +254,7 @@
             <option value="Otro">Otro</option>
           </select>
         </div>
+        <div><label>Lote (opcional, ej. LOTE-260910-02)</label><input type="text" id="hLote" placeholder="Déjalo vacío para ver todo"></div>
         <div><button class="btn btn-primario" onclick="buscarHistorico()">Buscar</button></div>
       </div>
       <div id="tablaHistCont"><div class="vacio">Elige un rango de fechas y presiona Buscar.</div></div>
@@ -717,6 +718,10 @@ async function guardarNuevosHoy(){
   let guardados = 0;
   let ordenBase = Date.now();
   const sinMatchAcumulado = [];
+  // Un solo "folio de lote" para TODA esta tanda de "Pedidos de hoy" que se
+  // guarda junta ahorita — igual que en "Capturar pedido", para que dos
+  // tandas del mismo día no se vean revueltas entre sí.
+  const folioLote = await obtenerFolioDeLote(fecha);
   try{
     for(const tr of filas){
       const canal = tr.querySelector(".nh-canal").value;
@@ -757,6 +762,7 @@ async function guardarNuevosHoy(){
         totalPiezas: parseInt(tr.querySelector(".nh-cant").value) || 1,
         piezasPaquete: parseInt(tr.querySelector(".nh-paquete").value) || 0,
         orden: ordenBase++,
+        loteGeneral: folioLote,
         creadoEn: firebase.firestore.FieldValue.serverTimestamp()
       });
       // Descuenta stock de Playeras en blanco según lo que se acaba de capturar
@@ -764,7 +770,7 @@ async function guardarNuevosHoy(){
       if(sinMatch.length) sinMatchAcumulado.push(sinMatch);
       guardados++;
     }
-    mostrarMsg(`✔ ${guardados} pedido(s) nuevo(s) guardado(s)`, "ok");
+    mostrarMsg(`✔ ${guardados} pedido(s) nuevo(s) guardado(s) — lote ${folioLote}`, "ok");
     avisarSinMatchPlayeras(sinMatchAcumulado);
     document.getElementById("nuevosHoyBody").innerHTML = "";
     const mNH = document.getElementById("chkTodosNH");
@@ -935,6 +941,25 @@ async function obtenerConsecutivoFolio(canal, fecha){
   return {prefijo, siguiente};
 }
 
+// "Folio de lote": identifica TODA una tanda que se guarda de un solo golpe
+// con "Guardar todo" (aunque sean 40 o 50 renglones distintos, cada uno con
+// su propio folio individual) — así, dos tandas capturadas el mismo día
+// (ej. una en la mañana y otra en la noche) quedan claramente separadas en
+// vez de verse como si fueran una sola cosa. Formato: LOTE-YYMMDD-## (##
+// reinicia cada día, va subiendo por cada "Guardar todo" que se presiona).
+async function obtenerFolioDeLote(fecha){
+  const contadorRef = db.collection("folioContadoresDiarios").doc(`LOTE_${fecha}`);
+  const siguiente = await db.runTransaction(async (tx)=>{
+    const snap = await tx.get(contadorRef);
+    const actual = snap.exists ? (+snap.data().ultimo || 0) : 0;
+    const proximo = actual + 1;
+    tx.set(contadorRef, {ultimo: proximo, fecha, actualizado: new Date().toISOString()}, {merge:true});
+    return proximo;
+  });
+  const [yy, mm, dd] = fecha.split("-");
+  return `LOTE-${yy.slice(2)}${mm}${dd}-${String(siguiente).padStart(2,"0")}`;
+}
+
 // Pone las prendas de MercadoLibre primero en la lista, dejando todo lo demás
 // (Local, Foráneo, Shopify, Tienda Nube, Otro) al final — sin alterar el orden
 // de captura dentro de cada uno de esos dos bloques.
@@ -1037,6 +1062,7 @@ async function guardarPedido(){
           totalPiezas: it.cantidad,
           piezasPaquete: it.piezasPaquete || pedidoExistente.piezasPaquete || 0,
           orden: ordenBase++,
+          loteGeneral: pedidoExistente.loteGeneral || pedidoExistente.folio,
           creadoEn: firebase.firestore.FieldValue.serverTimestamp()
         });
         const sinMatch = esFechaHoyExistente ? await descontarStockPlayerasDePedido(itemsPedido, []) : [];
@@ -1061,6 +1087,11 @@ async function guardarPedido(){
     let guardados = 0;
     let ordenBase = Date.now();
     const sinMatchAcumulado = [];
+    // Un solo "folio de lote" para TODA esta tanda (todos los renglones que
+    // se guardan juntos ahorita, con este clic de "Guardar todo") — así, si
+    // más tarde guardas otra tanda distinta (aunque sea el mismo día), cada
+    // una queda claramente separada en vez de verse mezcladas.
+    const folioLote = await obtenerFolioDeLote(fecha);
     // Folio automático: solo aplica a Local y Foráneo (MercadoLibre/Shopify/etc.
     // ya traen su propio folio real, que se escribe a mano en el campo Folio).
     // Cada renglón pide su folio por separado (transacción atómica en Firestore),
@@ -1085,13 +1116,14 @@ async function guardarPedido(){
         totalPiezas: it.cantidad,
         piezasPaquete: it.piezasPaquete || 0,
         orden: ordenBase++,
+        loteGeneral: folioLote,
         creadoEn: firebase.firestore.FieldValue.serverTimestamp()
       });
       const sinMatch = esFechaHoy ? await descontarStockPlayerasDePedido(itemsPedido, []) : [];
       if(sinMatch.length) sinMatchAcumulado.push(sinMatch);
       guardados++;
     }
-    mostrarMsg(`${guardados} pedido(s) guardado(s) ✔`, "ok");
+    mostrarMsg(`${guardados} pedido(s) guardado(s) — lote ${folioLote} ✔`, "ok");
     avisarSinMatchPlayeras(sinMatchAcumulado);
     limpiarFormulario();
     // Sin esto, la lista en memoria de "Pedidos de hoy" (la que usan tanto
@@ -1680,12 +1712,13 @@ function pintarTablaPedidos(lista, contenedor){
   if(lista.length === 0){ contenedor.innerHTML = '<div class="vacio">No hay pedidos registrados.</div>'; return; }
   let html = barraSeleccionHTML("hoy") + `<table><thead><tr>
       <th class="col-chk"><input type="checkbox" id="chkTodos-hoy" onchange="toggleTodosPedidos(this,'hoy')" title="Seleccionar todos"></th>
-      <th>Folio</th><th>Canal</th><th>Cliente</th><th>Ciudad</th><th>Tipo</th><th>Piezas</th><th>Detalle</th><th>Acciones</th></tr></thead><tbody>`;
+      <th>Lote</th><th>Folio</th><th>Canal</th><th>Cliente</th><th>Ciudad</th><th>Tipo</th><th>Piezas</th><th>Detalle</th><th>Acciones</th></tr></thead><tbody>`;
   lista.forEach(p=>{
     const detalle = (p.items||[]).map(it=> `${it.cantidad}× ${it.genero} ${it.talla} ${it.color}${it.marca?' ('+it.marca+')':''} — ${it.descripcion}`).join("<br>");
     const notaPaquete = p.piezasPaquete>1 ? `<br><span style="color:#b45309;font-weight:600;">📦 ${p.piezasPaquete} playeras en el mismo paquete</span>` : "";
     html += `<tr>
       <td class="col-chk"><input type="checkbox" class="chk-pedido-hoy" value="${p.id}" onchange="onChkPedido(this,'hoy')"></td>
+      <td style="font-size:.75rem;color:#6b7280;">${p.loteGeneral||'—'}</td>
       <td>${p.folio}</td><td>${badgeCanal(p.canal)}</td><td>${p.cliente}</td><td>${p.ciudad||'—'}</td><td>${p.tipoCliente}</td><td>${p.totalPiezas}</td>
       <td style="font-size:.78rem;color:#6b7280;">${detalle}${notaPaquete}</td>
       <td style="white-space:nowrap;">
@@ -1982,6 +2015,7 @@ async function buscarHistorico(){
   const hasta = document.getElementById("hHasta").value;
   const clienteFiltro = document.getElementById("hCliente").value.trim().toLowerCase();
   const canalFiltro = document.getElementById("hCanal").value;
+  const loteFiltro = document.getElementById("hLote").value.trim().toUpperCase();
   const cont = document.getElementById("tablaHistCont");
   if(!desde || !hasta){ mostrarMsg("Elige fecha 'Desde' y 'Hasta'.", "error"); return; }
   cont.innerHTML = '<div class="vacio">Buscando...</div>';
@@ -1998,15 +2032,18 @@ async function buscarHistorico(){
     });
     if(canalFiltro) lista = lista.filter(p=> p.canal === canalFiltro);
     if(clienteFiltro) lista = lista.filter(p=> (p.cliente||"").toLowerCase().includes(clienteFiltro));
+    if(loteFiltro) lista = lista.filter(p=> (p.loteGeneral||"").toUpperCase()===loteFiltro);
     historicoCache = priorizarML(lista);
     if(lista.length === 0){ cont.innerHTML = '<div class="vacio">Sin resultados para ese filtro.</div>'; document.getElementById("accionesHist").style.display = "none"; return; }
     let html = barraSeleccionHTML("historico") + `<table><thead><tr>
         <th class="col-chk"><input type="checkbox" id="chkTodos-historico" onchange="toggleTodosPedidos(this,'historico')" title="Seleccionar todos"></th>
-        <th>Fecha</th><th>Folio</th><th>Canal</th><th>Cliente</th><th>Ciudad</th><th>Tipo</th><th>Piezas</th><th>Acciones</th></tr></thead><tbody>`;
+        <th>Fecha</th><th>Lote</th><th>Folio</th><th>Canal</th><th>Cliente</th><th>Ciudad</th><th>Tipo</th><th>Piezas</th><th>Acciones</th></tr></thead><tbody>`;
     lista.forEach(p=>{
       html += `<tr>
         <td class="col-chk"><input type="checkbox" class="chk-pedido-historico" value="${p.id}" onchange="onChkPedido(this,'historico')"></td>
-        <td>${p.fecha}</td><td>${p.folio}</td><td>${badgeCanal(p.canal)}</td>
+        <td>${p.fecha}</td>
+        <td style="font-size:.75rem;color:#6b7280;cursor:pointer;" onclick="document.getElementById('hLote').value='${p.loteGeneral||''}';buscarHistorico();" title="Clic para ver solo este lote">${p.loteGeneral||'—'}</td>
+        <td>${p.folio}</td><td>${badgeCanal(p.canal)}</td>
         <td>${p.cliente}</td><td>${p.ciudad||'—'}</td><td>${p.tipoCliente}</td><td>${p.totalPiezas}</td>
         <td style="white-space:nowrap;">
           <button class="btn btn-secundario btn-chico" onclick="agregarRenglonAPedidoHistorico('${p.folio}')" title="Agregar otra prenda a este mismo folio">➕</button>
