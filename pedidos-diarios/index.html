@@ -1084,6 +1084,12 @@ async function guardarPedido(){
     mostrarMsg(`${guardados} pedido(s) guardado(s) ✔`, "ok");
     avisarSinMatchPlayeras(sinMatchAcumulado);
     limpiarFormulario();
+    // Sin esto, la lista en memoria de "Pedidos de hoy" (la que usan tanto
+    // la tabla como "Exportar Excel") se quedaba con lo que había ANTES de
+    // este guardado — así que si ya estabas parado en esa pestaña (sin
+    // volver a darle clic), veías/exportabas datos viejos aunque el pedido
+    // sí se hubiera guardado bien en Firestore.
+    if(esFechaHoy) cargarPedidosHoy();
   }catch(err){ console.error(err); mostrarMsg("Error al guardar: " + err.message, "error"); }
 }
 
