@@ -991,6 +991,16 @@ async function guardarPedido(){
   const items = leerItems().filter(it => it.descripcion || it.talla || it.color || it.folio);
   if(items.length === 0){ mostrarMsg("Agrega al menos una prenda.", "error"); return; }
 
+  // Salvaguarda: si el modo "agregar a pedido existente" está activo en
+  // memoria pero el aviso azul de "se van a agregar al pedido X" NO se ve
+  // en pantalla, algo quedó a medias (por ejemplo, se buscó un folio y
+  // nunca se le dio clic a "Cancelar" antes de intentar capturar algo
+  // nuevo) — en ese caso, para no mezclar sin querer un pedido nuevo con
+  // uno viejo, se trata como si no hubiera pedido existente.
+  if(pedidoExistente && document.getElementById("infoPedidoExistente")?.style.display === "none"){
+    pedidoExistente = null;
+  }
+
   // ---- Modo "agregar a pedido existente": crea renglones NUEVOS e
   // independientes con el mismo folio/cliente/ciudad/canal, igual que el
   // resto del sistema (varias prendas del mismo paquete = varios renglones
