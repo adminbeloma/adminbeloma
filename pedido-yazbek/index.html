@@ -490,8 +490,24 @@ function agregarRenglon(){
     mostrarMsg("✅ Renglón actualizado", "ok");
     cancelarEdicion(false);
   }else{
-    pedidoActual.push(renglon);
-    mostrarMsg("✅ Producto agregado al pedido", "ok");
+    // Si ya existe un renglón con el mismo proveedor + producto + género +
+    // color + talla, se le suma la cantidad en vez de crear uno nuevo —
+    // así, si agregas la misma combinación dos veces (ej. Grande Negra de
+    // Hombre), termina siendo UN renglón con el total, no dos separados.
+    const idxIgual = pedidoActual.findIndex(r=>
+      r.proveedor === renglon.proveedor &&
+      r.codigo === renglon.codigo &&
+      r.genero === renglon.genero &&
+      r.color.toLowerCase() === renglon.color.toLowerCase() &&
+      r.talla === renglon.talla
+    );
+    if(idxIgual !== -1){
+      pedidoActual[idxIgual].cantidad += renglon.cantidad;
+      mostrarMsg(`✅ Ya tenías esa combinación — se sumó a ${pedidoActual[idxIgual].cantidad} piezas en total`, "ok");
+    } else {
+      pedidoActual.push(renglon);
+      mostrarMsg("✅ Producto agregado al pedido", "ok");
+    }
   }
 
   const yaExiste = [...p.colores, ...(coloresGuardados[renglon.proveedor]||[])].some(c=>c.toLowerCase()===color.toLowerCase());
