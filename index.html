@@ -11121,10 +11121,6 @@ function calcCorteParaFecha(h){
   // Lo realmente cobrado hoy de cada venta (si quedó saldo pendiente, solo el
   // anticipo recibido; si se pagó completo, el total).
   const cobradoDeVenta=v=>(+v.saldo||0)>0 ? (+v.anticipo||0) : (+v.total||0);
-  const enEfectivoVenta = ventasLocales.filter(v=>v.metodoPago==='efectivo').reduce((s,v)=>s+cobradoDeVenta(v),0);
-  const enTransfVenta   = ventasLocales.filter(v=>v.metodoPago==='transferencia').reduce((s,v)=>s+cobradoDeVenta(v),0);
-  const enDepositoVenta = ventasLocales.filter(v=>v.metodoPago==='deposito').reduce((s,v)=>s+cobradoDeVenta(v),0);
-  const enTarjetaVenta  = ventasLocales.filter(v=>v.metodoPago==='tarjeta').reduce((s,v)=>s+cobradoDeVenta(v),0);
 
   // Abonos cobrados HOY (pagos de saldo de pedidos capturados en días
   // anteriores, vía el botón 💰 Pago) — antes NO se sumaban al efectivo del
@@ -11136,6 +11132,19 @@ function calcCorteParaFecha(h){
   const abonoDeposito = abonosHoy.filter(a=>a.metodo==='deposito').reduce((s,a)=>s+(+a.monto||0),0);
   const abonoTarjeta  = abonosHoy.filter(a=>a.metodo==='tarjeta').reduce((s,a)=>s+(+a.monto||0),0);
   const abonosTotal   = abonosHoy.reduce((s,a)=>s+(+a.monto||0),0);
+
+  // IMPORTANTE: si una venta de HOY además recibió un abono HOY (pago
+  // adicional sobre su saldo, capturado por separado), ese abono ya viene
+  // sumado en abonoEfectivo/abonoTransf/etc. de arriba — así que hay que
+  // RESTARLO de lo que ya traía la venta, o se cuenta dos veces. Antes esto
+  // solo se hacía en la tarjeta de Caja Chica, pero no aquí en el Corte, así
+  // que el Corte podía salir más alto que el efectivo real.
+  const abonoHoyDeVenta=vid=>abonosHoy.filter(a=>a.ventaId===vid).reduce((s,a)=>s+(+a.monto||0),0);
+  const cobroInicial=v=>+(cobradoDeVenta(v)-abonoHoyDeVenta(v.id)).toFixed(2);
+  const enEfectivoVenta = ventasLocales.filter(v=>v.metodoPago==='efectivo').reduce((s,v)=>s+cobroInicial(v),0);
+  const enTransfVenta   = ventasLocales.filter(v=>v.metodoPago==='transferencia').reduce((s,v)=>s+cobroInicial(v),0);
+  const enDepositoVenta = ventasLocales.filter(v=>v.metodoPago==='deposito').reduce((s,v)=>s+cobroInicial(v),0);
+  const enTarjetaVenta  = ventasLocales.filter(v=>v.metodoPago==='tarjeta').reduce((s,v)=>s+cobroInicial(v),0);
 
   const enEfectivo = enEfectivoVenta + abonoEfectivo;
   const enTransf   = enTransfVenta + abonoTransf;
