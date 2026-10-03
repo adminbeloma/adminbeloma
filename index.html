@@ -4336,6 +4336,16 @@ window.guardarVenta=async function(){
   const tintaColor=cantTotal>0?totalCcColor/cantTotal:0;
   const sinTinta=totalCcBlanca===0&&totalCcColor===0;
   const metodoPago=document.getElementById('v-metodo-pago').value||'';
+  // Si el canal sí usa método de pago (Local/Foráneo — en marketplaces ese
+  // recuadro ni se muestra) y no se eligió ninguno, no se deja guardar: sin
+  // esto, la venta se guardaba igual pero luego el Corte de Caja no la
+  // contaba como efectivo ni como nada — y eso solo se notaba hasta cuadrar
+  // caja, ya tarde para acordarse de cómo se cobró.
+  if(!CANALES_MARKETPLACE.includes(canal2) && !metodoPago){
+    toast('⚠️ Elige el método de pago antes de guardar — si no, no va a contar en el Corte de Caja');
+    document.getElementById('v-metodo-pago-section')?.scrollIntoView({behavior:'smooth', block:'center'});
+    return;
+  }
   const lugDeposito=document.getElementById('v-deposito-lugar').value||'';
   const tipoTarjeta=document.getElementById('v-tarjeta-tipo').value||'';
   const bancoOrigen=document.getElementById('v-banco-origen')?.value||'';
@@ -11145,6 +11155,12 @@ function calcCorteParaFecha(h){
   const enTransfVenta   = ventasLocales.filter(v=>v.metodoPago==='transferencia').reduce((s,v)=>s+cobroInicial(v),0);
   const enDepositoVenta = ventasLocales.filter(v=>v.metodoPago==='deposito').reduce((s,v)=>s+cobroInicial(v),0);
   const enTarjetaVenta  = ventasLocales.filter(v=>v.metodoPago==='tarjeta').reduce((s,v)=>s+cobroInicial(v),0);
+  // Ventas sin método de pago capturado — no cuentan como efectivo (ni como
+  // ningún otro método), así que "Ingresos" puede ser mayor a lo que
+  // realmente mueve el efectivo en caja. Antes esto no se mostraba aquí
+  // (solo en la tarjeta de Caja Chica), lo cual hacía parecer que el Corte
+  // "no cuadraba" sin dar ninguna pista de por qué.
+  const sinMetodoVenta  = ventasLocales.filter(v=>!v.metodoPago).reduce((s,v)=>s+cobroInicial(v),0);
 
   const enEfectivo = enEfectivoVenta + abonoEfectivo;
   const enTransf   = enTransfVenta + abonoTransf;
@@ -11158,7 +11174,7 @@ function calcCorteParaFecha(h){
   const fondoMonto = fondo ? +fondo.monto : 0;
   const efectivoSistema = fondoMonto + enEfectivo + anticiposHoy - gastosHoy;
   return{fecha:h,fondo:fondoMonto,ingresos:ingresosHoy,enEfectivo,enTransf,enDeposito,enTarjeta,
-    enEfectivoVenta,enTransfVenta,enDepositoVenta,enTarjetaVenta,
+    enEfectivoVenta,enTransfVenta,enDepositoVenta,enTarjetaVenta,sinMetodoVenta,
     abonoEfectivo,abonoTransf,abonoDeposito,abonoTarjeta,abonosTotal,
     anticipos:anticiposHoy,gastos:gastosHoy,efectivoSistema};
 }
@@ -11203,6 +11219,7 @@ window.recalcCorte=function(){
       ${d.enTransfVenta>0?`<span style="color:var(--ink-soft);padding-left:12px;">└ 📲 Transferencia:</span><span>${fmtMoney(d.enTransfVenta)}</span>`:''}
       ${d.enDepositoVenta>0?`<span style="color:var(--ink-soft);padding-left:12px;">└ 🏦 Depósito:</span><span>${fmtMoney(d.enDepositoVenta)}</span>`:''}
       ${d.enTarjetaVenta>0?`<span style="color:var(--ink-soft);padding-left:12px;">└ 💳 Tarjeta:</span><span>${fmtMoney(d.enTarjetaVenta)}</span>`:''}
+      ${d.sinMetodoVenta>0?`<span style="color:var(--red);padding-left:12px;">└ ❓ Sin método de pago:</span><span style="color:var(--red);">${fmtMoney(d.sinMetodoVenta)}</span>`:''}
       ${d.abonosTotal>0?`
       <span style="color:var(--ink-soft);">📦 Abonos cobrados hoy:</span><strong style="color:var(--green);">${fmtMoney(d.abonosTotal)}</strong>
       <span style="font-size:11px;color:var(--ink-soft);grid-column:1/-1;">(pagos de saldo de pedidos capturados en días anteriores)</span>
