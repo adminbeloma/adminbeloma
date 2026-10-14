@@ -299,11 +299,13 @@ async function sumarStockPlayeraYazbek(c, cantidad, costoUnitario, fecha, refere
 }
 
 /* ---------- utilidades ---------- */
-function mostrarMsg(texto, tipo){
+let _msgTimer = null;
+function mostrarMsg(texto, tipo, duracionMs){
   const el = document.getElementById("msgGlobal");
   el.textContent = texto;
   el.className = "msg " + tipo;
-  setTimeout(()=>{ el.className = "msg"; }, 3500);
+  clearTimeout(_msgTimer);
+  _msgTimer = setTimeout(()=>{ el.className = "msg"; }, duracionMs || 3500);
 }
 function hoyISO(){
   const d = new Date();
@@ -506,7 +508,7 @@ function agregarRenglon(){
       mostrarMsg(`✅ Ya tenías esa combinación — se sumó a ${pedidoActual[idxIgual].cantidad} piezas en total`, "ok");
     } else {
       pedidoActual.push(renglon);
-      mostrarMsg("✅ Producto agregado al pedido", "ok");
+      mostrarMsg("✅ Producto agregado al pedido", "ok", 1000);
     }
   }
 
@@ -1084,10 +1086,15 @@ function escucharHistorial(){
 }
 
 /* ---------- init ---------- */
-const catalogosListos = cargarCatalogos();
-
+// Los catálogos se piden SOLO cuando ya hay sesión: si se piden antes de que
+// termine el inicio de sesión anónimo, Firestore los rechaza (permisos) y la
+// lista de proveedores queda vacía hasta recargar con F5.
+let _appIniciada = false;
+let catalogosListos = Promise.resolve();
 appPedidoMultiProveedor.auth().onAuthStateChanged(user=>{
-  if(user){
+  if(user && !_appIniciada){
+    _appIniciada = true;
+    catalogosListos = cargarCatalogos();
     cargarColoresGuardados();
     escucharHistorial();
     catalogosListos.then(()=>cargarConfigProveedores());
