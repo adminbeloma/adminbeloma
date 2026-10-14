@@ -261,6 +261,10 @@
       <div class="fila-acciones" id="accionesHist" style="display:none;">
         <button class="btn btn-verde" onclick="exportarExcel('historico')">⬇️ Exportar Excel (resultados)</button>
       </div>
+      <div class="fila-acciones" style="margin-top:12px;border-top:1px solid #dde3ee;padding-top:12px;">
+        <button class="btn btn-secundario" id="btnVentasMLHist" onclick="crearVentasMLDelHistorico()">🛒 Crear ventas de Mercado Libre del rango</button>
+        <span style="font-size:.78rem;color:#667;">Usa las fechas Desde/Hasta de arriba. Solo crea las que no existan ya en Ventas.</span>
+      </div>
     </div>
   </div>
   <div class="panel" id="panel-reportes">
@@ -1010,6 +1014,128 @@ function cancelarPedidoExistente(){
   document.getElementById("infoPedidoExistente").style.display = "none";
 }
 
+/* ---------- Mercado Libre: cada renglón capturado crea/actualiza su venta en Ventas ----------
+   Solo Mercado Libre (no necesita método de pago: ML liquida por su cuenta).
+   - Se busca por folio: si ya existe una venta de ML con ese folio creada desde aquí,
+     se le agrega la prenda; si existe pero vino del Excel de ML, no se toca (ya tiene todo).
+   - La venta queda con total $0 y "pendienteCompletar"; el total real entra después
+     cuando importas el Excel de ML (el importador de adminbeloma ya sabe completarla).
+   - NO descuenta inventario: eso ya lo hace Pedidos Diarios al guardar. */
+function esCanalML(c){ return /^mercado\s*libre$/i.test((c||"").toString().trim()); }
+function itemDeVentaML(it){
+  return {
+    tipo:'Playera', genero:it.genero||'', talla:String(it.talla||''), color:String(it.color||''),
+    material:'', tipoPrenda:'', tipoPrendaOtro:'', tipoGorra:'', tipoGorraOtro:'',
+    marca:it.marca||'Yazbek', modelo:it.modelo||'', descripcion:String(it.descripcion||''),
+    proceso:'DTG', cantidad:+it.cantidad||1, precio:0, tintaBlanca:0, tintaColor:0, multiTG:false, desglose:[]
+  };
+}
+function resumenItemVentaML(x){
+  return `${x.cantidad}x ${x.genero||''} ${x.tipo}${x.talla?' Talla '+x.talla:''}${x.color?' '+x.color:''}${x.descripcion?' ('+x.descripcion+')':''}`.replace(/\s+/g,' ').trim();
+}
+function docVentaMLDesdePedidos(id, folio, fecha, cliente, ciudad, items){
+  const ahora = new Date().toISOString();
+  return {
+    id, fecha, canal:'Mercado Libre',
+    cliente: (cliente && !esCanalML(cliente)) ? cliente : 'Público en general',
+    producto: items.map(resumenItemVentaML).join(", "), items,
+    genero:'', talla:'', color:'', tipoProceso:'DTG', sinTinta:false,
+    ciudad: ciudad||'', paqueteria:'', guia:'', costoGuia:0, domicilioEnvio:'',
+    cantidad: items.reduce((a,x)=>a+(+x.cantidad||1),0), precio:0, descuento:0, total:0, anticipo:0, saldo:0,
+    proveedor:'Yazbek', folio,
+    notas:'Creada desde Pedidos Diarios — falta el total (se completa al importar el Excel de Mercado Libre), la tinta y el proceso.',
+    tintaBlanca:0, tintaColor:0, costoTinta:0,
+    metodoPago:'', lugDeposito:'', tipoTarjeta:'', bancoOrigen:'', pagoCon:0,
+    pendienteCompletar:true, origen:'pedidosDiarios', creado:ahora, actualizado:ahora
+  };
+}
+
+/* ---- Histórico: crea las ventas de ML que falten, a partir de los pedidos del rango ---- */
+async function crearVentasMLDelHistorico(){
+  const desde = document.getElementById("hDesde").value;
+  const hasta = document.getElementById("hHasta").value;
+  if(!desde || !hasta){ mostrarMsg("Elige fecha 'Desde' y 'Hasta' arriba (el rango que quieres pasar a Ventas).", "error"); return; }
+  const btn = document.getElementById("btnVentasMLHist");
+  btn.disabled = true; btn.textContent = "⏳ Revisando...";
+  try{
+    const snap = await db.collection(COLECCION).where("fecha",">=",desde).where("fecha","<=",hasta).get();
+    const grupos = new Map(); let omitidosHist = 0, omitidosSinFolio = 0, histCreados = 0;
+    snap.forEach(d=>{
+      const p = d.data();
+      if(!esCanalML(p.canal)) return;
+      const folio = (p.folio||"").toString().trim();
+      if(!folio || folio === "(sin folio)"){ omitidosSinFolio++; return; }
+      if(!grupos.has(folio)) grupos.set(folio, {folio, fecha:p.fecha, cliente:"", ciudad:"", items:[]});
+      const g = grupos.get(folio);
+      if(p.fecha < g.fecha) g.fecha = p.fecha;
+      if(!g.cliente && p.cliente && !esCanalML(p.cliente)) g.cliente = p.cliente;
+      if(!g.ciudad && p.ciudad) g.ciudad = p.ciudad;
+      (p.items||[]).forEach(it=> g.items.push(itemDeVentaML(it)));
+    });
+    // Folios de ML que YA existen en Ventas (para no duplicar)
+    const existentes = new Set();
+    const diasConVentasML = new Set();   // días en que Ventas ya tiene ML (venidas del Excel de ML)
+    const sv = await db.collection("pl_ventas").where("canal","==","Mercado Libre").get();
+    sv.forEach(d=>{
+      const v = d.data();
+      existentes.add((v.folio||"").toString().trim());
+      // Las provisionales creadas desde aquí NO cuentan como "ya cubierto" (si no, nunca se completaría el día)
+      if(!(v.origen === "pedidosDiarios")) diasConVentasML.add(v.fecha);
+    });
+    // Folios inventados al importar el Listado (HIST-...): solo se crean en días SIN ventas de ML reales.
+    const porCrear = [...grupos.values()].filter(g=>{
+      if(!g.items.length || existentes.has(g.folio)) return false;
+      if(/^HIST-/i.test(g.folio)){
+        if(diasConVentasML.has(g.fecha)){ omitidosHist += g.items.reduce((a,x)=>a+x.cantidad,0); return false; }
+        histCreados++;
+      }
+      return true;
+    });
+    const yaExistian = grupos.size - porCrear.length;
+    const piezas = porCrear.reduce((a,g)=>a+g.items.reduce((b,x)=>b+x.cantidad,0),0);
+    const detalleOmit = (omitidosHist||omitidosSinFolio)
+      ? `\n\nOmitidos: ${omitidosHist} pieza(s) de pedidos importados del Listado (folio HIST-) en días que YA tienen sus ventas de ML en Ventas, y ${omitidosSinFolio} renglón(es) sin folio.` : "";
+    if(porCrear.length === 0){
+      mostrarMsg(`No hay ventas por crear en ese rango (${yaExistian} folio(s) ya existían en Ventas).` + (detalleOmit ? " Omitidos: "+omitidosHist+" HIST, "+omitidosSinFolio+" sin folio." : ""), "ok");
+      return;
+    }
+    if(!confirm(`Del ${desde} al ${hasta}:\n\n• ${porCrear.length} venta(s) de Mercado Libre por crear (${piezas} piezas)\n• ${yaExistian} folio(s) ya existían en Ventas (no se tocan)${histCreados?`\n• ${histCreados} de las nuevas vienen del Listado importado (días sin ventas de ML en Ventas); son provisionales y se reemplazan cuando importes el Excel de ML de esos días`:""}${detalleOmit}\n\nLas ventas nuevas quedan con total $0 y "pendiente de completar"; el total se llena al importar el Excel de Mercado Libre. NO se descuenta inventario.\n\n¿Crearlas?`)) return;
+    btn.textContent = "💾 Creando...";
+    let batch = db.batch(), n = 0, creadas = 0;
+    for(const g of porCrear){
+      const id = Date.now().toString(36)+Math.random().toString(36).substr(2);
+      batch.set(db.collection("pl_ventas").doc(id), docVentaMLDesdePedidos(id, g.folio, g.fecha, g.cliente, g.ciudad, g.items));
+      n++; creadas++;
+      if(n >= 400){ await batch.commit(); batch = db.batch(); n = 0; }
+    }
+    if(n > 0) await batch.commit();
+    mostrarMsg(`✅ ${creadas} venta(s) de Mercado Libre creadas en Ventas (${piezas} piezas).`, "ok");
+  }catch(err){
+    console.error(err); mostrarMsg("Error al crear las ventas: " + err.message, "error");
+  }finally{
+    btn.disabled = false; btn.textContent = "🛒 Crear ventas de Mercado Libre del rango";
+  }
+}
+
+async function sincronizarVentaMLDesdePedido(it, folio, fecha, cliente, ciudad){
+  if(!folio || folio === "(sin folio)") return null;
+  const item = itemDeVentaML(it);
+  const snap = await db.collection("pl_ventas").where("canal","==","Mercado Libre").where("folio","==",folio).limit(1).get();
+  if(!snap.empty){
+    const d = snap.docs[0]; const v = d.data();
+    if(v.origen !== "pedidosDiarios") return "ya-existia";
+    const items = (v.items||[]).concat([item]);
+    await d.ref.set({
+      items, producto: items.map(resumenItemVentaML).join(", "),
+      cantidad: items.reduce((a,x)=>a+(+x.cantidad||1),0), actualizado: new Date().toISOString()
+    }, {merge:true});
+    return "agregada";
+  }
+  const id = Date.now().toString(36)+Math.random().toString(36).substr(2);
+  await db.collection("pl_ventas").doc(id).set(docVentaMLDesdePedidos(id, folio, fecha, cliente, ciudad, [item]));
+  return "creada";
+}
+
 async function guardarPedido(){
   const fecha = document.getElementById("fFecha").value || hoyISO();
   const esFechaHoy = fecha === hoyISO();
@@ -1046,7 +1172,7 @@ async function guardarPedido(){
     );
     if(!confirmar) return;
     try{
-      let guardados = 0;
+      let guardados = 0, ventasML = 0, ventasMLError = 0;
       let ordenBase = Date.now();
       const sinMatchAcumulado = [];
       for(const it of items){
@@ -1067,9 +1193,16 @@ async function guardarPedido(){
         });
         const sinMatch = esFechaHoyExistente ? await descontarStockPlayerasDePedido(itemsPedido, []) : [];
         if(sinMatch.length) sinMatchAcumulado.push(sinMatch);
+        if(esFechaHoyExistente && esCanalML(pedidoExistente.canal)){
+          try{ if(await sincronizarVentaMLDesdePedido(it, pedidoExistente.folio, pedidoExistente.fecha, pedidoExistente.cliente, pedidoExistente.ciudad)) ventasML++; }
+          catch(e){ console.error("Venta ML:", e); ventasMLError++; }
+        }
         guardados++;
       }
-      mostrarMsg(`✔ Se agregaron ${guardados} renglón(es) nuevo(s) al folio "${pedidoExistente.folio}"`, "ok");
+      mostrarMsg(`✔ Se agregaron ${guardados} renglón(es) nuevo(s) al folio "${pedidoExistente.folio}"`
+        + (ventasML ? ` · ${ventasML} registrada(s) en Ventas` : "")
+        + (ventasMLError ? ` · ⚠️ ${ventasMLError} no se pudieron registrar en Ventas` : ""),
+        ventasMLError ? "error" : "ok");
       avisarSinMatchPlayeras(sinMatchAcumulado);
       cancelarPedidoExistente();
       limpiarFormulario();
@@ -1084,7 +1217,7 @@ async function guardarPedido(){
   // ---- Modo normal: cada prenda es un pedido independiente, y cada una
   // usa el Canal que tiene EN SU PROPIO renglón (no uno solo para todos) ----
   try{
-    let guardados = 0;
+    let guardados = 0, ventasML = 0, ventasMLError = 0;
     let ordenBase = Date.now();
     const sinMatchAcumulado = [];
     // Un solo "folio de lote" para TODA esta tanda (todos los renglones que
@@ -1121,9 +1254,16 @@ async function guardarPedido(){
       });
       const sinMatch = esFechaHoy ? await descontarStockPlayerasDePedido(itemsPedido, []) : [];
       if(sinMatch.length) sinMatchAcumulado.push(sinMatch);
+      if(esFechaHoy && esCanalML(canalItem)){
+        try{ if(await sincronizarVentaMLDesdePedido(it, folioFinal, fecha, it.cliente, it.ciudad)) ventasML++; }
+        catch(e){ console.error("Venta ML:", e); ventasMLError++; }
+      }
       guardados++;
     }
-    mostrarMsg(`${guardados} pedido(s) guardado(s) — lote ${folioLote} ✔`, "ok");
+    mostrarMsg(`${guardados} pedido(s) guardado(s) — lote ${folioLote} ✔`
+      + (ventasML ? ` · ${ventasML} venta(s) de Mercado Libre registradas en Ventas` : "")
+      + (ventasMLError ? ` · ⚠️ ${ventasMLError} no se pudieron registrar en Ventas` : ""),
+      ventasMLError ? "error" : "ok");
     avisarSinMatchPlayeras(sinMatchAcumulado);
     limpiarFormulario();
     // Sin esto, la lista en memoria de "Pedidos de hoy" (la que usan tanto
