@@ -3528,6 +3528,7 @@ window.abrirAlertasProactivas=function(){
   openModal('modal-alertas');
 };
 window.openVentaModal=async function(tipo, ventaId){
+  { const t=document.getElementById('v-cliente-tel'); if(t){ t.value=''; t.dataset.nombre=''; } }
   document.getElementById('venta-id').value='';
   ['v-cliente','v-notas','v-proveedor','v-banco-origen'].forEach(f=>{const el=document.getElementById(f);if(el)el.value='';});
   document.getElementById('v-fecha').value=hoy();
@@ -4401,7 +4402,9 @@ window.guardarVenta=async function(){
     creado:ventaOriginal?.creado||new Date().toISOString(),
     actualizado:new Date().toISOString()};
   await setDoc(doc(db,'pl_ventas',id),data);
-  await sincronizarPedidoDesdeVenta(data, document.getElementById('v-cliente-tel')?.value||'');
+  const _te=document.getElementById('v-cliente-tel');
+  const _telOk=_te && (_te.dataset.nombre||'').trim().toLowerCase()===(data.cliente||'').trim().toLowerCase();
+  await sincronizarPedidoDesdeVenta(data, _telOk?(_te.value||''):'');
   // Descuento automático de stock de tinta (solo lo que cambió, si es una edición)
   const prevCant=+ventaOriginal?.cantidad||0;
   const prevTotalCcBlanca=(+ventaOriginal?.tintaBlanca||0)*prevCant;
@@ -4681,7 +4684,11 @@ window.enviarTicketWA=function(){
 
   // Teléfono: primero del campo oculto (si se seleccionó del dropdown),
   // si no, buscar en clientes registrados por nombre
-  let telRaw=(document.getElementById('v-cliente-tel')?.value||'').replace(/[^0-9]/g,'');
+  // El teléfono oculto solo vale si pertenece al cliente que está escrito AHORA
+  // (si no, se quedaba pegado el número de la venta anterior).
+  const telEl=document.getElementById('v-cliente-tel');
+  const telVigente=telEl && (telEl.dataset.nombre||'').trim().toLowerCase()===cliente.trim().toLowerCase();
+  let telRaw=telVigente?(telEl.value||'').replace(/[^0-9]/g,''):'';
   if(telRaw.length<10){
     const clienteReg=(window.clientes||[]).find(c=>(c.nombre||'').toLowerCase()===cliente.toLowerCase());
     if(clienteReg) telRaw=((clienteReg.tel||clienteReg.telefono||'')).replace(/[^0-9]/g,'');
@@ -4790,6 +4797,7 @@ window.cargarMasVentas = async function() {
 };
 
 window.buscarVentasPorFecha = async function() {
+  if(fechaInvalidaEnFiltro(['filter-venta-desde','filter-venta-hasta'])){ renderVentas(); return; }
   const desde = document.getElementById('filter-venta-desde').value;
   const hasta = document.getElementById('filter-venta-hasta').value;
 
@@ -5201,7 +5209,24 @@ async function actualizarStatsVentasCompletos(canal, desde, hasta){
   }
 }
 
+// Un <input type="date"> con un día inexistente (31/09) queda con value="" y
+// validity.badInput=true. Sin esta guarda, "Hasta" vacío = sin tope superior y
+// el total se inflaba con las ventas de octubre en adelante.
+function fechaInvalidaEnFiltro(ids){
+  for(const id of ids){
+    const el=document.getElementById(id);
+    if(el && el.validity && el.validity.badInput) return el;
+  }
+  return null;
+}
 window.renderVentas=function renderVentas(){
+  const malo=fechaInvalidaEnFiltro(['filter-venta-desde','filter-venta-hasta']);
+  if(malo){
+    toast('⚠️ Esa fecha no existe (el mes no tiene ese día). Corrígela — por ejemplo 30/09.');
+    malo.style.borderColor='var(--red, #c0392b)';
+    return;
+  }
+  ['filter-venta-desde','filter-venta-hasta'].forEach(id=>{const e=document.getElementById(id); if(e) e.style.borderColor='';});
   const search=(document.getElementById('search-ventas')||{value:''}).value.toLowerCase();
   const canal=(document.getElementById('filter-canal')||{value:''}).value;
   const desde=(document.getElementById('filter-venta-desde')||{value:''}).value;
@@ -12518,6 +12543,7 @@ window.seleccionarClienteVenta=function(nombre, tel){
     document.getElementById('v-cliente').parentNode.appendChild(telInput);
   }
   telInput.value=tel||'';
+  telInput.dataset.nombre=nombre||'';
 };
 document.addEventListener('click',function(e){
   const dd=document.getElementById('v-cliente-dropdown');
