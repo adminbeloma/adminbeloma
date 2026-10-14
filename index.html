@@ -4494,17 +4494,55 @@ window.importarVentasExcelML=async function(file){
     actualizarProgreso('⏳ Revisando folios ya importados...', `${ordenFolios.length} folio(s) encontrados en el Excel`);
     const snapExistentes=await getDocs(query(collection(db,'pl_ventas'), where('canal','==','Mercado Libre')));
     const foliosExistentes=new Set();
-    snapExistentes.forEach(d=> foliosExistentes.add(String(d.data().folio||'').trim()));
+    // Ventas creadas automáticamente desde Pedidos Diarios que aún no tienen total:
+    // en vez de saltarlas, se completan con los datos del Excel de ML.
+    const pendientesDePedidos=new Map();
+    const provisionalesHist=[];
+    snapExistentes.forEach(d=>{
+      const dd=d.data(); const f=String(dd.folio||'').trim();
+      foliosExistentes.add(f);
+      if(dd.origen==='pedidosDiarios' && !(+dd.total>0)){
+        if(/^HIST-/i.test(f)) provisionalesHist.push({id:d.id,fecha:dd.fecha});
+        else pendientesDePedidos.set(f,{id:d.id,items:dd.items||[]});
+      }
+    });
 
-    let creadas=0, saltadas=0;
+    let creadas=0, saltadas=0, completadas=0;
     let batch=writeBatch(db);
     let enBatch=0;
     let procesados=0;
     const totalFolios=ordenFolios.length;
+    // Ventas provisionales (folio HIST-, total $0) creadas desde Pedidos Diarios: si el
+    // Excel trae ventas reales de ese mismo día, las provisionales sobran y se borran.
+    let reemplazadasHist=0;
+    {
+      const fechasExcel=new Set(filas.map(f=>parsearFechaML(f.Fecha)).filter(Boolean));
+      for(const pv of provisionalesHist){
+        if(!fechasExcel.has(pv.fecha)) continue;
+        batch.delete(doc(db,'pl_ventas',pv.id));
+        enBatch++; reemplazadasHist++;
+        if(enBatch>=450){ await batch.commit(); batch=writeBatch(db); enBatch=0; }
+      }
+    }
     for(const folio of ordenFolios){
       procesados++;
       if(procesados%15===0 || procesados===totalFolios){
         actualizarProgreso('💾 Guardando ventas...', `${procesados} de ${totalFolios} folios procesados (${creadas} nuevas, ${saltadas} ya existían)`);
+      }
+      if(pendientesDePedidos.has(folio)){
+        const pend=pendientesDePedidos.get(folio);
+        const g=porFolio[folio], p0=g[0];
+        const totalV=+g.reduce((s,f)=>s+(+f.Total||0),0).toFixed(2);
+        const cantV=pend.items.reduce((s,it)=>s+(+it.cantidad||1),0)||1;
+        const itemsAct=pend.items.map(it=>({...it, precio:+(totalV/cantV).toFixed(2)}));
+        const upd={ total:totalV, anticipo:totalV, saldo:0, items:itemsAct, actualizado:new Date().toISOString() };
+        if(p0.Cliente) upd.cliente=p0.Cliente;
+        const ciu=[p0.Ciudad,p0.Estado].filter(Boolean).join(', ');
+        if(ciu) upd.ciudad=ciu;
+        batch.set(doc(db,'pl_ventas',pend.id), upd, {merge:true});
+        enBatch++; completadas++;
+        if(enBatch>=450){ await batch.commit(); batch=writeBatch(db); enBatch=0; }
+        continue;
       }
       if(foliosExistentes.has(folio)){ saltadas++; continue; }
       const grupo=porFolio[folio];
@@ -4562,7 +4600,7 @@ window.importarVentasExcelML=async function(file){
 
     document.getElementById('input-importar-ventas-ml').value='';
     ocultarProgreso();
-    toast(`✅ Importadas ${creadas} ventas nuevas (${saltadas} ya existían y se saltaron)`);
+    toast(`✅ Importadas ${creadas} ventas nuevas`+(completadas?` · ${completadas} completadas con su total (venían de Pedidos Diarios)`:'')+(reemplazadasHist?` · ${reemplazadasHist} provisionales del Listado reemplazadas por las reales`:'')+` (${saltadas} ya existían y se saltaron)`);
     await cargarVentas(true);
     renderVentas();
     renderDashboard();
