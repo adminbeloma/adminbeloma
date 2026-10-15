@@ -188,7 +188,7 @@
         <button class="btn btn-rojo btn-chico" onclick="borrarFilasCapturaSeleccionadas('it')">🗑 Quitar renglones seleccionados</button>
       </div>
       <div class="fila-acciones" style="margin-top:18px;">
-        <button class="btn btn-primario" onclick="guardarPedido()">Guardar todo</button>
+        <button class="btn btn-primario" id="btnGuardarTodo" onclick="guardarPedido()">Guardar todo</button>
         <button class="btn btn-secundario" onclick="limpiarFormulario()">Limpiar</button>
       </div>
     </div>
@@ -200,6 +200,7 @@
       <div id="tablaHoyCont"><div class="vacio">Cargando...</div></div>
       <div class="fila-acciones">
         <button class="btn btn-verde" onclick="exportarExcel('hoy')">⬇️ Exportar Excel (hoy)</button>
+        <button class="btn btn-rojo" id="btnQuitarDuplicados" onclick="limpiarDuplicadosDelDia()" title="Busca renglones repetidos entre tandas (lotes) de hoy">🧹 Quitar duplicados de hoy</button>
       </div>
     </div>
     <div class="card">
@@ -715,7 +716,27 @@ function onColorFilaChangeNH(id){ const tr = document.getElementById(id); const 
 function onMarcaFilaChangeNH(id){ const tr = document.getElementById(id); const esOtro = tr.querySelector(".nh-marca").value === "Otro"; const otroInput = tr.querySelector(".nh-marca-otro"); otroInput.style.display = esOtro ? "block" : "none"; if(esOtro) otroInput.focus(); const marcaActual = esOtro ? otroInput.value.trim() : tr.querySelector(".nh-marca").value; tr.querySelector(".nh-modelo").innerHTML = opcionesModelo(marcaActual, ""); tr.querySelector(".nh-modelo-otro").style.display = "none"; }
 function onModeloFilaChangeNH(id){ const tr = document.getElementById(id); const esOtro = tr.querySelector(".nh-modelo").value === "Otro"; const otroInput = tr.querySelector(".nh-modelo-otro"); otroInput.style.display = esOtro ? "block" : "none"; if(esOtro) otroInput.focus(); }
 
-async function guardarNuevosHoy(){
+/* ---------- Protección contra doble guardado ----------
+   Una tanda grande tarda varios segundos (cada renglón pide folio, descuenta
+   inventario, etc.). Sin esto, un segundo clic —o reintentar tras un error a
+   la mitad— volvía a guardar los renglones que ya se habían guardado. */
+let _guardandoTanda = false;
+async function _conCandado(fn){
+  if(_guardandoTanda){ mostrarMsg("⏳ Ya se está guardando, espera a que termine…", "error"); return; }
+  _guardandoTanda = true;
+  const btns = [document.getElementById("btnGuardarTodo"), document.getElementById("btnGuardarNuevosHoy")].filter(Boolean);
+  const textos = btns.map(b=>b.textContent);
+  btns.forEach(b=>{ b.disabled = true; b.textContent = "⏳ Guardando…"; });
+  try{ await fn(); }
+  finally{
+    _guardandoTanda = false;
+    btns.forEach((b,i)=>{ b.disabled = false; b.textContent = textos[i]; });
+  }
+}
+function guardarPedido(){ return _conCandado(_guardarPedidoInterno); }
+function guardarNuevosHoy(){ return _conCandado(_guardarNuevosHoyInterno); }
+
+async function _guardarNuevosHoyInterno(){
   const filas = document.querySelectorAll("#nuevosHoyBody tr");
   if(filas.length === 0){ mostrarMsg("Agrega al menos un renglón.", "error"); return; }
   const fecha = hoyISO();
@@ -772,7 +793,15 @@ async function guardarNuevosHoy(){
       // Descuenta stock de Playeras en blanco según lo que se acaba de capturar
       const sinMatch = await descontarStockPlayerasDePedido(itemsPedido, []);
       if(sinMatch.length) sinMatchAcumulado.push(sinMatch);
+      if(esCanalML(canal)){
+        try{ await sincronizarVentaMLDesdePedido(itemsPedido[0], folio, fecha, tr.querySelector(".nh-cliente").value.trim(), tr.querySelector(".nh-ciudad").value.trim()); }
+        catch(e){ console.error("Venta ML:", e); }
+      }
+      // Ya quedó guardado: se quita del formulario para que, si algo falla más
+      // adelante y vuelves a guardar, ESTE renglón no se guarde otra vez.
+      tr.remove();
       guardados++;
+      mostrarMsg(`⏳ Guardando… ${guardados} de ${filas.length}`, "ok");
     }
     mostrarMsg(`✔ ${guardados} pedido(s) nuevo(s) guardado(s) — lote ${folioLote}`, "ok");
     avisarSinMatchPlayeras(sinMatchAcumulado);
@@ -783,7 +812,8 @@ async function guardarNuevosHoy(){
     cargarPedidosHoy();
   }catch(err){
     console.error(err);
-    mostrarMsg("Error al guardar: " + err.message, "error");
+    mostrarMsg(`Error al guardar: ${err.message}. Ya se guardaron ${guardados} renglón(es) (se quitaron del formulario); los que siguen aquí NO se han guardado — corrige y vuelve a guardar.`, "error");
+    cargarPedidosHoy();
   }
 }
 
@@ -881,6 +911,7 @@ function leerItems(){
     const modeloSel = tr.querySelector(".it-modelo").value;
     const modelo = modeloSel === "Otro" ? tr.querySelector(".it-modelo-otro").value.trim() : modeloSel;
     items.push({
+      _trId: tr.id,
       folio: tr.querySelector(".it-folio").value.trim(),
       canal: tr.querySelector(".it-canal").value,
       cliente: tr.querySelector(".it-cliente").value.trim(),
@@ -1136,7 +1167,7 @@ async function sincronizarVentaMLDesdePedido(it, folio, fecha, cliente, ciudad){
   return "creada";
 }
 
-async function guardarPedido(){
+async function _guardarPedidoInterno(){
   const fecha = document.getElementById("fFecha").value || hoyISO();
   const esFechaHoy = fecha === hoyISO();
   const items = leerItems().filter(it => it.descripcion || it.talla || it.color || it.folio);
@@ -1197,6 +1228,8 @@ async function guardarPedido(){
           try{ if(await sincronizarVentaMLDesdePedido(it, pedidoExistente.folio, pedidoExistente.fecha, pedidoExistente.cliente, pedidoExistente.ciudad)) ventasML++; }
           catch(e){ console.error("Venta ML:", e); ventasMLError++; }
         }
+        const trG = it._trId && document.getElementById(it._trId);
+        if(trG) trG.remove();
         guardados++;
       }
       mostrarMsg(`✔ Se agregaron ${guardados} renglón(es) nuevo(s) al folio "${pedidoExistente.folio}"`
@@ -1258,7 +1291,12 @@ async function guardarPedido(){
         try{ if(await sincronizarVentaMLDesdePedido(it, folioFinal, fecha, it.cliente, it.ciudad)) ventasML++; }
         catch(e){ console.error("Venta ML:", e); ventasMLError++; }
       }
+      // Renglón ya guardado: se quita del formulario para que un reintento tras
+      // un error a la mitad no lo vuelva a guardar (esa era la causa de los duplicados).
+      const trGuardado = it._trId && document.getElementById(it._trId);
+      if(trGuardado) trGuardado.remove();
       guardados++;
+      mostrarMsg(`⏳ Guardando… ${guardados} de ${items.length}`, "ok");
     }
     mostrarMsg(`${guardados} pedido(s) guardado(s) — lote ${folioLote} ✔`
       + (ventasML ? ` · ${ventasML} venta(s) de Mercado Libre registradas en Ventas` : "")
@@ -1272,7 +1310,11 @@ async function guardarPedido(){
     // volver a darle clic), veías/exportabas datos viejos aunque el pedido
     // sí se hubiera guardado bien en Firestore.
     if(esFechaHoy) cargarPedidosHoy();
-  }catch(err){ console.error(err); mostrarMsg("Error al guardar: " + err.message, "error"); }
+  }catch(err){
+    console.error(err);
+    mostrarMsg(`Error al guardar: ${err.message}. Los renglones ya guardados se quitaron del formulario; los que siguen aquí NO se han guardado — corrige y vuelve a guardar (no los captures de nuevo).`, "error");
+    if(esFechaHoy) cargarPedidosHoy();
+  }
 }
 
 // ---- Importar "Listado" histórico (un día por hoja, formato # TALLA COLOR
@@ -2147,6 +2189,100 @@ async function eliminarPedido(id, origen){
     mostrarMsg("🗑 Pedido eliminado", "ok");
     if(origen === "hoy") cargarPedidosHoy(); else buscarHistorico();
   }catch(err){ mostrarMsg("Error al eliminar: " + err.message, "error"); }
+}
+
+/* ---------- Quitar duplicados del día (tandas guardadas dos veces) ----------
+   Un renglón es duplicado si, en un lote POSTERIOR, hay otro con exactamente el
+   mismo contenido que uno de un lote ANTERIOR (se empareja uno con uno).
+   Al borrarlo: repone el inventario que descontó y limpia/ajusta la venta de
+   Mercado Libre que se hubiera creado desde él. */
+async function limpiarDuplicadosDelDia(){
+  const btn = document.getElementById("btnQuitarDuplicados");
+  const fecha = hoyISO();
+  btn.disabled = true; btn.textContent = "⏳ Buscando…";
+  try{
+    const snap = await db.collection(COLECCION).where("fecha","==",fecha).get();
+    const filas = [];
+    snap.forEach(d=> filas.push({id:d.id, ...d.data()}));
+    if(!filas.length){ mostrarMsg("Hoy no hay pedidos capturados.", "ok"); return; }
+
+    const nz = v => (v==null?"":String(v)).trim().toLowerCase();
+    const clave = p => {
+      const it = (p.items&&p.items[0])||{};
+      return [p.canal, p.cliente, p.ciudad, it.genero, it.talla, it.color, it.marca, it.modelo, it.descripcion,
+              it.cantidad, !!it.clientePropiaPlayera, !!it.desdeInventarioImpreso,
+              // En ML el folio es el real y se repite igual; en Local cada renglón tiene folio propio
+              esCanalML(p.canal) ? p.folio : ""].map(nz).join("|");
+    };
+    const lotes = [...new Set(filas.map(p=>p.loteGeneral||""))].sort();
+    if(lotes.length < 2){ mostrarMsg("Hoy solo hay una tanda (lote): no hay duplicados entre tandas que quitar.", "ok"); return; }
+
+    const originales = new Map();   // clave -> [ids de lotes anteriores aún sin emparejar]
+    const duplicados = [];
+    for(const lote of lotes){
+      const delLote = filas.filter(p=>(p.loteGeneral||"")===lote).sort((a,b)=>(a.orden||0)-(b.orden||0));
+      const nuevos = [];
+      for(const p of delLote){
+        const k = clave(p);
+        const disp = originales.get(k);
+        if(disp && disp.length){ disp.shift(); duplicados.push({p, lote}); }
+        else nuevos.push([k,p.id]);
+      }
+      nuevos.forEach(([k,id])=>{ if(!originales.has(k)) originales.set(k,[]); originales.get(k).push(id); });
+    }
+    if(!duplicados.length){ mostrarMsg("No encontré renglones repetidos entre las tandas de hoy ✔", "ok"); return; }
+
+    const porLote = {};
+    duplicados.forEach(d=>{ porLote[d.lote||"(sin lote)"] = (porLote[d.lote||"(sin lote)"]||0)+1; });
+    const resumenLotes = Object.entries(porLote).map(([l,n])=>`  • ${l}: ${n} renglón(es)`).join("\n");
+    const muestra = duplicados.slice(0,12).map(d=>{ const it=(d.p.items&&d.p.items[0])||{}; return `  - ${d.p.folio} · ${d.p.canal} · ${it.genero||""} ${it.talla||""} ${it.color||""} ×${it.cantidad||1}`; }).join("\n");
+    if(!confirm(`Encontré ${duplicados.length} renglón(es) repetido(s) de otra tanda de hoy:\n\n${resumenLotes}\n\nEjemplos:\n${muestra}${duplicados.length>12?"\n  …":""}\n\nSe van a BORRAR (se conserva el de la tanda anterior), se repone el inventario de playeras lisas que descontaron, y se corrigen las ventas de Mercado Libre que hayan creado.\n\n¿Continuar?`)) return;
+
+    btn.textContent = "🧹 Borrando…";
+    const idsBorrados = new Set(duplicados.map(d=>d.p.id));
+    const foliosML = new Set();
+    let n = 0;
+    for(const {p} of duplicados){
+      if(p.items && p.items.length) await descontarStockPlayerasDePedido([], p.items);
+      await db.collection(COLECCION).doc(p.id).delete();
+      if(esCanalML(p.canal) && p.folio && p.folio !== "(sin folio)") foliosML.add(p.folio);
+      n++; btn.textContent = `🧹 Borrando… ${n}/${duplicados.length}`;
+    }
+
+    // Ventas de Mercado Libre creadas desde estos pedidos: reconstruirlas con lo que quedó
+    let ventasCorregidas = 0, ventasBorradas = 0;
+    for(const folio of foliosML){
+      const [sv, sp] = await Promise.all([
+        db.collection("pl_ventas").where("canal","==","Mercado Libre").where("folio","==",folio).get(),
+        db.collection(COLECCION).where("folio","==",folio).get()
+      ]);
+      const mias = [];
+      sv.forEach(d=>{ const v=d.data(); if(v.origen==="pedidosDiarios" && !(+v.total>0)) mias.push(d); });
+      if(!mias.length) continue;   // ya viene del Excel de ML u otra fuente: no se toca
+      mias.sort((a,b)=>(a.data().creado||"").localeCompare(b.data().creado||""));
+      const restantes = [];
+      sp.forEach(d=>{ if(!idsBorrados.has(d.id)) restantes.push(d.data()); });
+      if(!restantes.length){
+        for(const d of mias){ await d.ref.delete(); ventasBorradas++; }
+        continue;
+      }
+      const items = [];
+      restantes.forEach(p=> (p.items||[]).forEach(it=> items.push(itemDeVentaML(it))));
+      await mias[0].ref.set({
+        items, producto: items.map(resumenItemVentaML).join(", "),
+        cantidad: items.reduce((a,x)=>a+(+x.cantidad||1),0), actualizado: new Date().toISOString()
+      }, {merge:true});
+      ventasCorregidas++;
+      for(const d of mias.slice(1)){ await d.ref.delete(); ventasBorradas++; }
+    }
+    mostrarMsg(`✅ ${duplicados.length} renglón(es) duplicado(s) borrados y su inventario repuesto`
+      + (foliosML.size ? ` · Ventas ML: ${ventasCorregidas} corregida(s), ${ventasBorradas} borrada(s)` : ""), "ok");
+    cargarPedidosHoy();
+  }catch(err){
+    console.error(err); mostrarMsg("Error al quitar duplicados: " + err.message, "error");
+  }finally{
+    btn.disabled = false; btn.textContent = "🧹 Quitar duplicados de hoy";
+  }
 }
 
 let historicoCache = [];
