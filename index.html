@@ -3135,6 +3135,46 @@ const db = getFirestore(app);
 const CLOUD = 'dwabl0eti';
 const PRESET = 'seguro_ahorras';
 
+// Sube una imagen a Cloudinary con las fallas bien manejadas: reduce fotos muy
+// grandes (máx. 1600 px, conserva transparencia de los logos PNG), tiene
+// tiempo límite y, si algo sale mal, lanza un Error con el MOTIVO REAL en
+// lugar de dejar el aviso "Subiendo imagen..." pegado y no guardar nada.
+async function reducirImagenSiHaceFalta(file, maxLado=1600){
+  try{
+    if(!file.type.startsWith('image/') || file.type==='image/svg+xml' || file.type==='image/gif') return file;
+    if(file.size < 800*1024) return file;   // ya es ligera
+    const bmp = await createImageBitmap(file);
+    const k = Math.min(1, maxLado/Math.max(bmp.width,bmp.height));
+    if(k>=1 && file.size < 5*1024*1024) return file;
+    const c = document.createElement('canvas');
+    c.width = Math.round(bmp.width*k); c.height = Math.round(bmp.height*k);
+    c.getContext('2d').drawImage(bmp,0,0,c.width,c.height);
+    const conAlfa = file.type==='image/png' || file.type==='image/webp';
+    const blob = await new Promise(r=>c.toBlob(r, conAlfa?'image/png':'image/jpeg', 0.88));
+    return blob && blob.size < file.size ? new File([blob], file.name.replace(/\.\w+$/, conAlfa?'.png':'.jpg'), {type:blob.type}) : file;
+  }catch(e){ return file; }
+}
+async function subirImagenCloudinary(file, folder, publicId){
+  const f = await reducirImagenSiHaceFalta(file);
+  const fd = new FormData();
+  fd.append('file', f); fd.append('upload_preset', PRESET); fd.append('folder', folder);
+  if(publicId) fd.append('public_id', publicId);
+  const ctrl = new AbortController();
+  const timer = setTimeout(()=>ctrl.abort(), 45000);
+  let res;
+  try{
+    res = await fetch(`https://api.cloudinary.com/v1_1/${CLOUD}/image/upload`, {method:'POST', body:fd, signal:ctrl.signal});
+  }catch(e){
+    throw new Error(e.name==='AbortError' ? 'se tardó más de 45 segundos (revisa tu internet o usa una imagen más ligera)' : 'no hay conexión con el servidor de imágenes ('+e.message+')');
+  }finally{ clearTimeout(timer); }
+  let data = {};
+  try{ data = await res.json(); }catch(e){}
+  if(!res.ok || !data.secure_url){
+    throw new Error((data.error && data.error.message) || ('el servidor respondió '+res.status));
+  }
+  return data.secure_url;
+}
+
 let ventas=[], gastos=[], playeras=[], insumos=[], consumos=[], clientes=[];
 let gastosFiltro='todos';
 let cargados=0;
@@ -6233,15 +6273,18 @@ window.guardarPlayera=async function(){
   const id=document.getElementById('p-id').value||uid();
   let imagenUrl='';
   const file=document.getElementById('p-imagen').files[0];
+  const imgPrevia=playeras.find(x=>x.id===id)?.imagen||'';
   if(file){
     toast('⏳ Subiendo imagen...');
-    const fd=new FormData();fd.append('file',file);fd.append('upload_preset',PRESET);fd.append('folder','playeras-inventario');
-    const res=await fetch(`https://api.cloudinary.com/v1_1/${CLOUD}/image/upload`,{method:'POST',body:fd});
-    const data=await res.json();
-    imagenUrl=data.secure_url||'';
+    try{
+      imagenUrl=await subirImagenCloudinary(file,'playeras-inventario');
+    }catch(e){
+      console.error('Subida de imagen:',e);
+      if(!confirm('⚠️ No se pudo subir la imagen: '+e.message+'\n\n¿Guardar la playera de todos modos, '+(imgPrevia?'conservando la imagen que ya tenía':'sin imagen')+'?\n\n(Cancelar = no guardar nada para que lo intentes de nuevo)')){ toast('❌ No se guardó — la imagen no se pudo subir'); return; }
+      imagenUrl=imgPrevia;
+    }
   } else {
-    const existing=playeras.find(x=>x.id===id);
-    imagenUrl=existing?.imagen||'';
+    imagenUrl=imgPrevia;
   }
   const provSel=document.getElementById('p-proveedor').value;
   const proveedorFinal=provSel==='Otro'?document.getElementById('p-proveedor-otro').value.trim():provSel;
@@ -7285,15 +7328,18 @@ window.guardarInsumo=async function(){
   const id=document.getElementById('ins-id').value||uid();
   let imagenUrl='';
   const fileIns=document.getElementById('ins-imagen').files[0];
+  const imgPreviaIns=insumos.find(x=>x.id===id)?.imagen||'';
   if(fileIns){
     toast('⏳ Subiendo imagen...');
-    const fd=new FormData();fd.append('file',fileIns);fd.append('upload_preset',PRESET);fd.append('folder','beloma-insumos');
-    const res=await fetch(`https://api.cloudinary.com/v1_1/${CLOUD}/image/upload`,{method:'POST',body:fd});
-    const data2=await res.json();
-    imagenUrl=data2.secure_url||'';
+    try{
+      imagenUrl=await subirImagenCloudinary(fileIns,'beloma-insumos');
+    }catch(e){
+      console.error('Subida de imagen:',e);
+      if(!confirm('⚠️ No se pudo subir la imagen: '+e.message+'\n\n¿Guardar el insumo de todos modos, '+(imgPreviaIns?'conservando la imagen que ya tenía':'sin imagen')+'?')){ toast('❌ No se guardó — la imagen no se pudo subir'); return; }
+      imagenUrl=imgPreviaIns;
+    }
   } else {
-    const existing=insumos.find(x=>x.id===id);
-    imagenUrl=existing?.imagen||'';
+    imagenUrl=imgPreviaIns;
   }
   const autoConsumo=document.getElementById('ins-auto-consumo').value;
   const data={id,nombre,categoria,unidad:document.getElementById('ins-unidad').value,stock:+stock,stockMin:+document.getElementById('ins-stock-min').value||0,costo:+document.getElementById('ins-costo').value||0,usoPlayera:+document.getElementById('ins-uso-playera').value||0,usoDia:+document.getElementById('ins-uso-dia').value||0,autoConsumo,imagen:imagenUrl,creado:new Date().toISOString()};
@@ -8216,15 +8262,18 @@ window.guardarDiseno=async function(){
   const id=document.getElementById('dis-id').value||uid();
   let imagenUrl='';
   const file=document.getElementById('dis-imagen').files[0];
+  const imgPreviaDis=diseños.find(x=>x.id===id)?.imagen||'';
   if(file){
     toast('⏳ Subiendo imagen...');
-    const fd=new FormData();fd.append('file',file);fd.append('upload_preset',PRESET);fd.append('folder','beloma-catalogo');
-    const res=await fetch(`https://api.cloudinary.com/v1_1/${CLOUD}/image/upload`,{method:'POST',body:fd});
-    const data=await res.json();
-    imagenUrl=data.secure_url||'';
+    try{
+      imagenUrl=await subirImagenCloudinary(file,'beloma-catalogo');
+    }catch(e){
+      console.error('Subida de imagen:',e);
+      if(!confirm('⚠️ No se pudo subir la imagen: '+e.message+'\n\n¿Guardar el diseño de todos modos, '+(imgPreviaDis?'conservando la imagen que ya tenía':'sin imagen')+'?')){ toast('❌ No se guardó — la imagen no se pudo subir'); return; }
+      imagenUrl=imgPreviaDis;
+    }
   } else {
-    const existing=diseños.find(x=>x.id===id);
-    imagenUrl=existing?.imagen||'';
+    imagenUrl=imgPreviaDis;
   }
   const data={id,nombre,categoria,tags:document.getElementById('dis-tags').value,precio:+document.getElementById('dis-precio').value||0,color:document.getElementById('dis-color').value,genero:document.getElementById('dis-genero').value,activo:document.getElementById('dis-activo').value==='true',notas:document.getElementById('dis-notas').value,imagen:imagenUrl,creado:new Date().toISOString()};
   await setDoc(doc(db,'bl_disenos',id),data);
@@ -10024,12 +10073,13 @@ _Playeras Beloma_`;
 window.subirImagenTransferencia=async function(input){
   const file=input.files[0];if(!file)return;
   toast('⏳ Subiendo imagen...');
-  const fd=new FormData();fd.append('file',file);fd.append('upload_preset',PRESET);fd.append('folder','beloma-transferencia');fd.append('public_id','datos-transferencia');
-  const res=await fetch(`https://api.cloudinary.com/v1_1/${CLOUD}/image/upload`,{method:'POST',body:fd});
-  const data=await res.json();
-  if(data.secure_url){
-    await setDoc(doc(db,'pl_config','pagos'),{...configPagos,imagenUrl:data.secure_url});
+  try{
+    const url=await subirImagenCloudinary(file,'beloma-transferencia','datos-transferencia');
+    await setDoc(doc(db,'pl_config','pagos'),{...configPagos,imagenUrl:url});
     toast('✅ Imagen guardada');
+  }catch(e){
+    console.error('Subida de imagen:',e);
+    toast('⚠️ No se pudo subir la imagen: '+e.message);
   }
 };
 
