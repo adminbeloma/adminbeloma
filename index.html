@@ -6295,7 +6295,9 @@ window.guardarPlayera=async function(){
   const colorSel=document.getElementById('p-color').value;
   const colorFinal=colorSel==='Otro'?document.getElementById('p-color-otro').value.trim():colorSel;
   const existentePrev=playeras.find(x=>x.id===id);
-  const data={id,nombre,tipo:document.getElementById('p-tipo').value,genero:document.getElementById('p-genero').value,categoria:document.getElementById('p-categoria').value,talla:tallaFinal,color:colorFinal,stock:+document.getElementById('p-stock').value||0,stockMin:+document.getElementById('p-stock-min').value||0,proveedor:proveedorFinal,modelo:modeloFinal,costo:+document.getElementById('p-costo').value||0,notas:document.getElementById('p-notas').value,imagen:imagenUrl,creado:existentePrev?.creado||new Date().toISOString(),orden:existentePrev?.orden};
+  const data={id,nombre,tipo:document.getElementById('p-tipo').value,genero:document.getElementById('p-genero').value,categoria:document.getElementById('p-categoria').value,talla:tallaFinal,color:colorFinal,stock:+document.getElementById('p-stock').value||0,stockMin:+document.getElementById('p-stock-min').value||0,proveedor:proveedorFinal,modelo:modeloFinal,costo:+document.getElementById('p-costo').value||0,notas:document.getElementById('p-notas').value,imagen:imagenUrl,creado:existentePrev?.creado||new Date().toISOString()};
+  // Firestore rechaza campos con valor undefined: 'orden' solo se incluye si ya existía.
+  if(existentePrev && existentePrev.orden!==undefined && existentePrev.orden!==null) data.orden=existentePrev.orden;
   await setDoc(doc(db,'pl_playeras',id),data);
   closeModal('modal-playera');
   toast('✅ Playera guardada');
