@@ -316,7 +316,7 @@ tbody td{padding:11px 14px;font-size:13.5px;vertical-align:middle;}
     </div>
     <div class="content">
       <div class="filter-bar">
-        <input type="text" id="search-ventas" placeholder="🔍 Buscar..." oninput="renderVentas()">
+        <input type="text" id="search-ventas" placeholder="🔍 Buscar cliente, diseño, folio..." oninput="onBuscarVentasInput()">
         <select id="filter-canal" onchange="renderVentas()">
           <option value="">Todos los canales</option>
           <option value="Local">Local</option>
@@ -4894,6 +4894,7 @@ window.buscarVentasPorFecha = async function() {
 };
 
 window.limpiarFiltrosVentas=async function(){
+  _ventasBusq=null;
   document.getElementById('search-ventas').value='';
   document.getElementById('filter-canal').value='';
   document.getElementById('filter-venta-desde').value='';
@@ -5297,6 +5298,55 @@ function fechaInvalidaEnFiltro(ids){
   }
   return null;
 }
+// ── Búsqueda de texto en Ventas ──
+// Busca en TODO el historial (no solo las ~50 ventas cargadas) y también dentro
+// de cada renglón (nombre del diseño, marca, modelo, talla, color...), sin
+// distinguir mayúsculas ni acentos, y con varias palabras (todas deben estar).
+let _ventasBusq=null, _ventasBusqTimer=null, _ventasBusqCargando=false;
+function normBusqueda(t){ return String(t==null?'':t).normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase(); }
+function textoBuscableVenta(v){
+  if(v._txtBusq) return v._txtBusq;
+  const partes=[v.producto,v.cliente,v.canal,v.genero,v.color,v.talla,v.folio,v.notas,v.ciudad,v.guia,v.tipoProceso];
+  (v.items||[]).forEach(it=>{
+    partes.push(it.descripcion,it.marca,it.modelo,it.tipo,it.genero,it.talla,it.color,it.tipoPrenda,it.tipoPrendaOtro,it.proceso);
+    (it.desglose||[]).forEach(d=>partes.push(d.genero,d.talla));
+  });
+  const txt=normBusqueda(partes.filter(x=>x!=null&&x!=='').join(' | '));
+  try{ Object.defineProperty(v,'_txtBusq',{value:txt,enumerable:false,configurable:true,writable:true}); }catch(e){}
+  return txt;
+}
+function ventasBaseParaBusqueda(hayTexto){
+  if(!hayTexto || !_ventasBusq) return ventas;
+  // Lo ya cargado en pantalla manda (tiene las ediciones más nuevas); el resto sale del historial completo.
+  const porId=new Map(_ventasBusq.lista.map(v=>[v.id,v]));
+  ventas.forEach(v=>porId.set(v.id,v));
+  return [...porId.values()];
+}
+window.onBuscarVentasInput=function(){
+  renderVentas();
+  clearTimeout(_ventasBusqTimer);
+  const t=(document.getElementById('search-ventas')||{value:''}).value.trim();
+  if(t.length<2) return;
+  _ventasBusqTimer=setTimeout(asegurarHistorialParaBusqueda,350);
+};
+async function asegurarHistorialParaBusqueda(){
+  const desde=(document.getElementById('filter-venta-desde')||{value:''}).value;
+  const hasta=(document.getElementById('filter-venta-hasta')||{value:''}).value;
+  const conRango=!!(desde&&hasta);
+  const key=conRango?desde+'|'+hasta:'todo';
+  if(_ventasBusq && _ventasBusq.key===key && Date.now()-_ventasBusq.ts<60000) return;
+  if(_ventasBusqCargando) return;
+  _ventasBusqCargando=true;
+  const label=document.getElementById('ventas-count-label');
+  if(label) label.textContent='🔎 Buscando en todo el historial…';
+  try{
+    const lista=await obtenerVentasEnRango(conRango?desde:'',conRango?hasta:'');
+    _ventasBusq={key,ts:Date.now(),lista};
+  }catch(e){ console.error('Búsqueda en historial:',e); toast('⚠️ No se pudo buscar en todo el historial; se busca solo en lo cargado'); }
+  finally{ _ventasBusqCargando=false; }
+  renderVentas();
+}
+
 window.renderVentas=function renderVentas(){
   const malo=fechaInvalidaEnFiltro(['filter-venta-desde','filter-venta-hasta']);
   if(malo){
@@ -5305,19 +5355,14 @@ window.renderVentas=function renderVentas(){
     return;
   }
   ['filter-venta-desde','filter-venta-hasta'].forEach(id=>{const e=document.getElementById(id); if(e) e.style.borderColor='';});
-  const search=(document.getElementById('search-ventas')||{value:''}).value.toLowerCase();
+  const search=(document.getElementById('search-ventas')||{value:''}).value.trim();
+  const tokens=normBusqueda(search).split(/\s+/).filter(Boolean);
   const canal=(document.getElementById('filter-canal')||{value:''}).value;
   const desde=(document.getElementById('filter-venta-desde')||{value:''}).value;
   const hasta=(document.getElementById('filter-venta-hasta')||{value:''}).value;
   // Si hay fechas pero no texto de búsqueda, mostrar todo en ese rango
-  let lista=ventas.filter(v=>{
-    const ms=!search||
-      (v.producto||'').toLowerCase().includes(search)||
-      (v.cliente||'').toLowerCase().includes(search)||
-      (v.canal||'').toLowerCase().includes(search)||
-      (v.genero||'').toLowerCase().includes(search)||
-      (v.color||'').toLowerCase().includes(search)||
-      (v.folio||'').toLowerCase().includes(search);
+  let lista=ventasBaseParaBusqueda(tokens.length>0).filter(v=>{
+    const ms=!tokens.length||(()=>{ const t=textoBuscableVenta(v); return tokens.every(k=>t.includes(k)); })();
     const mc=!canal||v.canal===canal;
     const md=!desde||v.fecha>=desde;
     const mh=!hasta||v.fecha<=hasta;
@@ -5405,6 +5450,7 @@ window.renderVentas=function renderVentas(){
 window.eliminarVenta=async function(id){
   if(!confirm('¿Eliminar esta venta?'))return;
   const ventaVieja=ventas.find(v=>v.id===id);
+  _ventasBusq=null;   // el historial cacheado para búsquedas ya no vale
   await deleteDoc(doc(db,'pl_ventas',id));
   // Si esta venta tenía un pedido espejo (por saldo pendiente), lo eliminamos también
   const pedidoEspejo=pedidos.find(p=>p.id==='venta_'+id);
