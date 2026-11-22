@@ -388,6 +388,9 @@ tbody td{padding:11px 14px;font-size:13.5px;vertical-align:middle;}
           <option>Comisiones plataformas</option><option>Contabilidad</option><option>Impuestos / SAT</option>
           <option>Papelería</option><option>Limpieza</option><option>Otro</option>
         </select>
+        <select id="filter-gasto-proveedor" onchange="renderGastos()" style="min-width:190px;">
+          <option value="">Todos los proveedores</option>
+        </select>
         <input type="text" id="filter-gasto-buscar" placeholder="🔍 Buscar concepto..." oninput="renderGastos()" style="min-width:180px;">
         <button class="btn btn-accent btn-sm" onclick="renderGastos()">Buscar</button>
       </div>
@@ -5998,9 +6001,43 @@ window.limpiarFiltrosGastos=function(){
   document.getElementById('filter-gasto-desde').value='';
   document.getElementById('filter-gasto-hasta').value='';
   document.getElementById('filter-gasto-categoria').value='';
+  const _sp=document.getElementById('filter-gasto-proveedor'); if(_sp) _sp.value='';
   document.getElementById('filter-gasto-buscar').value='';
   renderGastos();
 };
+
+// ── Filtro por proveedor en Gastos ──
+// Las opciones salen de los proveedores que realmente aparecen en los gastos
+// (agrupados sin distinguir mayúsculas y respetando el "nombre comercial" del
+// Concentrado de Facturas), con el número de gastos de cada uno.
+function _provDeGasto(g){ const n=(g.proveedor||'').toString().trim(); return n?nombreComercialDe(n):''; }
+function _claveProvGasto(n){ return (n||'').toString().trim().toLowerCase(); }
+function _escOpt(t){ return String(t).replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
+function refrescarOpcionesProveedorGastos(todos){
+  const sel=document.getElementById('filter-gasto-proveedor'); if(!sel) return;
+  const mapa=new Map(); let sinProv=0;
+  todos.forEach(g=>{
+    const n=_provDeGasto(g);
+    if(!n){ sinProv++; return; }
+    const k=_claveProvGasto(n); const e=mapa.get(k)||{nombre:n,cant:0};
+    e.cant++; mapa.set(k,e);
+  });
+  const orden=[...mapa.entries()].sort((a,b)=>a[1].nombre.localeCompare(b[1].nombre,'es'));
+  const firma=orden.map(([k,e])=>k+':'+e.cant).join('|')+'|'+sinProv;
+  if(sel.dataset.firma===firma) return;   // nada cambió: no se reconstruye
+  const actual=sel.value;
+  sel.innerHTML='<option value="">Todos los proveedores</option>'
+    +(sinProv?`<option value="__sin__">(Sin proveedor) · ${sinProv}</option>`:'')
+    +orden.map(([k,e])=>`<option value="${_escOpt(k)}">${_escOpt(e.nombre)} · ${e.cant}</option>`).join('');
+  sel.dataset.firma=firma;
+  sel.value=[...sel.options].some(o=>o.value===actual)?actual:'';
+}
+function gastoPasaFiltroProveedor(g){
+  const v=(document.getElementById('filter-gasto-proveedor')||{value:''}).value;
+  if(!v) return true;
+  const n=_provDeGasto(g);
+  return v==='__sin__' ? !n : _claveProvGasto(n)===v;
+}
 
 window.renderGastos=function renderGastos(){
   const METODO_ICONO={Efectivo:'💵',Transferencia:'📲','Depósito':'🏦',Tarjeta:'💳'};
@@ -6009,16 +6046,19 @@ window.renderGastos=function renderGastos(){
   const catFG=(document.getElementById('filter-gasto-categoria')||{value:''}).value;
   const buscarG=(document.getElementById('filter-gasto-buscar')||{value:''}).value.toLowerCase();
   const todos=gastosCombinados();
+  refrescarOpcionesProveedorGastos(todos);
   let lista=todos.filter(g=>{
     const mt=gastosFiltro==='todos'||g.tipo===gastosFiltro;
     const md=!desde||g.fecha>=desde;
     const mh=!hasta||g.fecha<=hasta;
     const mc=!catFG||g.categoria===catFG;
     const mb=!buscarG||(g.concepto||'').toLowerCase().includes(buscarG)||(g.proveedor||'').toLowerCase().includes(buscarG);
-    return mt&&md&&mh&&mc&&mb;
+    const mp=gastoPasaFiltroProveedor(g);
+    return mt&&md&&mh&&mc&&mb&&mp;
   }).sort((a,b)=>b.fecha>a.fecha?1:-1);
-  const fijos=todos.filter(g=>(!desde||g.fecha>=desde)&&(!hasta||g.fecha<=hasta)&&g.tipo==='Fijo').reduce((s,g)=>s+(+g.monto||0),0);
-  const variables=todos.filter(g=>(!desde||g.fecha>=desde)&&(!hasta||g.fecha<=hasta)&&g.tipo==='Variable').reduce((s,g)=>s+(+g.monto||0),0);
+  // Los totales de arriba siguen el rango de fechas y, si eliges uno, el proveedor.
+  const fijos=todos.filter(g=>(!desde||g.fecha>=desde)&&(!hasta||g.fecha<=hasta)&&gastoPasaFiltroProveedor(g)&&g.tipo==='Fijo').reduce((s,g)=>s+(+g.monto||0),0);
+  const variables=todos.filter(g=>(!desde||g.fecha>=desde)&&(!hasta||g.fecha<=hasta)&&gastoPasaFiltroProveedor(g)&&g.tipo==='Variable').reduce((s,g)=>s+(+g.monto||0),0);
   document.getElementById('gastos-fijos-total').textContent=fmtMoney(fijos);
   document.getElementById('gastos-variables-total').textContent=fmtMoney(variables);
   document.getElementById('gastos-total').textContent=fmtMoney(fijos+variables);
@@ -6166,7 +6206,7 @@ window.exportarGastosPDF=function(){
   const doc=new jsPDF();
   const desde=(document.getElementById('filter-gasto-desde')||{value:''}).value;
   const hasta=(document.getElementById('filter-gasto-hasta')||{value:''}).value;
-  const lista=gastos.filter(g=>{const md=!desde||g.fecha>=desde;const mh=!hasta||g.fecha<=hasta;return md&&mh;}).sort((a,b)=>b.fecha>a.fecha?1:-1);
+  const lista=gastos.filter(g=>{const md=!desde||g.fecha>=desde;const mh=!hasta||g.fecha<=hasta;return md&&mh&&gastoPasaFiltroProveedor(g);}).sort((a,b)=>b.fecha>a.fecha?1:-1);
   doc.setFillColor(24,24,27);doc.rect(0,0,210,28,'F');
   doc.setTextColor(106,171,31);doc.setFontSize(16);doc.setFont('helvetica','bold');
   doc.text('PLAYERAS BELOMA',14,12);
@@ -6187,7 +6227,7 @@ window.exportarGastosPDF=function(){
 window.exportarGastosExcel=function(){
   const desde=(document.getElementById('filter-gasto-desde')||{value:''}).value;
   const hasta=(document.getElementById('filter-gasto-hasta')||{value:''}).value;
-  const lista=gastos.filter(g=>{const md=!desde||g.fecha>=desde;const mh=!hasta||g.fecha<=hasta;return md&&mh;}).sort((a,b)=>b.fecha>a.fecha?1:-1);
+  const lista=gastos.filter(g=>{const md=!desde||g.fecha>=desde;const mh=!hasta||g.fecha<=hasta;return md&&mh&&gastoPasaFiltroProveedor(g);}).sort((a,b)=>b.fecha>a.fecha?1:-1);
   const wb=XLSX.utils.book_new();
   const data=[['Fecha','Concepto','Categoría','Tipo','Proveedor','No. Factura','Monto','Notas'],...lista.map(g=>[fmtFecha(g.fecha),g.concepto,g.categoria,g.tipo,g.proveedor||'',g.factura||'',g.monto,g.notas||''])];
   const ws=XLSX.utils.aoa_to_sheet(data);
