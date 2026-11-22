@@ -1698,7 +1698,7 @@ tbody td{padding:11px 14px;font-size:13.5px;vertical-align:middle;}
         </div>
         <div class="form-group full"><label>Concepto *</label><input type="text" id="g-concepto" placeholder="Ej. Renta, Electricidad, Tinta blanca..."></div>
         <div class="form-group"><label>Categoría</label>
-          <select id="g-categoria" onchange="toggleCatPersonalizada()">
+          <select id="g-categoria" onchange="toggleCatPersonalizada();actualizarCampoPiezasGasto()">
             <optgroup label="Operación">
               <option>Renta</option>
               <option>Electricidad</option>
@@ -1737,6 +1737,7 @@ tbody td{padding:11px 14px;font-size:13.5px;vertical-align:middle;}
           <input type="text" id="g-cat-nueva" placeholder="Escribe la categoría">
         </div>
         <div class="form-group"><label>Monto ($) *</label><input type="number" id="g-monto" placeholder="0.00" step="0.01" oninput="actualizarPreviewMSI()"></div>
+        <div class="form-group" id="g-piezas-group" style="display:none;"><label>Piezas totales de la factura</label><input type="number" id="g-piezas" min="0" step="1" placeholder="Ej. 120"></div>
         <div class="form-group"><label>Método de pago *</label>
           <select id="g-metodo-pago">
             <option value="Efectivo">💵 Efectivo</option>
@@ -5583,7 +5584,32 @@ window.eliminarVentasMLSinProductoSeleccionadas=async function(){
 };
 
 // ─── GASTOS ───
+// ── Piezas totales de las facturas de playeras ──
+// Aplica a los gastos de categoría "Playeras" / "Playeras en blanco". El dato
+// se guarda en el gasto (campo "piezas"); si un gasto viejo no lo trae, se
+// deduce del concepto ("... 120 pzas") o de las compras de playeras ligadas
+// al mismo número de factura y fecha.
+function esCategoriaPlayeras(c){ return /^playeras/i.test((c||'').toString().trim()); }
+function piezasDeGasto(g){
+  if(!g) return null;
+  if(g.piezas!=null && g.piezas!=='' && !isNaN(+g.piezas)) return +g.piezas;
+  const m=String(g.concepto||'').match(/(\d[\d,]*)\s*(?:pzas?|piezas?)\b/i);
+  if(m) return parseInt(m[1].replace(/,/g,''),10);
+  if(g.factura && Array.isArray(comprasPlayeras)){
+    const ref=String(g.factura).trim().toLowerCase();
+    const filas=comprasPlayeras.filter(c=>String(c.referencia||'').trim().toLowerCase()===ref && (!g.fecha||c.fecha===g.fecha));
+    if(filas.length) return filas.reduce((a,c)=>a+(+c.cantidad||0),0);
+  }
+  return null;
+}
+window.actualizarCampoPiezasGasto=function(){
+  const sel=document.getElementById('g-categoria');
+  const grp=document.getElementById('g-piezas-group');
+  if(grp&&sel) grp.style.display=esCategoriaPlayeras(sel.value)?'block':'none';
+};
+
 window.openGastoModal=function(id){
+  { const p=document.getElementById('g-piezas'); if(p) p.value=''; }
   document.getElementById('gasto-id').value='';
   document.getElementById('g-fecha').value=hoy();
   document.getElementById('g-tipo').value='Fijo';
@@ -5642,8 +5668,10 @@ window.openGastoModal=function(id){
       document.getElementById('g-factura').value=g.factura||'';
       document.getElementById('g-notas').value=g.notas||'';
       document.getElementById('g-metodo-pago').value=g.metodoPago||(g.esMSI?'Tarjeta':'Efectivo');
+      const pz=piezasDeGasto(g); if(pz!=null) document.getElementById('g-piezas').value=pz;
     }
   }
+  actualizarCampoPiezasGasto();
   openModal('modal-gasto');
 };
 
@@ -5740,7 +5768,12 @@ window.guardarGasto=async function(){
   }
 
   const data={id,fecha,tipo,concepto,categoria,monto,proveedor,factura,notas,metodoPago,creado:new Date().toISOString()};
-  await setDoc(doc(db,'pl_gastos',id),data);
+  if(esCategoriaPlayeras(categoria)){
+    const pz=parseInt(document.getElementById('g-piezas').value,10);
+    if(!isNaN(pz)&&pz>=0) data.piezas=pz;
+  }
+  // merge:true para no borrar campos que el formulario no muestra (origen, etc.)
+  await setDoc(doc(db,'pl_gastos',id),data,{merge:true});
   closeModal('modal-gasto');
   toast('✅ Gasto guardado');
 };
@@ -6073,7 +6106,7 @@ window.renderGastos=function renderGastos(){
   tbody.innerHTML=lista.map(g=>`<tr>
     <td>${g.origen==='gastos'?`<input type="checkbox" class="g-check-item" data-id="${g.id}" ${gastosSeleccionados.has(g.id)?'checked':''} onchange="toggleGastoSeleccionado('${g.id}', this.checked)" style="width:15px;height:15px;cursor:pointer;">`:''}</td>
     <td>${fmtFecha(g.fecha)}</td>
-    <td style="font-weight:500;">${g.concepto}${g.origen==='caja'?' <span class="badge badge-blue" style="font-size:9px;" title="Registrado en Caja">🔗 Caja</span>':''}${g.origen==='compra'?' <span class="badge badge-blue" style="font-size:9px;" title="Generado desde Compras">🔗 Compra</span>':''}${g.origenFactura?' <span class="badge badge-blue" style="font-size:9px;" title="Importado del Lector de Facturas">🔗 Factura</span>':''}${g.esMSI?` <span class="badge badge-gold" style="font-size:9px;" title="Meses sin intereses — total ${fmtMoney(g.montoTotalMSI)}">💳 MSI ${g.mesMSI}/${g.totalMesesMSI}</span>`:''}</td>
+    <td style="font-weight:500;">${g.concepto}${g.origen==='caja'?' <span class="badge badge-blue" style="font-size:9px;" title="Registrado en Caja">🔗 Caja</span>':''}${g.origen==='compra'?' <span class="badge badge-blue" style="font-size:9px;" title="Generado desde Compras">🔗 Compra</span>':''}${g.origenFactura?' <span class="badge badge-blue" style="font-size:9px;" title="Importado del Lector de Facturas">🔗 Factura</span>':''}${g.esMSI?` <span class="badge badge-gold" style="font-size:9px;" title="Meses sin intereses — total ${fmtMoney(g.montoTotalMSI)}">💳 MSI ${g.mesMSI}/${g.totalMesesMSI}</span>`:''}${(esCategoriaPlayeras(g.categoria)&&piezasDeGasto(g)!=null)?` <span class="badge badge-green" style="font-size:9px;" title="Piezas totales de la factura">👕 ${piezasDeGasto(g)} pzas</span>`:''}</td>
     <td>${g.categoria}</td>
     <td><span class="badge ${g.tipo==='Fijo'?'badge-blue':'badge-gold'}">${g.tipo}</span></td>
     <td style="font-size:12px;">${METODO_ICONO[g.metodoPago]||''} ${g.metodoPago||'—'}</td>
@@ -7343,6 +7376,7 @@ window.confirmarImportarFacturaPlayeras=async function(){
         concepto:`Factura de playeras: ${filas.length} línea(s), ${filas.reduce((s,f)=>s+f.cantidad,0)} pzas${sumarStock?'':' (histórico, no sumado al stock)'}`,
         categoria:'Playeras en blanco', tipo:'Variable',
         proveedor:proveedores.join(', '), factura:referencia||'',
+        piezas:filas.reduce((s,f)=>s+f.cantidad,0),
         monto:+totalImportado.toFixed(2),
         notas:sumarStock?'Generado automáticamente al importar factura de Playeras':'Generado automáticamente al importar factura VIEJA de Playeras — solo gasto, piezas ya usadas/vendidas',
         creado:new Date().toISOString()
@@ -8961,7 +8995,43 @@ window.guardarProveedor=async function(){
   if(!nombre){toast('⚠️ El nombre es obligatorio');return;}
   const id=document.getElementById('prov-id').value||uid();
   const data={id,nombre,categoria:document.getElementById('prov-categoria').value,ciudad:document.getElementById('prov-ciudad').value,contacto:document.getElementById('prov-contacto').value,telefono:document.getElementById('prov-telefono').value,correo:document.getElementById('prov-correo').value,web:document.getElementById('prov-web').value,rfc:document.getElementById('prov-rfc').value,entrega:document.getElementById('prov-entrega').value,formaPago:document.getElementById('prov-forma-pago').value,calificacion:document.getElementById('prov-calificacion').value,productos:document.getElementById('prov-productos').value,notas:document.getElementById('prov-notas').value,creado:new Date().toISOString()};
+  const previo=proveedores.find(p=>p.id===id);
+  const nombreViejo=(previo&&previo.nombre||'').trim();
+  // Si cambió el nombre, se ofrece renombrarlo también en sus gastos y compras
+  // (se guardan como texto), para que Gastos, filtros y totales sigan juntos.
+  let renombrar=false, gastosAfectados=[], comprasAfectadas=[];
+  if(nombreViejo && nombreViejo.toLowerCase()!==nombre.toLowerCase()){
+    const k=nombreViejo.toLowerCase();
+    gastosAfectados=(gastos||[]).filter(g=>(g.proveedor||'').trim().toLowerCase()===k);
+    comprasAfectadas=(compras||[]).filter(c=>(c.proveedor||'').trim().toLowerCase()===k);
+    const total=gastosAfectados.length+comprasAfectadas.length;
+    if(total>0){
+      renombrar=confirm(`Cambiaste el nombre de "${nombreViejo}" a "${nombre}".\n\n¿Renombrar también en sus ${gastosAfectados.length} gasto(s) y ${comprasAfectadas.length} compra(s) de insumos?\n\nAceptar = se actualizan todos (los filtros y totales quedan juntos)\nCancelar = solo cambia el proveedor y lo anterior conserva el nombre viejo`);
+    }
+  }
   await setDoc(doc(db,'pl_proveedores',id),data);
+  if(renombrar){
+    try{
+      let batch=writeBatch(db), n=0;
+      const marcar=async(col,docs)=>{
+        for(const d of docs){
+          batch.set(doc(db,col,d.id),{proveedor:nombre},{merge:true});
+          if(++n>=450){ await batch.commit(); batch=writeBatch(db); n=0; }
+        }
+      };
+      await marcar('pl_gastos',gastosAfectados);
+      await marcar('pl_compras',comprasAfectadas);
+      if(n>0) await batch.commit();
+      closeModal('modal-proveedor');
+      toast(`✅ Proveedor guardado y renombrado en ${gastosAfectados.length+comprasAfectadas.length} registro(s)`);
+      return;
+    }catch(e){
+      console.error('Renombrar proveedor:',e);
+      closeModal('modal-proveedor');
+      toast('⚠️ El proveedor se guardó, pero no se pudieron renombrar sus gastos: '+e.message);
+      return;
+    }
+  }
   closeModal('modal-proveedor');
   toast('✅ Proveedor guardado');
 };
@@ -9021,6 +9091,8 @@ onSnapshot(collection(db,'pl_proveedor_alias'),s=>{
   proveedorAlias=s.docs.map(d=>d.data());
   if(document.getElementById('prov-tab-concentrado')?.style.display!=='none') renderConcentradoProveedores();
   if(typeof renderProveedores==='function') renderProveedores();
+  // El filtro de proveedor de Gastos usa el nombre comercial: se actualiza al cambiarlo.
+  if(typeof renderGastos==='function') renderGastos();
 });
 function _slugAlias(s){
   return (s||'').toString().trim().toLowerCase()
@@ -9368,7 +9440,7 @@ window.verDetalleProveedor=function(id){
 // lector de facturas o capturados a mano en Gastos — para que se pueda
 // contar y revisar cuántos hay realmente registrados, por proveedor y fecha.
 window.abrirHistorialFacturasPlayeras=function(){
-  const proveedoresEnGastos=[...new Set((gastos||[]).filter(g=>g.categoria==='Playeras en blanco').map(g=>g.proveedor).filter(Boolean))].sort();
+  const proveedoresEnGastos=[...new Set((gastos||[]).filter(g=>esCategoriaPlayeras(g.categoria)).map(g=>g.proveedor).filter(Boolean))].sort();
   const sel=document.getElementById('hfp-filtro-proveedor');
   sel.innerHTML='<option value="">Todos los proveedores</option>'+proveedoresEnGastos.map(p=>`<option>${p}</option>`).join('');
   document.getElementById('hfp-desde').value='';
@@ -9381,18 +9453,20 @@ window.renderHistorialFacturasPlayeras=function(){
   const provFiltro=document.getElementById('hfp-filtro-proveedor').value;
   const desde=document.getElementById('hfp-desde').value;
   const hasta=document.getElementById('hfp-hasta').value;
-  let lista=(gastos||[]).filter(g=>g.categoria==='Playeras en blanco');
+  let lista=(gastos||[]).filter(g=>esCategoriaPlayeras(g.categoria));
   if(provFiltro) lista=lista.filter(g=>g.proveedor===provFiltro);
   if(desde) lista=lista.filter(g=>g.fecha>=desde);
   if(hasta) lista=lista.filter(g=>g.fecha<=hasta);
   lista.sort((a,b)=>(b.fecha||'').localeCompare(a.fecha||''));
 
   const total=lista.reduce((s,g)=>s+(+g.monto||0),0);
+  const totalPiezas=lista.reduce((s,g)=>s+(piezasDeGasto(g)||0),0);
+  const sinPiezas=lista.filter(g=>piezasDeGasto(g)==null).length;
   const porProveedor={};
   lista.forEach(g=>{
     const prov=g.proveedor||'Sin proveedor';
-    if(!porProveedor[prov]) porProveedor[prov]={n:0,monto:0};
-    porProveedor[prov].n++; porProveedor[prov].monto+=+g.monto||0;
+    if(!porProveedor[prov]) porProveedor[prov]={n:0,monto:0,piezas:0};
+    porProveedor[prov].n++; porProveedor[prov].monto+=+g.monto||0; porProveedor[prov].piezas+=piezasDeGasto(g)||0;
   });
   const filasProveedor=Object.entries(porProveedor).sort((a,b)=>b[1].monto-a[1].monto);
 
@@ -9400,22 +9474,24 @@ window.renderHistorialFacturasPlayeras=function(){
     <div style="display:flex;gap:24px;flex-wrap:wrap;background:var(--bg);border-radius:8px;padding:12px 16px;margin-bottom:${filasProveedor.length?'8px':'0'};">
       <div><div style="font-size:11px;color:var(--ink-soft);">Registros encontrados</div><strong style="font-size:20px;">${lista.length}</strong></div>
       <div><div style="font-size:11px;color:var(--ink-soft);">Total</div><strong style="color:var(--green);font-size:20px;">${fmtMoney(total)}</strong></div>
+      <div><div style="font-size:11px;color:var(--ink-soft);">Piezas totales</div><strong style="font-size:20px;">${totalPiezas}</strong>${sinPiezas?`<div style="font-size:10px;color:var(--ink-soft);">${sinPiezas} factura(s) sin dato de piezas</div>`:''}</div>
     </div>
     ${filasProveedor.length?`<div style="display:flex;flex-wrap:wrap;gap:8px;">${filasProveedor.map(([prov,d])=>
-      `<div style="background:var(--bg);border-radius:8px;padding:8px 12px;font-size:12px;"><strong>${prov}</strong> — ${d.n} registro${d.n===1?'':'s'} · ${fmtMoney(d.monto)}</div>`).join('')}</div>`:''}`;
+      `<div style="background:var(--bg);border-radius:8px;padding:8px 12px;font-size:12px;"><strong>${prov}</strong> — ${d.n} registro${d.n===1?'':'s'} · ${d.piezas} pzas · ${fmtMoney(d.monto)}</div>`).join('')}</div>`:''}`;
 
   if(lista.length===0){
     document.getElementById('hfp-tabla').innerHTML='<div class="empty-state"><div class="icon">📋</div><p>No hay gastos de "Playeras en blanco" con estos filtros.</p></div>';
     return;
   }
   document.getElementById('hfp-tabla').innerHTML=`<div class="table-wrap"><table><thead><tr>
-    <th>Fecha</th><th>Proveedor</th><th>Concepto</th><th>Factura/Ref.</th><th>Monto</th><th>Origen</th>
+    <th>Fecha</th><th>Proveedor</th><th>Concepto</th><th>Factura/Ref.</th><th>Piezas</th><th>Monto</th><th>Origen</th>
   </tr></thead><tbody>`+
     lista.map(g=>`<tr>
       <td>${fmtFecha(g.fecha)}</td>
       <td>${g.proveedor||'—'}</td>
       <td style="font-size:12px;max-width:280px;">${g.concepto||'—'}</td>
       <td style="font-size:12px;">${g.factura||'—'}</td>
+      <td style="font-weight:600;">${piezasDeGasto(g)!=null?piezasDeGasto(g):'—'}</td>
       <td style="font-weight:600;">${fmtMoney(g.monto)}</td>
       <td style="font-size:11px;color:var(--ink-soft);">${g.origen==='compra-playera-factura'?'📄 Import. factura':g.origen==='compra-playera'?'🛒 Compra individual':'✍️ Manual'}</td>
     </tr>`).join('')+
