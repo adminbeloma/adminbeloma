@@ -6276,7 +6276,9 @@ window.guardarGastosLote=async function(){
 function camposFaltantesGasto(g){
   const faltan=[];
   if(!g.metodoPago) faltan.push('Método de pago');
-  if(!g.proveedor) faltan.push('Proveedor');
+  // Los sueldos / nómina se pagan a una persona, no a un proveedor: no lo exigimos.
+  const esSueldo=/sueldo|n[oó]mina/i.test(g.categoria||'');
+  if(!g.proveedor && !esSueldo) faltan.push('Proveedor');
   if(!(+g.monto>0)) faltan.push('Monto');
   return faltan;
 }
