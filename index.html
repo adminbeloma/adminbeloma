@@ -3710,7 +3710,7 @@ window.openVentaModal=async function(tipo, ventaId){
   document.getElementById('modal-venta-title').textContent='Nueva Venta';
 
   if(tipo==='edit' && ventaId) {
-    const v = ventas.find(x=>x.id===ventaId);
+    const v = ventaPorId(ventaId);
     if(v){
       document.getElementById('venta-id').value=v.id;
       document.getElementById('v-fecha').value=v.fecha||hoy();
@@ -4540,7 +4540,7 @@ window.guardarVenta=async function(){
     document.getElementById('v-factura-file').value='';
   }
   // Preservar fecha de creación si es edición
-  const ventaOriginal=idExistente?ventas.find(v=>v.id===idExistente):null;
+  const ventaOriginal=idExistente?ventaPorId(idExistente):null;
   const data={id,fecha:document.getElementById('v-fecha').value,canal:canal2,
     cliente:document.getElementById('v-cliente').value||'Público en general',
     producto:productoResumen,items:window._ventaItems,
@@ -5444,6 +5444,9 @@ function textoBuscableVenta(v){
   try{ Object.defineProperty(v,'_txtBusq',{value:txt,enumerable:false,configurable:true,writable:true}); }catch(e){}
   return txt;
 }
+function ventaPorId(id){
+  return ventas.find(x=>x.id===id) || (_ventasBusq&&_ventasBusq.lista.find(x=>x.id===id)) || null;
+}
 function ventasBaseParaBusqueda(hayTexto){
   if(!hayTexto || !_ventasBusq) return ventas;
   // Lo ya cargado en pantalla manda (tiene las ediciones más nuevas); el resto sale del historial completo.
@@ -5590,7 +5593,7 @@ window._devItems=[];
 function _normDesc(t){ return String(t||'').trim().toUpperCase().replace(/\s+/g,' '); }
 
 window.abrirDevolucion=function(ventaId){
-  const v=ventas.find(x=>x.id===ventaId); if(!v){ toast('⚠️ No encontré esa venta'); return; }
+  const v=ventaPorId(ventaId); if(!v){ toast('⚠️ No encontré esa venta'); return; }
   const prev=v.devolucion||null;
   document.getElementById('dev-venta-id').value=ventaId;
   document.getElementById('dev-resumen').innerHTML=`<b>${_escAttrFact(v.cliente||'')}</b> · Folio ${_escAttrFact(v.folio||'—')} · ${fmtFecha(v.fecha)} · Total ${fmtMoney(v.total)}<br><span style="color:var(--ink-soft);">${_escAttrFact(v.producto||'')}</span>`;
@@ -5681,7 +5684,7 @@ async function revertirEfectosDevolucion(ventaId, dev){
 
 window.guardarDevolucion=async function(){
   const ventaId=document.getElementById('dev-venta-id').value;
-  const v=ventas.find(x=>x.id===ventaId); if(!v) return;
+  const v=ventaPorId(ventaId); if(!v) return;
   const fecha=document.getElementById('dev-fecha').value;
   const monto=+document.getElementById('dev-monto').value;
   const sel=window._devItems.filter(x=>x.incluir);
@@ -5757,7 +5760,7 @@ window.guardarDevolucion=async function(){
 
 window.quitarDevolucion=async function(){
   const ventaId=document.getElementById('dev-venta-id').value;
-  const v=ventas.find(x=>x.id===ventaId); if(!v||!v.devolucion) return;
+  const v=ventaPorId(ventaId); if(!v||!v.devolucion) return;
   if(!confirm('¿Quitar esta devolución?\n\nLa venta vuelve a contar completa, se restan del inventario impreso las piezas que se habían regresado y se borra el gasto del cobro de Mercado Libre (si lo había).')) return;
   try{
     await revertirEfectosDevolucion(ventaId, v.devolucion);
@@ -5772,7 +5775,7 @@ window.quitarDevolucion=async function(){
 
 window.eliminarVenta=async function(id){
   if(!confirm('¿Eliminar esta venta?'))return;
-  const ventaVieja=ventas.find(v=>v.id===id);
+  const ventaVieja=ventaPorId(id);
   _ventasBusq=null;   // el historial cacheado para búsquedas ya no vale
   if(ventaVieja&&ventaVieja.devolucion) await revertirEfectosDevolucion(id, ventaVieja.devolucion);
   await deleteDoc(doc(db,'pl_ventas',id));
