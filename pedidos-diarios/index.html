@@ -331,7 +331,7 @@
       <div style="overflow-x:auto;margin-top:10px;">
         <table class="items-tabla" style="width:100%;">
           <thead><tr>
-            <th>Género</th><th>Talla</th><th>Color</th><th>Descripción</th><th>Categoría</th><th>Piezas</th><th></th>
+            <th>Foto</th><th>Género</th><th>Talla</th><th>Color</th><th>Descripción</th><th>Categoría</th><th>Piezas</th><th></th>
           </tr></thead>
           <tbody id="invBody"></tbody>
         </table>
@@ -362,6 +362,12 @@
       <div><label>Color</label><input type="text" id="inv-add-color" placeholder="Ej. Negro"></div>
       <div><label>Descripción (igual a como la escribes al capturar)</label><input type="text" id="inv-add-descripcion" placeholder="Ej. AKIRA 121"></div>
       <div><label>Piezas</label><input type="number" id="inv-add-cantidad" value="1" min="0"></div>
+      <div>
+        <label>Foto de la playera (opcional)</label>
+        <input type="file" id="inv-foto-file" accept="image/*" onchange="elegirFotoInv(this)">
+        <div id="inv-foto-preview" style="margin-top:6px;display:flex;align-items:center;gap:10px;"></div>
+        <div style="font-size:.74rem;color:#888;margin-top:4px;">Se ve en todas las tallas de este mismo diseño.</div>
+      </div>
     </div>
     <div class="fila-acciones">
       <button class="btn btn-secundario" onclick="cerrarModalInventarioAgregar()">Cancelar</button>
@@ -1499,7 +1505,7 @@ function claveInventario(genero,talla,descripcion){
 
 async function cargarInventario(){
   const tbody = document.getElementById("invBody");
-  tbody.innerHTML = `<tr><td colspan="7" class="vacio">Cargando...</td></tr>`;
+  tbody.innerHTML = `<tr><td colspan="8" class="vacio">Cargando...</td></tr>`;
   try{
     const snap = await db.collection(COL_INVENTARIO).get();
     inventarioCache = [];
@@ -1508,7 +1514,7 @@ async function cargarInventario(){
     llenarFiltrosInventario();
     renderInventario();
   }catch(err){
-    tbody.innerHTML = `<tr><td colspan="7" class="vacio">Error: ${err.message}</td></tr>`;
+    tbody.innerHTML = `<tr><td colspan="8" class="vacio">Error: ${err.message}</td></tr>`;
   }
 }
 
@@ -1522,6 +1528,63 @@ function llenarFiltrosInventario(){
   selT.innerHTML = `<option value="">Todas</option>` + tallas.map(t=>`<option value="${t}">${t}</option>`).join("");
   selG.value = vG; selT.value = vT;
 }
+
+// Foto del diseño: la propia de la fila, o la de otra talla del MISMO diseño
+// (así subes la foto una vez y se ve en todas las tallas).
+function fotoDeItem(i){
+  if(i.foto) return i.foto;
+  const d = normDescripcion(i.descripcion);
+  if(!d) return "";
+  const otro = inventarioCache.find(x=>x.foto && normDescripcion(x.descripcion)===d);
+  return otro ? otro.foto : "";
+}
+
+const CLOUD_INV = "dwabl0eti", PRESET_INV = "seguro_ahorras";
+let _invFotoArchivo = null, _invFotoUrl = "";
+async function reducirFotoInv(file, maxLado=1400){
+  try{
+    if(!file.type.startsWith("image/") || file.type==="image/gif" || file.type==="image/svg+xml") return file;
+    const bmp = await createImageBitmap(file);
+    const k = Math.min(1, maxLado/Math.max(bmp.width,bmp.height));
+    if(k>=1 && file.size<800*1024) return file;
+    const c = document.createElement("canvas");
+    c.width=Math.round(bmp.width*k); c.height=Math.round(bmp.height*k);
+    c.getContext("2d").drawImage(bmp,0,0,c.width,c.height);
+    const blob = await new Promise(r=>c.toBlob(r,"image/jpeg",0.85));
+    return blob && blob.size<file.size ? new File([blob], file.name.replace(/\.\w+$/,".jpg"), {type:"image/jpeg"}) : file;
+  }catch(e){ return file; }
+}
+async function subirFotoInv(file){
+  const f = await reducirFotoInv(file);
+  const fd = new FormData();
+  fd.append("file", f); fd.append("upload_preset", PRESET_INV); fd.append("folder", "beloma-inventario-playeras");
+  const ctrl = new AbortController(); const t = setTimeout(()=>ctrl.abort(), 45000);
+  let res;
+  try{ res = await fetch(`https://api.cloudinary.com/v1_1/${CLOUD_INV}/image/upload`, {method:"POST", body:fd, signal:ctrl.signal}); }
+  catch(e){ throw new Error(e.name==="AbortError" ? "se tardó más de 45 segundos" : "sin conexión con el servidor de imágenes"); }
+  finally{ clearTimeout(t); }
+  let data = {}; try{ data = await res.json(); }catch(e){}
+  if(!res.ok || !data.secure_url) throw new Error((data.error && data.error.message) || ("el servidor respondió "+res.status));
+  return data.secure_url;
+}
+function pintarFotoInvModal(){
+  const box = document.getElementById("inv-foto-preview");
+  const url = _invFotoArchivo ? URL.createObjectURL(_invFotoArchivo) : _invFotoUrl;
+  box.innerHTML = url
+    ? `<img src="${url}" style="width:96px;height:96px;object-fit:cover;border-radius:8px;border:1px solid #ddd;"> <button type="button" class="btn btn-rojo btn-chico" onclick="quitarFotoInvModal()">Quitar foto</button>`
+    : `<span style="color:#999;font-size:.8rem;">Sin foto</span>`;
+}
+window.elegirFotoInv = function(inp){
+  const f = inp.files && inp.files[0];
+  if(!f) return;
+  if(!f.type.startsWith("image/")){ mostrarMsg("Elige una imagen (JPG, PNG…).", "error"); inp.value=""; return; }
+  _invFotoArchivo = f; pintarFotoInvModal();
+};
+window.quitarFotoInvModal = function(){
+  _invFotoArchivo = null; _invFotoUrl = "";
+  document.getElementById("inv-foto-file").value = "";
+  pintarFotoInvModal();
+};
 
 function renderInventario(){
   const buscar = (document.getElementById("invBuscar").value||"").trim().toUpperCase();
@@ -1545,7 +1608,8 @@ function renderInventario(){
     return;
   }
   vacio.style.display = "none";
-  tbody.innerHTML = lista.map(i=>`<tr>
+  tbody.innerHTML = lista.map(i=>{ const f=fotoDeItem(i); return `<tr>
+    <td style="width:56px;">${f?`<img src="${f.replace(/"/g,'&quot;')}" alt="" loading="lazy" onclick="window.open(this.src,'_blank')" style="width:48px;height:48px;object-fit:cover;border-radius:6px;cursor:zoom-in;border:1px solid #ddd;">`:`<span style="color:#bbb;font-size:.75rem;">—</span>`}</td>
     <td>${i.genero||"—"}</td>
     <td>${i.talla||"—"}</td>
     <td>${i.color||"—"}</td>
@@ -1556,7 +1620,7 @@ function renderInventario(){
       <button class="btn btn-secundario btn-chico" onclick="editarInventarioItem('${i.id}')">✏️</button>
       <button class="btn btn-rojo btn-chico" onclick="eliminarInventarioItem('${i.id}')">✕</button>
     </td>
-  </tr>`).join("");
+  </tr>`; }).join("");
 }
 
 window.eliminarInventarioItem = async function(id){
@@ -1596,6 +1660,7 @@ window.abrirModalInventarioAgregar = function(){
   document.getElementById("inv-add-color").value = "";
   document.getElementById("inv-add-descripcion").value = "";
   document.getElementById("inv-add-cantidad").value = "1";
+  _invFotoArchivo = null; _invFotoUrl = ""; document.getElementById("inv-foto-file").value = ""; pintarFotoInvModal();
   actualizarTallasInventarioAgregar();
   document.getElementById("invModalAgregar").classList.add("activo");
 };
@@ -1611,6 +1676,7 @@ window.editarInventarioItem = function(id){
   document.getElementById("inv-add-color").value = item.color || "";
   document.getElementById("inv-add-descripcion").value = item.descripcion || "";
   document.getElementById("inv-add-cantidad").value = item.cantidad || 0;
+  _invFotoArchivo = null; _invFotoUrl = item.foto || ""; document.getElementById("inv-foto-file").value = ""; pintarFotoInvModal();
   document.getElementById("invModalAgregar").classList.add("activo");
 };
 
@@ -1640,11 +1706,19 @@ window.guardarInventarioManual = async function(){
   if(!descripcion || !talla){ mostrarMsg("Falta talla o descripción.", "error"); return; }
   if(isNaN(cantidad) || cantidad<0){ mostrarMsg("La cantidad de piezas no es válida.", "error"); return; }
 
+  // Foto: si se eligió una nueva, se sube primero (si falla, no se guarda nada).
+  let foto = _invFotoUrl || "";
+  if(_invFotoArchivo){
+    mostrarMsg("⏳ Subiendo foto...", "ok");
+    try{ foto = await subirFotoInv(_invFotoArchivo); }
+    catch(e){ mostrarMsg("No se pudo subir la foto: "+e.message+". No se guardó; inténtalo de nuevo.", "error"); return; }
+  }
+
   if(idEditando){
     // Modo edición: se sobreescribe EXACTAMENTE ese registro (no se suma a
     // nada ni se busca coincidencia con otro diseño) — así se puede corregir
     // una cantidad mal capturada, como en este caso.
-    const data = {genero, talla: normTalla(talla), color: color||"", descripcion, cantidad};
+    const data = {genero, talla: normTalla(talla), color: color||"", descripcion, cantidad, foto};
     await db.collection(COL_INVENTARIO).doc(idEditando).update(data);
     const idx = inventarioCache.findIndex(i=>i.id===idEditando);
     if(idx!==-1) inventarioCache[idx] = {...inventarioCache[idx], ...data};
@@ -1654,13 +1728,15 @@ window.guardarInventarioManual = async function(){
     const existente = inventarioCache.find(i=>claveInventario(i.genero,i.talla,i.descripcion)===clave);
     if(existente){
       const nuevaCant = (+existente.cantidad||0) + cantidad;
-      await db.collection(COL_INVENTARIO).doc(existente.id).update({cantidad:nuevaCant});
-      existente.cantidad = nuevaCant;
+      const cambios = {cantidad:nuevaCant};
+      if(foto && !existente.foto) cambios.foto = foto;
+      await db.collection(COL_INVENTARIO).doc(existente.id).update(cambios);
+      Object.assign(existente, cambios);
     } else {
       const ref = await db.collection(COL_INVENTARIO).add({
-        genero, talla: normTalla(talla), color: color||"", descripcion, categoria: "Manual", cantidad
+        genero, talla: normTalla(talla), color: color||"", descripcion, categoria: "Manual", cantidad, foto
       });
-      inventarioCache.push({id:ref.id, genero, talla:normTalla(talla), color, descripcion, categoria:"Manual", cantidad});
+      inventarioCache.push({id:ref.id, genero, talla:normTalla(talla), color, descripcion, categoria:"Manual", cantidad, foto});
     }
     mostrarMsg("✅ Agregado al inventario.", "ok");
   }
