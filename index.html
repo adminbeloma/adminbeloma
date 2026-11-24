@@ -4566,6 +4566,30 @@ window.guardarVenta=async function(){
   const _te=document.getElementById('v-cliente-tel');
   const _telOk=_te && (_te.dataset.nombre||'').trim().toLowerCase()===(data.cliente||'').trim().toLowerCase();
   await sincronizarPedidoDesdeVenta(data, _telOk?(_te.value||''):'');
+  // Si se está liquidando (o abonando) una venta de un día ANTERIOR editándola,
+  // ese dinero entra hoy a caja: se registra como abono de hoy, igual que el
+  // botón 💰 Pago. Sin esto el corte de hoy no lo veía (la venta conserva su
+  // fecha original) y el del día viejo ya estaba cerrado.
+  if(ventaOriginal && ['Local','Foráneo'].includes(data.canal) && data.fecha<hoy()){
+    const cobrado=v=>(+v.saldo||0)>0?(+v.anticipo||0):(+v.total||0);
+    const yaAbonado=(abonos||[]).filter(a=>a.ventaId===id).reduce((s,a)=>s+(+a.monto||0),0);
+    const delta=+(cobrado(data)-cobrado(ventaOriginal)).toFixed(2);
+    if(delta>0.009){
+      const met=['efectivo','transferencia','deposito','tarjeta'].includes(metodoPago)?metodoPago:'efectivo';
+      const resp=prompt(`Esta venta es del ${fmtFecha(data.fecha)} y ahora tiene ${fmtMoney(delta)} más cobrados (${met}).\n\n¿En qué fecha recibiste ese dinero? Escribe AAAA-MM-DD (por defecto hoy).\n\nAceptar = se suma a la caja y al corte de ese día.\nCancelar = fue solo una corrección (no entra dinero).`, hoy());
+      const fechaCobro=resp===null?null:(/^\d{4}-\d{2}-\d{2}$/.test(resp.trim())?resp.trim():hoy());
+      if(fechaCobro){
+        const pedMirror=(pedidos||[]).find(x=>x.ventaId===id);
+        const abonoId=uid();
+        await setDoc(doc(db,'pl_abonos',abonoId),{
+          id:abonoId, pedidoId:pedMirror?pedMirror.id:'', ventaId:id,
+          cliente:data.cliente||'', descripcion:data.producto||'',
+          fechaVenta:data.fecha||'', fecha:fechaCobro, monto:delta, metodo:met,
+          notas:'Pago al editar la venta', creado:new Date().toISOString()
+        });
+      }
+    }
+  }
   // Descuento automático de stock de tinta (solo lo que cambió, si es una edición)
   const prevCant=+ventaOriginal?.cantidad||0;
   const prevTotalCcBlanca=(+ventaOriginal?.tintaBlanca||0)*prevCant;
@@ -10432,7 +10456,7 @@ function renderCaja(){
   const abonosHoyTotal=abonosHoyArr.reduce((s,a)=>s+(+a.monto||0),0);
   // Los abonos de ventas de HOY ya están incluidos en el anticipo de la venta,
   // así que se descuentan para no contarlos dos veces.
-  const abonoHoyDeVenta=vid=>abonosHoyArr.filter(a=>a.ventaId===vid).reduce((s,a)=>s+(+a.monto||0),0);
+  const abonoHoyDeVenta=vid=>(abonos||[]).filter(a=>a.ventaId===vid).reduce((s,a)=>s+(+a.monto||0),0);
   const abonosDeVentasDeHoy=ventasHoyArr.reduce((s,v)=>s+abonoHoyDeVenta(v.id),0);
   const abonosDeDiasAnteriores=+(abonosHoyTotal-abonosDeVentasDeHoy).toFixed(2);
 
@@ -11790,7 +11814,9 @@ function calcCorteParaFecha(h){
   // RESTARLO de lo que ya traía la venta, o se cuenta dos veces. Antes esto
   // solo se hacía en la tarjeta de Caja Chica, pero no aquí en el Corte, así
   // que el Corte podía salir más alto que el efectivo real.
-  const abonoHoyDeVenta=vid=>abonosHoy.filter(a=>a.ventaId===vid).reduce((s,a)=>s+(+a.monto||0),0);
+  // Se restan TODOS los abonos de esa venta (de cualquier día): los de días
+  // posteriores no pertenecen al día de la venta, y los de hoy ya van aparte.
+  const abonoHoyDeVenta=vid=>(abonos||[]).filter(a=>a.ventaId===vid).reduce((s,a)=>s+(+a.monto||0),0);
   const cobroInicial=v=>+(cobradoDeVenta(v)-abonoHoyDeVenta(v.id)).toFixed(2);
   const enEfectivoVenta = ventasLocales.filter(v=>v.metodoPago==='efectivo').reduce((s,v)=>s+cobroInicial(v),0);
   const enTransfVenta   = ventasLocales.filter(v=>v.metodoPago==='transferencia').reduce((s,v)=>s+cobroInicial(v),0);
